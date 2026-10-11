@@ -45,6 +45,7 @@ const tillAbi = parseAbi([
   "function clockIn(uint256 id)",
   "function clockOut(uint256 id)",
   "function close(uint256 id)",
+  "function settle(uint256 id) returns (uint128)",
   "function settleMany(uint256[] ids) returns (uint256)",
 ]);
 const fwdAbi = parseAbi([
@@ -220,7 +221,11 @@ async function tick() {
         // One tab that can't be paid (say a frozen AUSD account) must not hold up the others.
         log("batch settle failed, settling one by one:", e.shortMessage || e.message);
         for (const id of ids) {
-          await sendFromKeeper(TILL, encodeFunctionData({ abi: tillAbi, functionName: "settle", args: [id] })).catch((err) => log(`settle ${id}:`, err.shortMessage || err.message));
+          try {
+            await sendFromKeeper(TILL, encodeFunctionData({ abi: tillAbi, functionName: "settle", args: [id] }));
+          } catch (err) {
+            log(`settle ${id}:`, err.shortMessage || err.message);
+          }
         }
       }
     }
