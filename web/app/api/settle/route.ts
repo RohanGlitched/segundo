@@ -1,12 +1,10 @@
 import { decodeEventLog, encodeFunctionData } from "viem";
 import { tillAbi } from "@/lib/abi";
 import { TILL, publicClient } from "@/lib/chain";
-import { clientIp, json, limited, revertReason, sendAndWait, signer } from "@/lib/server";
+import { RESERVE, clientIp, json, keeperMon, limited, revertReason, sendAndWait, signer } from "@/lib/server";
 
 export const runtime = "nodejs";
 
-/** Below this much MON the relayer keeps its gas for clock-ins, closes and cash-outs instead of watch-payouts. */
-const KEEPER_RESERVE = 400_000_000_000_000_000n; // 0.4 MON
 
 /**
  * Pays out whatever a tab has earned. Anyone may ask (money only ever goes to the freelancer);
@@ -33,8 +31,8 @@ export async function POST(req: Request) {
   if (head - view.tab.lastBlock < 6n) return json({ skipped: true, reason: "Paid out moments ago." });
   try {
     const keeper = signer("keeper");
-    const mon = await publicClient.getBalance({ address: keeper.account.address });
-    if (mon < KEEPER_RESERVE)
+    const mon = await keeperMon();
+    if (mon !== null && mon < RESERVE.settle)
       return json({ skipped: true, reason: "The relayer is low on test MON and is keeping it for clock-ins and closes. Earned pay is still owed and is paid at close." });
     const data = encodeFunctionData({ abi: tillAbi, functionName: "settle", args: [id] });
     const { logs, ...landed } = await sendAndWait(keeper, { to: TILL, data });

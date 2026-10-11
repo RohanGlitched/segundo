@@ -19,6 +19,8 @@ export async function POST(req: Request) {
   if (!b || !isAddress(b.from) || !isAddress(b.to)) return json({ error: "Enter a valid wallet address." }, 400);
   if (b.from.toLowerCase() === b.to.toLowerCase()) return json({ error: "That's your own wallet." }, 400);
   if (NO_INBOX.has(b.to.toLowerCase())) return json({ error: "That address is a contract that can't send AUSD back. Enter a person's wallet." }, 400);
+  const code = await publicClient.getCode({ address: b.to }).catch(() => undefined);
+  if (code && code !== "0x" && !code.startsWith("0xef0100")) return json({ error: "That address is a contract, not a person's wallet. Enter the receiver's wallet address." }, 400);
   let data: Hex;
   try {
     const value = BigInt(b.value);

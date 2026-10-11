@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { bandPaths, bandsFor, ringPath, ringsFor, seedOf, wavePath } from "@/lib/guilloche";
 import { currency as currencyOf, formatUsd, noteParts, type Currency, type Rates } from "@/lib/money";
 import { Odometer } from "./Odometer";
@@ -77,9 +77,20 @@ export function Note(p: NoteProps) {
   const cur = p.cur.code !== "USD" && !p.rates?.[p.cur.code] ? currencyOf("USD") : p.cur;
   const parts = noteParts(p.usd, cur, p.rates);
   const serial = `№ ${p.id.toString().padStart(4, "0")}`;
-  // Long amounts (naira, rupiah) shrink to stay inside the note instead of clipping their last digits.
-  const chars = parts ? parts.whole.length + (parts.frac ? 0.5 + parts.frac.length * 0.5 : 0) + 0.6 : 0;
-  const shrink = chars > 9.5 ? 9.5 / chars : 1;
+  // Long amounts (naira, shillings, rupiah) shrink to stay inside the note instead of clipping their
+  // last digits: a first guess from the digit count, then a measurement once the note is on screen.
+  const chars = parts ? parts.whole.length + (parts.frac ? 0.5 + parts.frac.length * 0.5 : 0) + parts.symbol.length * 0.6 : 0;
+  const guess = chars > 9.5 ? 9.5 / chars : 1;
+  const amountRef = useRef<HTMLSpanElement>(null);
+  const [fit, setFit] = useState(1);
+  useLayoutEffect(() => {
+    const el = amountRef.current;
+    if (!el) return;
+    el.style.setProperty("--shrink", String(guess));
+    const r = el.scrollWidth > 0 ? el.clientWidth / el.scrollWidth : 1;
+    setFit(r < 0.995 ? Math.max(0.5, r * 0.96) : 1);
+  }, [guess, parts?.whole.length, parts?.frac?.length]);
+  const shrink = guess * fit;
   const microprint = `${p.payee.name} ${p.payee.place} ${serial} paid by ${p.payer.name} `.repeat(14);
 
   return (
@@ -144,7 +155,7 @@ export function Note(p: NoteProps) {
         <span className={`serial ${styles.serialTop}`}>{serial}</span>
         <div className={styles.value}>
           <span className={styles.curName}>{cur.name}</span>
-          <span className={`denom ${styles.amount}`} style={{ ["--shrink" as string]: shrink }}>
+          <span ref={amountRef} className={`denom ${styles.amount}`} style={{ ["--shrink" as string]: shrink }}>
             {parts ? (
               <>
                 <span className={styles.symbol}>{parts.symbol}</span>

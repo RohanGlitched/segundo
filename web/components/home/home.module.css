@@ -46,7 +46,7 @@ a.cityLink:hover {
   color: var(--ink-soft);
 }
 .cityAmount {
-  font-size: clamp(16px, 1.55vw + 4px, 26px);
+  font-size: clamp(15px, 1.35vw + 4px, 26px);
   font-weight: 550;
   margin-top: 8px;
   line-height: 1.1;

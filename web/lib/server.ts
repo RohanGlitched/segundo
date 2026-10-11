@@ -63,6 +63,8 @@ export function sendAndWait(client: Client, tx: { to: Address; data: Hex; minGas
 
 /** Pulls Till's custom error name out of a failed simulation so the app can explain it. */
 export function revertReason(e: unknown): string {
+  // The relayer itself cannot pay: say so in the same words as the notice bar, never a raw RPC line.
+  if (/insufficient funds|exceeds the balance/i.test(e instanceof Error ? e.message : String(e))) return LOW_GAS;
   if (e instanceof BaseError) {
     const revert = e.walk((err) => err instanceof ContractFunctionRevertedError) as ContractFunctionRevertedError | null;
     if (revert?.data?.errorName) return revert.data.errorName;
@@ -112,7 +114,7 @@ export const RESERVE = {
   settle: 400_000_000_000_000_000n, // 0.4 MON: watch-payouts pause
   open: 150_000_000_000_000_000n, // 0.15 MON: new tabs, top-ups, sends and profiles pause
   clockIn: 50_000_000_000_000_000n, // 0.05 MON: clock-ins pause
-  essential: 0n, // clock-outs, holds, closes and invite claims run while anything is left
+  essential: 20_000_000_000_000_000n, // 0.02 MON, about one transaction: clock-outs, holds, closes and invite claims run until then
 } as const;
 
 /** Which reserve a forwarded Till call must clear. */
@@ -123,13 +125,21 @@ export function reserveFor(fn: string): keyof typeof RESERVE {
   return "open";
 }
 
-const LOW_GAS =
-  "The relayer is low on test MON, so this action is paused for the moment. Clock-outs and closes still work, and nothing you have earned is lost.";
+export const LOW_GAS =
+  "The relayer is short of test MON, so this action is paused for the moment. Nothing you have earned is lost: pay already locked in the contract is paid out as soon as gas is back.";
+
+let monCache: { at: number; mon: bigint } | null = null;
+/** The relayer's MON, read at most every ten seconds per instance. */
+export async function keeperMon(): Promise<bigint | null> {
+  if (monCache && Date.now() - monCache.at < 10_000) return monCache.mon;
+  const mon = await publicClient.getBalance({ address: signer("keeper").account.address }).catch(() => null);
+  if (mon !== null) monCache = { at: Date.now(), mon };
+  return mon;
+}
 
 /** Refuses an action when the relayer's MON is below the tier it needs; returns the message to show. */
 export async function lowOnGas(tier: keyof typeof RESERVE): Promise<string | null> {
-  if (RESERVE[tier] === 0n) return null;
-  const mon = await publicClient.getBalance({ address: signer("keeper").account.address }).catch(() => null);
+  const mon = await keeperMon();
   if (mon === null) return null; // an RPC hiccup must not block the action; the send itself will fail loudly
   return mon < RESERVE[tier] ? LOW_GAS : null;
 }

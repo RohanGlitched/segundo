@@ -152,7 +152,7 @@ async function recycle(fromKey, toKey, value) {
   return sendFromKeeper(DOLLAR, data);
 }
 
-const dollarOf = (a) = pub.readContract({ address: DOLLAR, abi: dollarAbi, functionName: "balanceOf", args: [a] });
+const dollarOf = (a) => pub.readContract({ address: DOLLAR, abi: dollarAbi, functionName: "balanceOf", args: [a] });
 
 /**
  * Is this freelancer at work? Two blocks a day in their own time zone, 09:00 to 12:00 and 14:00 to
@@ -249,7 +249,7 @@ async function person(f, now, due) {
       if (!fromBot) {
         // Hired by someone else (a judge): clock in straight away and work until the budget runs out
         // or 45 minutes pass, whichever comes first.
-        if (t.since === 0n && !t.held && !spent) {
+        if (t.since === 0n && !t.held && !spent && !keeperLow) {
           const worked = Number(t.banked) * 3600 / Math.max(1, Number(t.rate));
           // Dust tabs cost the relayer three transactions each; a demo freelancer only takes real ones, one per tick.
           if (worked < 45 * 60 && t.budget >= 500_000n && newClockIns < 1) {

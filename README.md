@@ -188,7 +188,7 @@ cd web && npm install && npm run dev
 
 Web environment: `NEXT_PUBLIC_TILL_ADDRESS`, `NEXT_PUBLIC_FORWARDER_ADDRESS`, `NEXT_PUBLIC_PRIVY_APP_ID` (without it the app offers practice wallets), and server-only `KEEPER_KEY` and `FAUCET_KEY`.
 
-Operating it: `GET /api/health` reports the relayer's and the faucet wallet's test MON against the reserve tiers (watch-payouts pause first, then new tabs and sends, then clock-ins; closes and clock-outs run to the last drop) and the app shows a notice bar while anything is paused. `node bots/topup.mjs keeper=10` moves test MON between the project's wallets; the bots log loudly when the keeper runs low.
+Operating it: `GET /api/health` reports the relayer's and the faucet wallet's test MON against the reserve tiers (watch-payouts pause first, then new tabs and sends, then clock-ins; closes and clock-outs run down to about one transaction's worth) and the app shows a notice bar while anything is paused. Set `AUTO_REFUEL=1` on the deployment and a health check tops the relayer up from the faucet wallet by itself. `node bots/topup.mjs keeper=10` moves test MON between the project's wallets; the bots log loudly when the keeper runs low.
 
 ## Built with
 

@@ -15,6 +15,7 @@ import { InviteBox } from "@/components/InviteBox";
 import { useLive } from "@/lib/live";
 import { currency, formatDuration, formatMoney, formatUsd, toUnits, toUsd } from "@/lib/money";
 import { relay, requestTestDollars, signPermit } from "@/lib/relay";
+import { gasPaused, useHealth } from "@/lib/health";
 import { useWallet } from "@/lib/wallet";
 import styles from "./open.module.css";
 
@@ -23,6 +24,8 @@ type Who = "invite" | "demo" | "address";
 export default function OpenTab() {
   const wallet = useWallet();
   const me = wallet.address;
+  const health = useHealth();
+  const paused = gasPaused(health, "open");
   const { rates } = useLive();
   const { balance, refresh: refreshBalance } = useDollarBalance(me);
   const myProfile = useProfile(me);
@@ -232,7 +235,7 @@ export default function OpenTab() {
           </div>
 
           <div className={styles.submit}>
-            <button className="btn primary" disabled={!!problem || act.busy}>
+            <button className="btn primary" disabled={!!problem || act.busy || paused}>
               {busyLabel(act.phase, `Open tab with ${budgetN > 0 ? formatUsd(budgetN) : "$0"}`)}
             </button>
             <span className="soft">
@@ -257,6 +260,7 @@ export default function OpenTab() {
             </span>
           </div>
           {problem && <p className={styles.why}>{problem}</p>}
+          {paused && !problem && <p className={styles.why}>The relayer is short of test MON right now, so opening a tab is paused. Try again in a little while; your wallet and balance are unchanged.</p>}
           <p className="soft">
             {wallet.kind === "practice"
               ? "Your practice wallet signs for you: once to let Till take the budget, once to open the tab. No gas."
