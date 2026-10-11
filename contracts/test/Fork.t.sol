@@ -23,7 +23,7 @@ contract ForkTest is Test {
     IAgoraFaucet constant FAUCET = IAgoraFaucet(0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C);
 
     function test_realAusdGaslessFlow() public {
-        if (block.chainid != 10143) return; // only on a Monad testnet fork
+        vm.skip(block.chainid != 10143); // only on a Monad testnet fork; shows as skipped elsewhere
         ERC2771Forwarder fwd = new ERC2771Forwarder("Till");
         Till till = new Till(AUSD, address(fwd));
         uint256 clientKey = 0xA11CE;

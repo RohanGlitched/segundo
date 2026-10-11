@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { bandPaths, bandsFor, seedOf, wavePath } from "@/lib/guilloche";
 import { useLive } from "@/lib/live";
+import { useMounted } from "@/lib/mounted";
 import { CURRENCIES, noteParts, type Currency } from "@/lib/money";
 import styles from "./home.module.css";
 
@@ -11,6 +12,7 @@ const H = 200;
 
 /** A small specimen note in one currency's ink: what one hour at the given rate is worth there. */
 function Specimen({ cur, usd, rates }: { cur: Currency; usd: number; rates: Record<string, number> | null }) {
+  const mounted = useMounted();
   const art = useMemo(() => {
     const seed = seedOf("ink", cur.code);
     const bands = bandsFor(seed, 4).flatMap((b, i) => bandPaths(96, 100, 82, { ...b, radius: 0.5 + i * 0.15, strands: 6 }));
@@ -29,12 +31,14 @@ function Specimen({ cur, usd, rates }: { cur: Currency; usd: number; rates: Reco
     <figure className={styles.specimen} style={{ ["--ink-c" as string]: cur.ink, ["--ink-c-night" as string]: cur.inkNight }}>
       <svg viewBox={`0 0 ${W} ${H}`} className={styles.specimenArt} aria-hidden>
         <rect width={W} height={H} rx="8" className={styles.specimenPaper} />
-        {art.border.map((d, i) => (
-          <path key={`b${i}`} d={d} fill="none" strokeWidth="0.8" className={styles.specimenInk} opacity="0.7" />
-        ))}
-        {art.bands.map((d, i) => (
-          <path key={i} d={d} fill="none" strokeWidth="0.55" className={styles.specimenInk} opacity="0.75" />
-        ))}
+        {mounted &&
+          art.border.map((d, i) => (
+            <path key={`b${i}`} d={d} fill="none" strokeWidth="0.8" className={styles.specimenInk} opacity="0.7" />
+          ))}
+        {mounted &&
+          art.bands.map((d, i) => (
+            <path key={i} d={d} fill="none" strokeWidth="0.55" className={styles.specimenInk} opacity="0.75" />
+          ))}
         <circle cx="96" cy="100" r="26" className={styles.specimenMedal} />
         <text x="96" y="108" textAnchor="middle" className={styles.specimenCode}>
           {cur.code}

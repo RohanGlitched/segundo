@@ -8,7 +8,7 @@ import { TabNote, personOf } from "@/components/TabNote";
 import { TimeCard } from "@/components/TimeCard";
 import { ErrorLine, LandedLine, busyLabel, useAction } from "@/components/ui";
 import { explorerTx } from "@/lib/chain";
-import { useHistory, useTabs, useUsdcBalance, type StubLine } from "@/lib/hooks";
+import { useHistory, useTabs, useDollarBalance, type StubLine } from "@/lib/hooks";
 import { inviteLink, loadInvite } from "@/lib/invite";
 import { useChainNow, useLive } from "@/lib/live";
 import { ago, currency, formatDuration, formatMoney, formatUsd, toUnits, toUsd } from "@/lib/money";
@@ -49,7 +49,7 @@ export default function TabPage() {
   const [payouts, setPayouts] = useState<(Landed & { amount: number })[]>([]);
   const [topUp, setTopUp] = useState("");
   const [showTopUp, setShowTopUp] = useState(false);
-  const { balance } = useUsdcBalance(wallet.address);
+  const { balance } = useDollarBalance(wallet.address);
   const [invite, setInvite] = useState<string | null>(null);
   const [pace, setPace] = useState(6_000);
   const [confirmClose, setConfirmClose] = useState(false);
@@ -260,7 +260,7 @@ export default function TabPage() {
                 <p className={styles.waiting} role="status">
                   <i aria-hidden />
                   {isDemo
-                    ? `${payee.name.split(" ")[0]} clocks in by themselves, usually within a minute. The note starts printing the moment they do.`
+                    ? `${payee.name.split(" ")[0]} clocks in by themselves, usually within a few seconds and a minute at most. The note starts printing the moment they do.`
                     : `Waiting for ${payee.name} to clock in. They do it from their Till account; the note starts printing the moment they do.`}
                 </p>
               )}

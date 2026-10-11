@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Archivo } from "next/font/google";
+import { GasNotice } from "@/components/GasNotice";
 import { Header } from "@/components/Header";
 import { Providers } from "@/components/Providers";
 import "./globals.css";
@@ -26,6 +27,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <Providers>
           <Header />
+          <GasNotice />
           {children}
         </Providers>
       </body>

@@ -34,13 +34,13 @@ function AccountMenu() {
     <div className={styles.account} ref={box}>
       <button className={styles.who} onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-haspopup="menu" title={wallet.address}>
         <i aria-hidden className={styles.dot} />
-        {wallet.kind === "email" && wallet.method === "email" ? wallet.label : shortAddress(wallet.address)}
+        {wallet.kind === "privy" && wallet.method === "email" ? wallet.label : shortAddress(wallet.address)}
         <span aria-hidden className={styles.caret} />
       </button>
       {open && (
         <div className={styles.menu} role="menu">
           <p className={styles.menuHead}>
-            {wallet.kind === "email" ? (wallet.method === "passkey" ? "Signed in with a passkey" : "Signed in with email") : "Practice wallet in this browser"}
+            {wallet.kind === "privy" ? (wallet.method === "passkey" ? "Signed in with a passkey" : "Signed in with email") : "Practice wallet in this browser"}
             <span className="serial">{shortAddress(wallet.address)}</span>
           </p>
           <Link role="menuitem" href="/app" className={styles.item} onClick={() => setOpen(false)}>

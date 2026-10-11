@@ -1,4 +1,8 @@
+"use client";
+
+import { useMemo } from "react";
 import { bandPaths, bandsFor, ringPath, ringsFor, seedOf, wavePath } from "@/lib/guilloche";
+import { useMounted } from "@/lib/mounted";
 import styles from "./home.module.css";
 
 /** A strip of interlaced waves between sections: the same engraved border every note carries. */
@@ -17,9 +21,15 @@ export function Divider({ seed = 0 }: { seed?: number }) {
 
 /** The closing rosette: every band of a full day's work, engraved at poster size. */
 export function GrandRosette() {
-  const seed = seedOf("till", "grand");
-  const bands = bandsFor(seed, 7).map((b) => bandPaths(300, 300, 280, { ...b, strands: b.strands + 3 }));
-  const core = ringsFor(seed, 3).map((r, i) => ringPath(300, 300, 280 * [0.2, 0.27, 0.33][i]!, { ...r, scale: 1 }));
+  const mounted = useMounted();
+  const { bands, core } = useMemo(() => {
+    const seed = seedOf("till", "grand");
+    return {
+      bands: bandsFor(seed, 7).map((b) => bandPaths(300, 300, 280, { ...b, strands: b.strands + 3 })),
+      core: ringsFor(seed, 3).map((r, i) => ringPath(300, 300, 280 * [0.2, 0.27, 0.33][i]!, { ...r, scale: 1 })),
+    };
+  }, []);
+  if (!mounted) return <svg viewBox="0 0 600 600" className={styles.grand} aria-hidden />;
   return (
     <svg viewBox="0 0 600 600" className={styles.grand} aria-hidden>
       {bands.map((band, i) =>

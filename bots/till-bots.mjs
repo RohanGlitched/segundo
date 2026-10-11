@@ -152,7 +152,7 @@ async function recycle(fromKey, toKey, value) {
   return sendFromKeeper(DOLLAR, data);
 }
 
-const usdcOf = (a) => pub.readContract({ address: DOLLAR, abi: dollarAbi, functionName: "balanceOf", args: [a] });
+const dollarOf = (a) = pub.readContract({ address: DOLLAR, abi: dollarAbi, functionName: "balanceOf", args: [a] });
 
 /**
  * Is this freelancer at work? Two blocks a day in their own time zone, 09:00 to 12:00 and 14:00 to
@@ -176,7 +176,7 @@ async function ensureProfiles() {
 /** Studios top themselves up from Agora's testnet faucet (10,000 AUSD a call); the faucet wallet pays the gas. */
 async function ensureClientFunds() {
   for (const c of CLIENTS) {
-    const bal = await usdcOf(acct(c.key).address);
+    const bal = await dollarOf(acct(c.key).address);
     if (bal >= BUDGET * 2n) continue;
     const data = encodeFunctionData({ abi: parseAbi(["function requestFunds(address recipient)"]), functionName: "requestFunds", args: [acct(c.key).address] });
     const est = await pub.estimateGas({ account: faucet.account.address, to: AGORA_FAUCET, data });
@@ -191,9 +191,16 @@ async function ensureClientFunds() {
 const SETTLE_STAMP = process.env.SETTLE_STAMP || "";
 let lastSettle = SETTLE_STAMP && fs.existsSync(SETTLE_STAMP) ? Number(fs.readFileSync(SETTLE_STAMP, "utf8")) || 0 : 0;
 
+/** Below this the keeper only clocks people out and settles; nobody opens or tops up. Logged loudly every tick. */
+const KEEPER_LOW = 150_000_000_000_000_000n; // 0.15 MON
+let keeperLow = false;
+
 async function tick() {
   const now = Math.floor(Date.now() / 1000);
   const due = new Map();
+  const mon = await pub.getBalance({ address: keeper.account.address });
+  keeperLow = mon < KEEPER_LOW;
+  if (keeperLow) log(`!!! KEEPER LOW ON MON: ${(Number(mon) / 1e18).toFixed(3)} MON at ${keeper.account.address}. Top it up (node bots/topup.mjs keeper=10) or clock-ins stop.`);
   for (const f of FREELANCERS) {
     // One person's failed step (a dropped RPC call, a reverted clock-in) must not stop the others.
     try {
@@ -244,8 +251,8 @@ async function person(f, now, due) {
         // or 45 minutes pass, whichever comes first.
         if (t.since === 0n && !t.held && !spent) {
           const worked = Number(t.banked) * 3600 / Math.max(1, Number(t.rate));
-          // Dust tabs cost the relayer three transactions each; a demo freelancer only takes real ones, a few per tick.
-          if (worked < 45 * 60 && t.budget >= 500_000n && newClockIns < 3) {
+          // Dust tabs cost the relayer three transactions each; a demo freelancer only takes real ones, one per tick.
+          if (worked < 45 * 60 && t.budget >= 500_000n && newClockIns < 1) {
             newClockIns++;
             await forward(f.key, "clockIn", [v.id]);
             log(`${f.name} clocked in on tab ${v.id} for a new client`);
@@ -259,9 +266,17 @@ async function person(f, now, due) {
 
     // Their regular client: keep one tab open, topped up, and follow working hours.
     const client = CLIENTS.find((c) => c.key === f.client);
+    if (keeperLow) {
+      // Keep the gas for clock-outs: no new tabs, top-ups or clock-ins until the keeper is refilled.
+      if (ownTab && ownTab.tab.since > 0n && !onShift(f)) {
+        await forward(f.key, "clockOut", [ownTab.id]);
+        log(`${f.name} clocked out (tab ${ownTab.id})`);
+      }
+      return;
+    }
     if (!ownTab) {
       const budget = BUDGET;
-      if ((await usdcOf(acct(client.key).address)) < budget) return;
+      if ((await dollarOf(acct(client.key).address)) < budget) return;
       const p = await permit(client.key, budget);
       await forward(client.key, "openWithPermit", [me, "0x0000000000000000000000000000000000000000", BigInt(f.rate * 1e6), budget, f.memo, p.deadline, p.v, p.r, p.s]);
       log(`${client.name} opened a tab for ${f.name}`);
@@ -271,7 +286,7 @@ async function person(f, now, due) {
     const left = t.budget - ownTab.earned;
     if (left < 1_000_000n && onShift(f)) {
       const amount = TOPUP;
-      if ((await usdcOf(acct(client.key).address)) >= amount) {
+      if ((await dollarOf(acct(client.key).address)) >= amount) {
         const p = await permit(client.key, amount);
         await forward(client.key, "topUpWithPermit", [ownTab.id, amount, p.deadline, p.v, p.r, p.s]);
         log(`${client.name} topped up ${f.name}'s tab ${ownTab.id}`);
@@ -287,7 +302,7 @@ async function person(f, now, due) {
     }
 
     // Pass earnings back to the client so the loop never runs dry.
-    const earnedBal = await usdcOf(me);
+    const earnedBal = await dollarOf(me);
     if (earnedBal > RECYCLE_ABOVE) {
       await recycle(f.key, f.client, earnedBal - 1_000_000n);
       log(`${f.name} sent ${(Number(earnedBal - 1_000_000n) / 1e6).toFixed(2)} AUSD back to ${client.name}`);

@@ -87,22 +87,22 @@ export function Ledger({ paid, paying, cur }: { paid: TabView[]; paying: TabView
 
 /** First visit: the three things to do, each one click away, ticked off as they happen. */
 export function GettingStarted({
-  hasUsdc,
+  hasDollars,
   hasProfile,
   hasTab,
   onFaucet,
   faucetBusy,
 }: {
-  hasUsdc: boolean;
+  hasDollars: boolean;
   hasProfile: boolean;
   hasTab: boolean;
   onFaucet: () => void;
   faucetBusy: boolean;
 }) {
-  if (hasUsdc && hasProfile && hasTab) return null;
+  if (hasDollars && hasProfile && hasTab) return null;
   const steps = [
     {
-      done: hasUsdc,
+      done: hasDollars,
       title: "Get test AUSD",
       body: "25 test dollars of Agora's AUSD on Monad testnet. No real money.",
       action: (

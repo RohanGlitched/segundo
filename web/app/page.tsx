@@ -208,10 +208,10 @@ export default function Home() {
               </p>
             </div>
             <div>
-              <h3>Tabs that never queue behind each other</h3>
+              <h3>Tabs that don&apos;t queue behind each other</h3>
               <p>
-                Each tab keeps its own state and nothing shared is written when pay builds up or settles, so Monad&apos;s parallel execution can
-                settle thousands of tabs side by side.
+                Pay builds up from timestamps, so nothing is written while the clock runs, and each tab settles its own state. The one slot every
+                payout shares is the escrow balance in AUSD, which Monad&apos;s optimistic execution re-runs when two land in a block.
               </p>
             </div>
             <div>

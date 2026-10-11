@@ -77,6 +77,9 @@ export function Note(p: NoteProps) {
   const cur = p.cur.code !== "USD" && !p.rates?.[p.cur.code] ? currencyOf("USD") : p.cur;
   const parts = noteParts(p.usd, cur, p.rates);
   const serial = `№ ${p.id.toString().padStart(4, "0")}`;
+  // Long amounts (naira, rupiah) shrink to stay inside the note instead of clipping their last digits.
+  const chars = parts ? parts.whole.length + (parts.frac ? 0.5 + parts.frac.length * 0.5 : 0) + 0.6 : 0;
+  const shrink = chars > 9.5 ? 9.5 / chars : 1;
   const microprint = `${p.payee.name} ${p.payee.place} ${serial} paid by ${p.payer.name} `.repeat(14);
 
   return (
@@ -141,7 +144,7 @@ export function Note(p: NoteProps) {
         <span className={`serial ${styles.serialTop}`}>{serial}</span>
         <div className={styles.value}>
           <span className={styles.curName}>{cur.name}</span>
-          <span className={`denom ${styles.amount}`}>
+          <span className={`denom ${styles.amount}`} style={{ ["--shrink" as string]: shrink }}>
             {parts ? (
               <>
                 <span className={styles.symbol}>{parts.symbol}</span>

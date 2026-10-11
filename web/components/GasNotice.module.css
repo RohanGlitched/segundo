@@ -1,0 +1,8 @@
+.bar {
+  background: color-mix(in srgb, var(--warn) 14%, var(--sheet));
+  border-bottom: 1px solid color-mix(in srgb, var(--warn) 40%, var(--rule));
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.45;
+  padding: 8px 0;
+}

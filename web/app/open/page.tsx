@@ -9,12 +9,12 @@ import { ErrorLine, LandedLine, SignInPanel, busyLabel, useAction } from "@/comp
 import { tillAbi } from "@/lib/abi";
 import { publicClient } from "@/lib/chain";
 import { DEMO_FREELANCERS } from "@/lib/demo";
-import { useAutoDrip, useProfile, useUsdcBalance } from "@/lib/hooks";
+import { useAutoDrip, useProfile, useDollarBalance } from "@/lib/hooks";
 import { inviteLink, saveInvite } from "@/lib/invite";
 import { InviteBox } from "@/components/InviteBox";
 import { useLive } from "@/lib/live";
 import { currency, formatDuration, formatMoney, formatUsd, toUnits, toUsd } from "@/lib/money";
-import { relay, requestTestUsdc, signPermit } from "@/lib/relay";
+import { relay, requestTestDollars, signPermit } from "@/lib/relay";
 import { useWallet } from "@/lib/wallet";
 import styles from "./open.module.css";
 
@@ -24,7 +24,7 @@ export default function OpenTab() {
   const wallet = useWallet();
   const me = wallet.address;
   const { rates } = useLive();
-  const { balance, refresh: refreshBalance } = useUsdcBalance(me);
+  const { balance, refresh: refreshBalance } = useDollarBalance(me);
   const myProfile = useProfile(me);
   const [who, setWho] = useState<Who>("demo");
   const [demo, setDemo] = useState(0);
@@ -245,7 +245,7 @@ export default function OpenTab() {
                   onClick={() =>
                     faucet.run("25 test AUSD arrived", async (sent) => {
                       sent();
-                      const r = await requestTestUsdc(me);
+                      const r = await requestTestDollars(me);
                       refreshBalance();
                       return r;
                     })
@@ -257,7 +257,11 @@ export default function OpenTab() {
             </span>
           </div>
           {problem && <p className={styles.why}>{problem}</p>}
-          <p className="soft">You sign twice: once to let Till take the budget from your wallet, once to open the tab. No gas.</p>
+          <p className="soft">
+            {wallet.kind === "practice"
+              ? "Your practice wallet signs for you: once to let Till take the budget, once to open the tab. No gas."
+              : "You sign twice: once to let Till take the budget from your wallet, once to open the tab. No gas."}
+          </p>
           <ErrorLine error={act.error ?? faucet.error} />
           <LandedLine landed={faucet.landed ?? drip.landed} />
         </form>

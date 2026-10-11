@@ -7,10 +7,10 @@ import { ProfileForm } from "@/components/ProfileForm";
 import { TabRow } from "@/components/TabRow";
 import { GettingStarted, Ledger, WalletNote } from "@/components/WalletPanel";
 import { ErrorLine, LandedLine, SignInPanel, busyLabel, useAction } from "@/components/ui";
-import { useAutoDrip, useMyTabIds, useProfile, useTabs, useUsdcBalance } from "@/lib/hooks";
+import { useAutoDrip, useMyTabIds, useProfile, useTabs, useDollarBalance } from "@/lib/hooks";
 import { useLive, useChainNow } from "@/lib/live";
 import { currency, formatMoney, formatUsd, toUnits, toUsd } from "@/lib/money";
-import { relay, requestTestUsdc, sendUsdc } from "@/lib/relay";
+import { relay, requestTestDollars, sendDollars } from "@/lib/relay";
 import { stateOf, type TabView } from "@/lib/tabs";
 import { useWallet } from "@/lib/wallet";
 import styles from "./app.module.css";
@@ -20,7 +20,7 @@ export default function YourTabs() {
   const me = wallet.address;
   const { ids } = useMyTabIds(me);
   const { views, profiles, refresh, error: readError } = useTabs(ids);
-  const { balance, refresh: refreshBalance } = useUsdcBalance(me);
+  const { balance, refresh: refreshBalance } = useDollarBalance(me);
   const { rates } = useLive();
   const now = useChainNow();
   const act = useAction();
@@ -46,10 +46,10 @@ export default function YourTabs() {
   const usd = balance == null ? null : toUsd(balance);
   const lowBalance = balance != null && balance < 5_000_000n;
   const hasStarted = (views?.length ?? 0) > 0 && !!mine?.name;
-  const getUsdc = () =>
+  const getDollars = () =>
     faucet.run("25 test AUSD arrived", async (sent) => {
       sent();
-      const r = await requestTestUsdc(me);
+      const r = await requestTestDollars(me);
       refreshBalance();
       return r;
     });
@@ -94,7 +94,7 @@ export default function YourTabs() {
         <div className={styles.walletSide}>
           <h1 className={styles.h1}>{mine?.name ? `${mine.name.split(" ")[0]}'s tabs` : "Your tabs"}</h1>
           <p className={styles.addr}>
-            {wallet.kind === "email" ? (wallet.method === "passkey" ? "Signed in with a passkey. " : `Signed in as ${wallet.label}. `) : "Practice wallet in this browser. "}
+            {wallet.kind === "privy" ? (wallet.method === "passkey" ? "Signed in with a passkey. " : `Signed in as ${wallet.label}. `) : "Practice wallet in this browser. "}
             {usd != null && myCur.code !== "USD" && rates ? `${formatUsd(usd)} is about ${formatMoney(usd, myCur, rates)}.` : ""}
           </p>
           <div className={styles.walletActions}>
@@ -103,20 +103,20 @@ export default function YourTabs() {
             </Link>
             {((balance != null && balance > 0n) || sendOpen) && (
               <button className="btn" onClick={() => setSendOpen((o) => !o)} aria-expanded={sendOpen}>
-                {sendOpen ? "Done sending" : "Send AUSD to someone"}
+                {sendOpen ? "Cancel" : "Send AUSD to someone"}
               </button>
             )}
             {lowBalance && hasStarted && (
-              <button className="btn quiet" disabled={faucet.busy} onClick={getUsdc}>
+              <button className="btn quiet" disabled={faucet.busy} onClick={getDollars}>
                 {faucet.busy ? "Sending test AUSD…" : "Get 25 test AUSD"}
               </button>
             )}
           </div>
           <GettingStarted
-            hasUsdc={(balance ?? 0n) > 0n || (views?.length ?? 0) > 0}
+            hasDollars={(balance ?? 0n) > 0n || (views?.length ?? 0) > 0}
             hasProfile={!!mine?.name}
             hasTab={(views?.length ?? 0) > 0}
-            onFaucet={getUsdc}
+            onFaucet={getDollars}
             faucetBusy={faucet.busy || drip.sending}
           />
           <Ledger paid={paid} paying={paying} cur={myCur} />
@@ -213,7 +213,7 @@ function SendForm({ max, onDone, onClose }: { max: bigint; onDone: () => void; o
         e.preventDefault();
         if (problem) return;
         act.run(`Sent ${formatUsd(Number(amount))}`, async (sent) => {
-          const p = sendUsdc(wallet, to as Address, value);
+          const p = sendDollars(wallet, to as Address, value);
           sent();
           const r = await p;
           // A sent form empties itself, so one more click can't send the money twice.

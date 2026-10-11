@@ -92,7 +92,7 @@ export async function signPermit(wallet: Wallet, value: bigint) {
 }
 
 /** Sends AUSD out of the user's wallet with an EIP-3009 authorization the relayer submits. */
-export async function sendUsdc(wallet: Wallet, to: Address, value: bigint): Promise<Landed> {
+export async function sendDollars(wallet: Wallet, to: Address, value: bigint): Promise<Landed> {
   const from = wallet.address!;
   const nonce = toHex(crypto.getRandomValues(new Uint8Array(32)));
   const validBefore = BigInt(Math.floor(Date.now() / 1000) + 1800);
@@ -116,7 +116,7 @@ export async function sendUsdc(wallet: Wallet, to: Address, value: bigint): Prom
   return { ...res, ms: Math.round(performance.now() - started) };
 }
 
-export async function requestTestUsdc(address: Address): Promise<Landed> {
+export async function requestTestDollars(address: Address): Promise<Landed> {
   const started = performance.now();
   const res = await post<{ hash: Hex; block: number }>("/api/faucet", { address });
   return { ...res, ms: Math.round(performance.now() - started) };

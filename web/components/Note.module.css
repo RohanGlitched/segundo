@@ -132,7 +132,7 @@
 .amount {
   display: flex;
   align-items: flex-start;
-  font-size: clamp(30px, 7.6cqw, 92px);
+  font-size: clamp(22px, calc(7.6cqw * var(--shrink, 1)), 92px);
   font-weight: 500;
   color: var(--ink);
   line-height: 1;
@@ -210,7 +210,7 @@
     display: none;
   }
   .amount {
-    font-size: 9.6cqw;
+    font-size: calc(9.6cqw * var(--shrink, 1));
   }
   .who {
     font-size: 3.2cqw;

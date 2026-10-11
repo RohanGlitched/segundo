@@ -217,6 +217,12 @@ select.input {
   border-color: var(--ok);
 }
 
+[id] {
+  scroll-margin-top: 76px;
+}
+html {
+  overflow-x: clip;
+}
 .skeleton {
   background: linear-gradient(90deg, color-mix(in srgb, var(--rule) 60%, transparent), color-mix(in srgb, var(--rule) 25%, transparent), color-mix(in srgb, var(--rule) 60%, transparent));
   background-size: 200% 100%;

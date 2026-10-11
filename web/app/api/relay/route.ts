@@ -1,7 +1,7 @@
-import { concat, decodeFunctionData, encodeFunctionData, isAddress, type Address, type Hex } from "viem";
+import { concat, decodeFunctionData, encodeFunctionData, isAddress, keccak256, type Address, type Hex } from "viem";
 import { forwarderAbi, tillAbi } from "@/lib/abi";
 import { FORWARDER, TILL, publicClient } from "@/lib/chain";
-import { MIN_BUDGET, clientIp, json, limited, revertReason, sendAndWait, signer } from "@/lib/server";
+import { MIN_BUDGET, clientIp, json, limited, lowOnGas, reserveFor, revertReason, sendAndWait, signer } from "@/lib/server";
 
 export const runtime = "nodejs";
 
@@ -23,7 +23,7 @@ const ALLOWED = new Set([
 const MAX_CALL_GAS = 900_000n;
 /** Forwarder overhead: signature check, nonce, and the 1/64 gas reserve it keeps for itself. */
 const OVERHEAD = 70_000n;
-/** Requests being sent right now, by signer and nonce, so two copies of one request can't both cost gas. */
+/** Requests being sent right now, keyed by their signature, so two copies of one request can't both cost gas. */
 const inFlight = new Set<string>();
 
 type Req = { from: Address; to: Address; value: string; gas: string; nonce: string; deadline: number; data: Hex; signature: Hex };
@@ -38,11 +38,10 @@ export async function POST(req: Request) {
   const r = body.request;
   if (!r || typeof r.data !== "string" || typeof r.signature !== "string" || !isAddress(r.from)) return json({ error: "Send a signed request." }, 400);
   let gas: bigint;
-  let nonce: bigint;
   try {
     if (r.to?.toLowerCase() !== TILL.toLowerCase() || BigInt(r.value) !== 0n) return json({ error: "The relayer only pays for Till actions." }, 400);
     gas = BigInt(r.gas);
-    nonce = BigInt(r.nonce);
+    BigInt(r.nonce); // must parse; the forwarder checks the real one
   } catch {
     return json({ error: "Send a signed request." }, 400);
   }
@@ -64,6 +63,9 @@ export async function POST(req: Request) {
   const from = r.from.toLowerCase();
   if (limited(`relay:${from}`, 40, 60_000) || limited(`relay-ip:${clientIp(req)}`, 60, 60_000) || limited("relay:all", 240, 60_000))
     return json({ error: "Too many actions in a minute. Wait a moment and try again." }, 429);
+  // When gas runs low, the actions that give money back keep working longest.
+  const low = await lowOnGas(reserveFor(fn));
+  if (low) return json({ error: low, lowGas: true }, 503);
 
   const request = { from: r.from, to: r.to, value: 0n, gas, deadline: Number(r.deadline), data: r.data, signature: r.signature };
   const valid = await publicClient
@@ -81,7 +83,8 @@ export async function POST(req: Request) {
   }
   if (gas > (inner * 3n) / 2n + 20_000n) return json({ error: "That request asks for too much gas. Reload the page and try again." }, 400);
 
-  const key = `${from}:${nonce}`;
+  // The nonce in the body is only the signer's claim; the signature is what identifies the request.
+  const key = keccak256(r.signature);
   if (inFlight.has(key)) return json({ error: "That action is already on its way." }, 409);
   inFlight.add(key);
   try {

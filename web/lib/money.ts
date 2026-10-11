@@ -71,5 +71,6 @@ export function ago(seconds: number): string {
   if (s < 60) return `${s} seconds ago`;
   if (s < 3600) return `${Math.round(s / 60)} min ago`;
   if (s < 86400) return `${Math.round(s / 3600)} h ago`;
-  return `${Math.round(s / 86400)} days ago`;
+  const d = Math.round(s / 86400);
+  return `${d} ${d === 1 ? "day" : "days"} ago`;
 }

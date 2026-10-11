@@ -1,11 +1,15 @@
 import { encodeFunctionData, hexToSignature, isAddress, type Address, type Hex } from "viem";
-import { DOLLAR, publicClient, dollarAbi } from "@/lib/chain";
-import { clientIp, json, limited, revertReason, sendAndWait, signer } from "@/lib/server";
+import { DOLLAR, FORWARDER, TILL, publicClient, dollarAbi } from "@/lib/chain";
+import { clientIp, json, limited, lowOnGas, revertReason, sendAndWait, signer } from "@/lib/server";
 
 export const runtime = "nodejs";
 
 /** The smallest transfer the relayer pays gas for: one cent. */
 const MIN_SEND = 10_000n;
+/** AUSD sent to these can never come back out, so the relayer won't deliver it there. */
+const NO_INBOX = new Set([TILL, FORWARDER, DOLLAR].map((a) => a.toLowerCase()));
+/** Authorisations being sent right now, so two copies of one transfer can't both cost gas. */
+const inFlight = new Set<string>();
 
 /** Relays an AUSD transferWithAuthorization (EIP-3009) so people can move their pay without gas. */
 export async function POST(req: Request) {
@@ -14,6 +18,7 @@ export async function POST(req: Request) {
     | null;
   if (!b || !isAddress(b.from) || !isAddress(b.to)) return json({ error: "Enter a valid wallet address." }, 400);
   if (b.from.toLowerCase() === b.to.toLowerCase()) return json({ error: "That's your own wallet." }, 400);
+  if (NO_INBOX.has(b.to.toLowerCase())) return json({ error: "That address is a contract that can't send AUSD back. Enter a person's wallet." }, 400);
   let data: Hex;
   try {
     const value = BigInt(b.value);
@@ -26,16 +31,23 @@ export async function POST(req: Request) {
   }
   if (limited(`send:${b.from.toLowerCase()}`, 10, 60_000) || limited(`send-ip:${clientIp(req)}`, 20, 60_000) || limited("send:all", 120, 60_000))
     return json({ error: "Too many transfers in a minute." }, 429);
+  const low = await lowOnGas("open");
+  if (low) return json({ error: low, lowGas: true }, 503);
   try {
     await publicClient.call({ to: DOLLAR, data });
   } catch (e) {
     const why = revertReason(e);
     return json({ error: /balance/i.test(why) ? "Not enough AUSD in your wallet." : why }, 400);
   }
+  const key = `${b.from.toLowerCase()}:${String(b.nonce).toLowerCase()}`;
+  if (inFlight.has(key)) return json({ error: "That transfer is already on its way." }, 409);
+  inFlight.add(key);
   try {
     const { logs: _logs, ...landed } = await sendAndWait(signer("keeper"), { to: DOLLAR, data });
     return json(landed);
   } catch (e) {
     return json({ error: revertReason(e) }, 502);
+  } finally {
+    inFlight.delete(key);
   }
 }

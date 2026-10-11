@@ -30,10 +30,14 @@ export async function GET() {
     }
     const open = tabs.filter((v) => !v.tab.closed);
     // Feature the running tab that has been going longest, so the hero has a story behind it. Between
-    // shifts, show the tab that changed most recently and has a freelancer on it (never an unclaimed invite).
+    // shifts, show the tab that changed most recently and has a freelancer on it and budget left
+    // (never an unclaimed invite, and a spent tab only when nothing else is open).
+    const claimed = open.filter((v) => !/^0x0+$/.test(v.tab.payee));
+    const byRecent = (a: (typeof open)[number], b: (typeof open)[number]) => Number(b.tab.lastBlock - a.tab.lastBlock);
     const featured =
       [...running].sort((a, b) => Number(a.tab.since - b.tab.since))[0] ??
-      [...open].filter((v) => !/^0x0+$/.test(v.tab.payee)).sort((a, b) => Number(b.tab.lastBlock - a.tab.lastBlock))[0] ??
+      claimed.filter((v) => earnedAt(v.tab, now) < v.tab.budget).sort(byRecent)[0] ??
+      claimed.sort(byRecent)[0] ??
       open.at(-1) ??
       null;
 

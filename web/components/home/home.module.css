@@ -46,10 +46,12 @@ a.cityLink:hover {
   color: var(--ink-soft);
 }
 .cityAmount {
-  font-size: 26px;
+  font-size: clamp(16px, 1.55vw + 4px, 26px);
   font-weight: 550;
   margin-top: 8px;
   line-height: 1.1;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .cityState {
   display: inline-flex;
@@ -471,7 +473,7 @@ a.receiptLine:hover span:first-child {
     padding: 16px 12px;
   }
   .cityAmount {
-    font-size: 21px;
+    font-size: clamp(15px, 4.4vw, 21px);
   }
   .sheet {
     grid-template-columns: repeat(2, minmax(0, 1fr));

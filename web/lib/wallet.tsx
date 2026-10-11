@@ -7,14 +7,14 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { monadTestnet } from "./chain";
 
 /**
- * One wallet interface for the app. People sign in with email through Privy (an embedded wallet,
+ * One wallet interface for the app. People sign in with a passkey or an email through Privy (an embedded wallet,
  * no seed phrase, no gas), or start instantly with a practice wallet kept in this browser.
  * Till never asks either one to pay gas: every action is a signature the relayer submits.
  */
 export type Wallet = {
   ready: boolean;
   address?: Address;
-  kind: "email" | "practice" | null;
+  kind: "privy" | "practice" | null;
   label: string;
   /** How a Privy user signed in. */
   method?: "passkey" | "email";
@@ -130,7 +130,7 @@ function WithPrivy({ children }: { children: ReactNode }) {
       return {
         ready: true,
         address: embedded.address as Address,
-        kind: "email",
+        kind: "privy",
         label: email ?? (viaPasskey ? "Passkey account" : "Signed in"),
         method: viaPasskey ? "passkey" : "email",
         privyEnabled: true,

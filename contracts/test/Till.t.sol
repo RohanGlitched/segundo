@@ -8,8 +8,9 @@ import {ERC2771Forwarder} from "@openzeppelin/contracts/metatx/ERC2771Forwarder.
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {Till} from "../src/Till.sol";
 
-contract TestUSDC is ERC20, ERC20Permit {
-    constructor() ERC20("USD Coin", "USDC") ERC20Permit("USD Coin") {}
+/// A 6-decimal dollar with permit, like Agora's AUSD.
+contract TestDollar is ERC20, ERC20Permit {
+    constructor() ERC20("Agora Dollar", "AUSD") ERC20Permit("Agora Dollar") {}
 
     function decimals() public pure override returns (uint8) {
         return 6;
@@ -21,7 +22,7 @@ contract TestUSDC is ERC20, ERC20Permit {
 }
 
 contract TillTest is Test {
-    TestUSDC usdc;
+    TestDollar usd;
     ERC2771Forwarder fwd;
     Till till;
 
@@ -36,14 +37,14 @@ contract TillTest is Test {
 
     function setUp() public {
         vm.warp(1_790_000_000);
-        usdc = new TestUSDC();
+        usd = new TestDollar();
         fwd = new ERC2771Forwarder("Till");
-        till = new Till(usdc, address(fwd));
+        till = new Till(usd, address(fwd));
         client = vm.addr(clientKey);
         freelancer = vm.addr(freelancerKey);
-        usdc.mint(client, 1_000e6);
+        usd.mint(client, 1_000e6);
         vm.prank(client);
-        usdc.approve(address(till), type(uint256).max);
+        usd.approve(address(till), type(uint256).max);
     }
 
     function _open() internal returns (uint256 id) {
@@ -64,14 +65,14 @@ contract TillTest is Test {
 
         vm.prank(keeper);
         till.settle(id);
-        assertEq(usdc.balanceOf(freelancer), RATE, "settled to the freelancer by anyone");
+        assertEq(usd.balanceOf(freelancer), RATE, "settled to the freelancer by anyone");
 
         vm.warp(block.timestamp + 1800);
         vm.prank(client);
         till.close(id);
-        assertEq(usdc.balanceOf(freelancer), RATE + RATE / 2, "paid for 90 minutes");
-        assertEq(usdc.balanceOf(client), 1_000e6 - RATE - RATE / 2, "the rest came back");
-        assertEq(usdc.balanceOf(address(till)), 0);
+        assertEq(usd.balanceOf(freelancer), RATE + RATE / 2, "paid for 90 minutes");
+        assertEq(usd.balanceOf(client), 1_000e6 - RATE - RATE / 2, "the rest came back");
+        assertEq(usd.balanceOf(address(till)), 0);
     }
 
     function test_noPayWhileClockedOut() public {
@@ -180,7 +181,7 @@ contract TillTest is Test {
         uint256 id = till.open(address(0), inviteAddr, RATE, BUDGET, "");
         vm.prank(client);
         till.close(id);
-        assertEq(usdc.balanceOf(client), 1_000e6);
+        assertEq(usd.balanceOf(client), 1_000e6);
     }
 
     function test_settleManyPaysEveryTab() public {
@@ -196,13 +197,13 @@ contract TillTest is Test {
         vm.prank(keeper);
         uint256 total = till.settleMany(ids);
         assertEq(total, 3 * (120 * uint256(RATE) / 3600));
-        for (uint256 i; i < 3; ++i) assertEq(usdc.balanceOf(people[i]), 120 * uint256(RATE) / 3600);
+        for (uint256 i; i < 3; ++i) assertEq(usd.balanceOf(people[i]), 120 * uint256(RATE) / 3600);
     }
 
     /// The whole flow with no gas on either side: a relayer submits signed requests through the forwarder.
     function test_gaslessOpenWithPermitAndClockIn() public {
         address newClient = vm.addr(0xBEEF);
-        usdc.mint(newClient, 50e6);
+        usd.mint(newClient, 50e6);
         assertEq(newClient.balance, 0);
 
         uint256 deadline = block.timestamp + 1 hours;
@@ -212,7 +213,7 @@ contract TillTest is Test {
         fwd.execute(_request(0xBEEF, newClient, call));
         uint256 id = till.tabCount();
         assertEq(till.getTab(id).tab.payer, newClient);
-        assertEq(usdc.balanceOf(address(till)), 20e6);
+        assertEq(usd.balanceOf(address(till)), 20e6);
 
         vm.prank(keeper);
         fwd.execute(_request(freelancerKey, freelancer, abi.encodeCall(Till.clockIn, (id))));
@@ -284,9 +285,9 @@ contract TillTest is Test {
         uint256 earnedAtClose = till.earned(id);
         vm.prank(client);
         till.close(id);
-        assertEq(usdc.balanceOf(freelancer), earnedAtClose);
-        assertEq(usdc.balanceOf(client), 1_000e6 - earnedAtClose);
-        assertEq(usdc.balanceOf(address(till)), 0);
+        assertEq(usd.balanceOf(freelancer), earnedAtClose);
+        assertEq(usd.balanceOf(client), 1_000e6 - earnedAtClose);
+        assertEq(usd.balanceOf(address(till)), 0);
     }
 
     // ---------------------------------------------------------------- helpers
@@ -304,11 +305,11 @@ contract TillTest is Test {
                 owner,
                 address(till),
                 value,
-                usdc.nonces(owner),
+                usd.nonces(owner),
                 deadline
             )
         );
-        return vm.sign(key, MessageHashUtils.toTypedDataHash(usdc.DOMAIN_SEPARATOR(), structHash));
+        return vm.sign(key, MessageHashUtils.toTypedDataHash(usd.DOMAIN_SEPARATOR(), structHash));
     }
 
     function _request(uint256 key, address from, bytes memory data) internal view returns (ERC2771Forwarder.ForwardRequestData memory req) {

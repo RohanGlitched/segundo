@@ -5,7 +5,7 @@ import { decodeEventLog, type Address, type Hex } from "viem";
 import { tillAbi } from "./abi";
 import { TILL, DOLLAR, publicClient, dollarAbi } from "./chain";
 import { readProfiles, readTabs, type Profile, type TabView } from "./tabs";
-import { requestTestUsdc, type Landed } from "./relay";
+import { requestTestDollars, type Landed } from "./relay";
 
 /** Fired by the profile form after a save lands, so every profile on the page re-reads at once. */
 export const PROFILE_SAVED = "till:profile";
@@ -87,7 +87,7 @@ export function useMyTabIds(address?: Address) {
   return { ids, refresh };
 }
 
-export function useUsdcBalance(address?: Address) {
+export function useDollarBalance(address?: Address) {
   const [balance, setBalance] = useState<bigint | null>(null);
   const refresh = useCallback(async () => {
     if (!address) return setBalance(null);
@@ -118,7 +118,7 @@ export function useAutoDrip(address: Address | undefined, balance: bigint | null
       sessionStorage.setItem(key, "1");
     } catch {}
     setState("sending");
-    requestTestUsdc(address)
+    requestTestDollars(address)
       .then((r) => {
         setLanded({ ...r, what: "25 test AUSD arrived" });
         setState("done");

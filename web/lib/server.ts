@@ -103,6 +103,37 @@ export const clientIp = (req: Request) => req.headers.get("x-real-ip") ?? req.he
 /** The smallest tab budget or top-up the relayer will pay gas for: half a test dollar. */
 export const MIN_BUDGET = 500_000n;
 
+/**
+ * How much test MON the relayer keeps back before it pays for each kind of action, so that when gas
+ * runs low the actions that return money (clock-outs, closes, cash-outs) keep working longest.
+ * Watch-payouts stop first, then new tabs and transfers, then clock-ins; closes run to the last drop.
+ */
+export const RESERVE = {
+  settle: 400_000_000_000_000_000n, // 0.4 MON: watch-payouts pause
+  open: 150_000_000_000_000_000n, // 0.15 MON: new tabs, top-ups, sends and profiles pause
+  clockIn: 50_000_000_000_000_000n, // 0.05 MON: clock-ins pause
+  essential: 0n, // clock-outs, holds, closes and invite claims run while anything is left
+} as const;
+
+/** Which reserve a forwarded Till call must clear. */
+export function reserveFor(fn: string): keyof typeof RESERVE {
+  if (fn === "settle") return "settle";
+  if (fn === "clockIn") return "clockIn";
+  if (fn === "clockOut" || fn === "hold" || fn === "close" || fn === "claim") return "essential";
+  return "open";
+}
+
+const LOW_GAS =
+  "The relayer is low on test MON, so this action is paused for the moment. Clock-outs and closes still work, and nothing you have earned is lost.";
+
+/** Refuses an action when the relayer's MON is below the tier it needs; returns the message to show. */
+export async function lowOnGas(tier: keyof typeof RESERVE): Promise<string | null> {
+  if (RESERVE[tier] === 0n) return null;
+  const mon = await publicClient.getBalance({ address: signer("keeper").account.address }).catch(() => null);
+  if (mon === null) return null; // an RPC hiccup must not block the action; the send itself will fail loudly
+  return mon < RESERVE[tier] ? LOW_GAS : null;
+}
+
 export const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body, (_, v) => (typeof v === "bigint" ? v.toString() : v)), {
     status,

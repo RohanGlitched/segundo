@@ -30,7 +30,7 @@ Freelancers outside the US and Europe wait for their money and pay to receive it
 |---|---|
 | **6.49%** | average cost of sending money across borders ([World Bank, Q1 2025](https://remittanceprices.worldbank.org/)) |
 | **~10 days** | before hourly marketplace pay is released after the work week ([Upwork](https://www.upwork.com/resources/understanding-freelancer-payment-protection)) |
-| **435M** | online gig workers worldwide ([World Bank, 2023](https://openknowledge.worldbank.org/entities/publication/ebc4a7e2-85c6-467b-8713-e2d77e954c6c)) |
+| **up to 435M** | online gig workers worldwide, 154M to 435M ([World Bank, 2023](https://openknowledge.worldbank.org/entities/publication/ebc4a7e2-85c6-467b-8713-e2d77e954c6c)) |
 
 And if a client disappears, the freelancer chases an invoice for work already done.
 
@@ -38,7 +38,7 @@ And if a client disappears, the freelancer chases an invoice for work already do
 
 A client opens a **tab**: an hourly rate and a budget in **AUSD**, Agora's digital dollar. The budget waits in the Till contract on Monad, which can only pay the freelancer for time on the clock or send it back to the client. While the freelancer is **clocked in**, pay builds up every second; while the tab is open on screen it lands in their wallet every few seconds, each payout settling in about a second. Either side can stop the clock at any moment, the client can pause pay or top up, and closing the tab returns every unspent cent in the same block.
 
-**Nobody is ever owed more than a few seconds of work.**
+**Every second of pay is already locked in the contract, and either side can stop the clock at any moment.**
 
 ```mermaid
 sequenceDiagram
@@ -114,8 +114,8 @@ Tabs are funded and paid in [AUSD](https://www.agora.finance), Agora's dollar st
 
 ## Why Monad
 
-- **Pay you can watch arrive.** Blocks every ~0.4 s with fast finality: a payout lands while the freelancer is still looking at the screen. The tab page settles every few seconds and shows how long each payout took (about 0.8 s from a browser in India). Every payout is a transaction the relayer pays for, so the pace eases the longer a page stays open, and the last seconds of pay are sent the moment a clock stops.
-- **Built for parallel execution.** Pay accrues from timestamps and each tab keeps its own state. Clocking and settling never write shared storage, so independent tabs never contend; `settleMany` pays many tabs in one transaction.
+- **Pay you can watch arrive.** Blocks every ~0.4 s with fast finality: a payout lands while the freelancer is still looking at the screen. The tab page settles every few seconds and shows how long each payout took (0.6 to 2.6 s from a laptop in India in the proof run, [VERIFY.md](VERIFY.md)). Every payout is a transaction the relayer pays for, so the pace eases the longer a page stays open, and the last seconds of pay are sent the moment a clock stops.
+- **Built for parallel execution.** Pay accrues from timestamps, so nothing is written while the clock runs, and each tab's state is its own. The shared slots are few and known: `tabCount` on open, and the escrow balance inside AUSD on every payout, which Monad's optimistic execution re-runs when two land in one block. `settleMany` pays many tabs in one transaction.
 - **Monad-aware engineering.** Monad charges the gas *limit*, not gas used, so every transaction (relayer, faucet, bots) is sent with Monad's own gas estimate plus a small margin, never a blanket limit. Public RPCs cap `eth_getLogs` at 100 blocks, so each tab links its changes block to block (`Activity(id, prevBlock)`) and the app reads a full pay stub with one exact-block query per step, with no indexer.
 - **Live from the chain.** The site follows Monad's `newHeads` subscription; the landing page's numbers, world clocks and receipt all come from contract state and exact-block log reads.
 
@@ -140,13 +140,14 @@ No owner, no admin key, no upgrade path, no fee switch: earned pay can only go t
 | Paid + refunded always equals the budget | `testFuzz_moneyIsConserved` (1,000 runs) |
 | Whatever happens in any order, escrow equals what open tabs still hold and pay never goes down | `TillInvariantTest`: 2 stateful invariants over 12,800 random actions |
 | Edge cases hold: top-ups mid-shift and at exhaustion, duplicate settles, extreme rates, issuer freezes, dust tabs | `TillEdges.t.sol`, 32 tests |
+| A hostile token or receiver cannot re-enter `settle`, `settleMany` or `close`; an invite signature is bound to its tab, contract and chain; the rate can never change under a running shift | `TillAdversary.t.sol`, 7 tests |
 | Fully gasless with an AUSD permit and the forwarder | `test_gaslessOpenWithPermitAndClockIn`, plus a fork test with Agora's real AUSD |
 | Every action works on Monad testnet | [VERIFY.md](VERIFY.md): 17 transactions, one per action, with fresh wallets |
 | The whole UI works on the live site | `scripts/e2e.cjs`: faucet, profile, open, payouts, pause, close, invite on a phone |
 
 ```bash
 cd contracts
-forge test                                                   # 46 tests: units, edges, a 1,000-run fuzz, stateful invariants
+forge test                                                   # 53 tests: units, edges, adversary, a 1,000-run fuzz, stateful invariants
 forge test --match-contract Fork --fork-url monad_testnet    # Agora AUSD on a Monad fork
 ```
 
@@ -171,7 +172,7 @@ flowchart TB
 ```
 
 ```
-contracts/   Till.sol (Solidity 0.8.28, OpenZeppelin 5.4), Foundry tests, deploy script
+contracts/   Till.sol (Solidity 0.8.28, OpenZeppelin 5.4), 53 Foundry tests, deploy script
 web/         Next.js 15 app and API routes: relay, send, settle, faucet, live stats, exchange rates
 bots/        Seeded studios (Berlin, Austin, Singapore) and freelancers (Manila, Lagos, Pune,
              São Paulo, Nairobi) on their local working hours, the keeper, and the proof run
@@ -186,6 +187,12 @@ cd web && npm install && npm run dev
 ```
 
 Web environment: `NEXT_PUBLIC_TILL_ADDRESS`, `NEXT_PUBLIC_FORWARDER_ADDRESS`, `NEXT_PUBLIC_PRIVY_APP_ID` (without it the app offers practice wallets), and server-only `KEEPER_KEY` and `FAUCET_KEY`.
+
+Operating it: `GET /api/health` reports the relayer's and the faucet wallet's test MON against the reserve tiers (watch-payouts pause first, then new tabs and sends, then clock-ins; closes and clock-outs run to the last drop) and the app shows a notice bar while anything is paused. `node bots/topup.mjs keeper=10` moves test MON between the project's wallets; the bots log loudly when the keeper runs low.
+
+## Built with
+
+[Monad](https://monad.xyz) testnet · [Agora AUSD](https://www.agora.finance) (EIP-2612, EIP-3009) · [Privy](https://privy.io) embedded wallets and passkeys · [OpenZeppelin 5.4](https://www.openzeppelin.com/contracts) (`ERC2771Forwarder`, `ERC2771Context`, `ReentrancyGuardTransient`, `SafeERC20`) · [Foundry](https://getfoundry.sh) · [Next.js 15](https://nextjs.org) · [viem](https://viem.sh) · Archivo by Omnibus-Type · exchange rates from open.er-api.com.
 
 ## Roadmap
 

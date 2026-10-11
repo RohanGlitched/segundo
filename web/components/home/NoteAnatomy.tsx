@@ -41,8 +41,8 @@ export function NoteAnatomy() {
           rateUsd={rate}
           hours={minutes / 60}
           live
-          status={`On the clock for ${Math.floor(minutes)} min`}
-          serialLine={`block ${head ? head.number.toLocaleString("en-US") : "…"}, paid moments ago`}
+          status={`Specimen: on the clock for ${Math.floor(minutes)} min`}
+          serialLine={`block ${head ? head.number.toLocaleString("en-US") : "…"}, a specimen note`}
         />
         {PARTS.map((p) => (
           <span

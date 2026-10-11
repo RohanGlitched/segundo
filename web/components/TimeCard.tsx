@@ -104,7 +104,7 @@ export function TimeCard({ lines, now, earnedUsd, running, partial }: { lines: S
         </text>
       </svg>
       <figcaption className={styles.cap}>
-        {partial ? "In this stretch: " : ""}{workedText} on the clock across {sessions}
+        {work.length === 0 && partial ? "No clock changes in this stretch of the history" : `${partial ? "In this stretch: " : ""}${workedText} on the clock across ${sessions}`}
         {holds.length ? `, paused ${holds.length} ${holds.length === 1 ? "time" : "times"}` : ""}. Each tick is a payout transaction.
       </figcaption>
     </figure>

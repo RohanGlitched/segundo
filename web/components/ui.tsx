@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, type ReactNode } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { explorerTx } from "@/lib/chain";
 import { plainError, type Landed } from "@/lib/relay";
 import { useWallet } from "@/lib/wallet";
@@ -59,9 +59,13 @@ export function LandedLine({ landed }: { landed: (Landed & { what: string }) | n
 }
 
 export function ErrorLine({ error }: { error: string | null }) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (error) ref.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [error]);
   if (!error) return null;
   return (
-    <p className="notice error" role="alert">
+    <p className="notice error" role="alert" ref={ref}>
       {error}
     </p>
   );

@@ -199,7 +199,16 @@ export default function Join() {
 function Shell({ children, busy }: { children?: React.ReactNode; busy?: boolean }) {
   return (
     <main className={`wrap ${styles.page}`} aria-busy={busy}>
-      {busy ? <div className={`skeleton ${styles.skel}`} /> : <h1 className={styles.h1}>{children}</h1>}
+      {busy ? (
+        <div className={`skeleton ${styles.skel}`} />
+      ) : (
+        <>
+          <h1 className={styles.h1}>{children}</h1>
+          <p className="soft">
+            <Link href="/">Home</Link> · <Link href="/app">Your tabs</Link> · <Link href="/open">Open a tab</Link>
+          </p>
+        </>
+      )}
     </main>
   );
 }

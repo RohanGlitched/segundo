@@ -11,7 +11,7 @@ Everything here can be checked on Monad testnet (chain 10143) without trusting u
 | AUSD (Agora) | [`0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC`](https://testnet.monadvision.com/address/0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC) | [Agora's deployments](https://docs.agora.finance/developer/contract-deployments) |
 | Agora AUSD faucet | [`0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C`](https://testnet.monadvision.com/address/0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C) | Used to fund test accounts |
 
-Deployment transactions: [forwarder](https://testnet.monadvision.com/tx/0x4ec106a8034299c0146d51b18ef56852c693ee1205eb16c93623fa3958625a15), [Till on AUSD](https://testnet.monadvision.com/tx/0x12ec03d3c85cfe1ae59fdb67c29d1b4b181af40584c189ac158b0643f30760d6). An earlier Till on Circle USDC (`0x4720B1FA15a8e3b8AEc7aA6B7b627dCacEaa1b4f`) was replaced by the AUSD deployment on Oct 4.
+Deployment transactions: [forwarder](https://testnet.monadvision.com/tx/0x4ec106a8034299c0146d51b18ef56852c693ee1205eb16c93623fa3958625a15), [Till on AUSD](https://testnet.monadvision.com/tx/0x12ec03d3c85cfe1ae59fdb67c29d1b4b181af40584c189ac158b0643f30760d6). An earlier Till on Circle USDC (`0x4720B1FA15a8e3b8AEc7aA6B7b627dCacEaa1b4f`, retired, holds nothing) was replaced by the AUSD deployment on Oct 4.
 
 ## One tab, every action, on chain
 
@@ -49,7 +49,7 @@ TILL=0xeb6c2c519c9bcc4495364c34ac116c20098113d1 FORWARDER=0xB0Af71Dfb11df900B2B1
 
 ```bash
 cd contracts
-forge test                                                    # 46 tests: units, edges, a 1,000-run fuzz, stateful invariants
+forge test                                                    # 53 tests: units, edges, adversary, a 1,000-run fuzz, stateful invariants (the fork rehearsal is skipped off-fork)
 forge test --match-contract Fork --fork-url monad_testnet     # Agora AUSD (faucet, permit, transferWithAuthorization) on a Monad fork
 ```
 
@@ -72,6 +72,9 @@ forge test --match-contract Fork --fork-url monad_testnet     # Agora AUSD (fauc
 | The forwarder rejects replays, expired requests and forged senders; a sender suffix is ignored outside the forwarder | `test_forwarderRejectsReplayExpiryAndForgedFrom`, `test_spoofedSenderSuffixIgnoredOutsideForwarder` |
 | A front-run or garbage permit never blocks an open that already has an allowance | `test_frontRunPermitDoesNotBlockOpen`, `test_badPermitFallsBackToAllowance` |
 | What an AUSD account freeze does to a tab (documented in SECURITY.md) | `test_frozenPayeeLocksRefundAndBreaksBatch`, `test_frozenPayerBlocksCloseButNotSettle` |
+| A token or receiver that calls back into Till mid-transfer cannot re-enter `settle`, `settleMany` or `close`; with the hook gone the same close pays and refunds exactly once | `test_settleCannotReenterSettle`, `test_settleCannotReenterClose`, `test_closeCannotReenterSettleOrClose`, `test_settleManyCannotReenter` |
+| An invite signature works on its own tab, contract and chain only, and once; a client cannot claim their own invite | `test_inviteSignatureIsBoundToTabContractAndChain`, `test_clientCannotClaimTheirOwnInvite` |
+| A rate change never touches a running shift and only prices the next one | `test_rateChangeNeverTouchesARunningShift` |
 
 The web app has an end-to-end test that drives the real UI on the deployed site: faucet, profile, open a tab to a demo freelancer, payouts while watching, pause, close and refund, then an invite joined from a second browser at phone width (`scripts/e2e.cjs`).
 
