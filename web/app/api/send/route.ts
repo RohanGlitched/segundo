@@ -1,7 +1,7 @@
 import { isAddress, type Hex } from "viem";
 import { authorizationCall, authorizationKey, type SignedAuthorization } from "@/lib/authorization";
 import { DOLLAR, FORWARDER, TILL, TREASURY, publicClient } from "@/lib/chain";
-import { clientIp, json, limited, lowOnGas, revertReason, sendAndWait, signer } from "@/lib/server";
+import { clientIp, json, limited, relayerFor, revertReason, sendAndWait } from "@/lib/server";
 
 export const runtime = "nodejs";
 
@@ -32,7 +32,8 @@ export async function POST(req: Request) {
   }
   if (limited(`send:${b.from.toLowerCase()}`, 10, 60_000) || limited(`send-ip:${clientIp(req)}`, 20, 60_000) || limited("send:all", 120, 60_000))
     return json({ error: "Too many transfers in a minute." }, 429);
-  const low = await lowOnGas("open");
+  // The sender's own relayer key, so one person's transfers keep their order while other people's run alongside.
+  const { relayer, low } = await relayerFor(b.from, "open");
   if (low) return json({ error: low, lowGas: true }, 503);
   try {
     await publicClient.call({ to: DOLLAR, data });
@@ -44,7 +45,7 @@ export async function POST(req: Request) {
   if (inFlight.has(key)) return json({ error: "That transfer is already on its way." }, 409);
   inFlight.add(key);
   try {
-    const { logs: _logs, ...landed } = await sendAndWait(signer("keeper"), { to: DOLLAR, data });
+    const { logs: _logs, ...landed } = await sendAndWait(relayer, { to: DOLLAR, data });
     return json(landed);
   } catch (e) {
     return json({ error: revertReason(e) }, 502);

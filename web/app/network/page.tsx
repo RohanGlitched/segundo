@@ -151,7 +151,7 @@ export default async function Network() {
             <p className={styles.lede}>
               Per-second pay only works if many tabs can pay out at the same moment without queueing behind each other. So on {runDay} we opened{" "}
               {bench.tabs} real tabs on Monad testnet, clocked every freelancer in, and settled all of them every second. Then we sent the same kind of
-              payout from a single key, the way Segundo&apos;s relayer works today. Below are the numbers from that run, what they don&apos;t prove, and the
+              payout from a single key, the way Segundo&apos;s relayer worked before this test. Below are the numbers from that run, what they don&apos;t prove, and the
               transactions so you can check them.
             </p>
           </div>
@@ -334,7 +334,7 @@ export default async function Network() {
             </div>
             <div className={`${styles.compareRow} ${styles.compareUs}`} role="row">
               <span role="cell" className={styles.compareWho}>
-                One key, one at a time: Segundo&apos;s relayer today
+                One key, one at a time: Segundo&apos;s relayer before this test
               </span>
               <span role="cell" data-label="Payouts">
                 {bench.singleSender.txs} in {bench.singleSender.durationS.toFixed(1)} s
@@ -353,8 +353,9 @@ export default async function Network() {
           <div className={styles.verdict}>
             <p>
               <b>Monad was not the bottleneck; our relayer was.</b> {bench.pipelined.txs} payouts from one fresh key with consecutive nonces all landed in a
-              single block. Segundo&apos;s relayer sends a transaction, waits for its receipt, then sends the next, so it tops out near{" "}
-              {bench.singleSender.txPerS.toFixed(1)} payouts a second however fast the chain is. That is fine for a demo and wrong for payroll.
+              single block. Segundo&apos;s relayer used to send a transaction, wait for its receipt, then send the next, so it topped out near{" "}
+              {bench.singleSender.txPerS.toFixed(1)} payouts a second however fast the chain is. That was fine for a demo and wrong for payroll, so we
+              changed it: the relayer is now a pool of keys that keep many transactions in flight each.
             </p>
             <p>
               Production needs what this benchmark used: <b>a pool of relayer keys, each sending its own nonces without waiting</b>. With a pool, one stuck
@@ -364,6 +365,12 @@ export default async function Network() {
                 1
               </a>
               . At {bench.cost.perSettleMon} MON a payout, that limit is roughly a thousand payouts in flight per key.
+            </p>
+            <p>
+              <b>Since this run, Segundo&apos;s relayer uses a pool of 7 keys.</b> Each person&apos;s actions go to one key chosen from their address (a
+              tab&apos;s payouts, from its number), so they stay in order, and each key sends its next transaction without waiting for the last one&apos;s
+              receipt. In our own test of 12 transfers sent at once by 12 people, the last one finished in 5.6 to 9.4 s over three runs; through the
+              one-key relayer it took 25 to 57 s, and one timed out.
             </p>
           </div>
         </Sec>

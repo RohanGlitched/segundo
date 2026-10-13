@@ -4,7 +4,8 @@ import { authorizationCall, authorizationKey, type SignedAuthorization } from "@
 import { DOLLAR, FORWARDER, TILL, TREASURY, dollarAbi, publicClient } from "@/lib/chain";
 import { feeFor, formatFee } from "@/lib/money";
 import { feeRefundNonce, fromTreasury, refundClosedTab, type Refund, type TabRefund } from "@/lib/refund";
-import { LOW_GAS, MIN_BUDGET, clientIp, json, limited, lowOnGas, reserveFor, revertReason, sendAndWait, signer } from "@/lib/server";
+import type { Relayer } from "@/lib/pool";
+import { LOW_GAS, MIN_BUDGET, asRelayer, clientIp, json, limited, relayerFor, reserveFor, revertReason, sendAndWait } from "@/lib/server";
 
 export const runtime = "nodejs";
 
@@ -90,8 +91,9 @@ export async function POST(req: Request) {
   const from = r.from.toLowerCase();
   if (limited(`relay:${from}`, 40, 60_000) || limited(`relay-ip:${clientIp(req)}`, 60, 60_000) || limited("relay:all", 240, 60_000))
     return json({ error: "Too many actions in a minute. Wait a moment and try again." }, 429);
+  // The signer's own relayer key: their actions stay in order on it while other people's run on the rest of the pool.
   // When gas runs low, the actions that give money back keep working longest.
-  const low = await lowOnGas(reserveFor(fn));
+  const { relayer: keeper, low } = await relayerFor(r.from, reserveFor(fn));
   if (low) return json({ error: low, lowGas: true }, 503);
 
   const request = { from: r.from, to: r.to, value: 0n, gas, deadline: Number(r.deadline), data: r.data, signature: r.signature };
@@ -100,7 +102,6 @@ export async function POST(req: Request) {
     .catch(() => false);
   if (!valid) return json({ error: "The signature doesn't match this request. Reload the page and try again." }, 400);
 
-  const keeper = signer("keeper");
   if (fee) {
     // The budget and the fee leave the wallet together, so both must be there before anything moves.
     const balance = await publicClient.readContract({ address: DOLLAR, abi: dollarAbi, functionName: "balanceOf", args: [r.from] }).catch(() => null);
@@ -166,7 +167,7 @@ export async function POST(req: Request) {
       if (!feePaid || !fee) return json({ error: why }, 502);
       // The fee paid for something that didn't happen: it goes straight back.
       console.error(`!!! ${fn} by ${r.from} failed after its ${fee.value} fee landed in ${feePaid.hash} (${why}); refunding the fee`);
-      const back = await refundFee(r.from, fee.value, fee.nonce);
+      const back = await refundFee(keeper, r.from, fee.value, fee.nonce);
       const error = back.feeRefund
         ? `The ${fn.startsWith("open") ? "tab couldn't be opened" : "top-up didn't go through"} (your wallet or the tab changed meanwhile), so Segundo's fee has been sent back. Nothing else moved.`
         : `The ${fn.startsWith("open") ? "tab couldn't be opened" : "top-up didn't go through"}. ${back.feeRefundError}`;
@@ -180,7 +181,7 @@ export async function POST(req: Request) {
       const started = Date.now();
       const id = args[0] as bigint;
       try {
-        const back: TabRefund = await refundClosedTab(id, true);
+        const back: TabRefund = await asRelayer(keeper, () => refundClosedTab(id, true));
         result.feeRefund = back.hash ? { value: back.value, hash: back.hash, block: back.block } : { value: 0n, note: back.note };
       } catch (e) {
         console.error(`!!! FEE REFUND FAILED for closed tab ${id} (close ${landed.hash}): ${revertReason(e)}`);
@@ -196,10 +197,10 @@ export async function POST(req: Request) {
   }
 }
 
-/** Sends a whole fee back to the client; never throws, since the caller is already answering with an error. */
-async function refundFee(to: Address, value: bigint, clientNonce: Hex): Promise<{ feeRefund?: Refund; feeRefundError?: string }> {
+/** Sends a whole fee back to the client, submitted by the request's own relayer key; never throws, since the caller is already answering with an error. */
+async function refundFee(keeper: Relayer, to: Address, value: bigint, clientNonce: Hex): Promise<{ feeRefund?: Refund; feeRefundError?: string }> {
   try {
-    return { feeRefund: await fromTreasury(to, value, feeRefundNonce(clientNonce)) };
+    return { feeRefund: await asRelayer(keeper, () => fromTreasury(to, value, feeRefundNonce(clientNonce))) };
   } catch (e) {
     console.error(`!!! FEE REFUND FAILED: ${value} to ${to} for fee nonce ${clientNonce}: ${revertReason(e)}`);
     return { feeRefundError: "Segundo's fee was taken but its refund didn't go through yet. It will be sent back." };
@@ -210,13 +211,13 @@ async function refundFee(to: Address, value: bigint, clientNonce: Hex): Promise<
 async function retryRefund(req: Request, raw: unknown) {
   if (typeof raw !== "string" || !/^\d{1,12}$/.test(raw)) return json({ error: "Which tab?" }, 400);
   if (limited(`refund:${raw}`, 2, 60_000) || limited(`refund-ip:${clientIp(req)}`, 10, 60_000)) return json({ error: "Try again in a minute." }, 429);
-  const low = await lowOnGas("essential");
+  const { relayer, low } = await relayerFor(BigInt(raw), "essential");
   if (low) return json({ error: low, lowGas: true }, 503);
   const key = `refund:${raw}`;
   if (inFlight.has(key)) return json({ error: "That refund is already on its way." }, 409);
   inFlight.add(key);
   try {
-    const back = await refundClosedTab(BigInt(raw));
+    const back = await asRelayer(relayer, () => refundClosedTab(BigInt(raw)));
     return json({ feeRefund: back.hash ? { value: back.value, hash: back.hash, block: back.block } : { value: 0n, note: back.note } });
   } catch (e) {
     return json({ feeRefundError: revertReason(e) }, 400);

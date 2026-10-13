@@ -9,7 +9,10 @@ Everything here can be checked on Monad testnet (chain 10143) without trusting u
 | Till (AUSD) | [`0xeb6c2c519c9bcc4495364c34ac116c20098113d1`](https://testnet.monadvision.com/address/0xeb6c2c519c9bcc4495364c34ac116c20098113d1) | Verified on Sourcify, exact match ([job](https://sourcify-api-monad.blockvision.org/v2/verify/e3300355-e6e0-40ff-8435-6642865d38f9)) |
 | ERC2771Forwarder (OpenZeppelin 5.4, unmodified) | [`0xB0Af71Dfb11df900B2B1a63De0D156e7f035B4D1`](https://testnet.monadvision.com/address/0xB0Af71Dfb11df900B2B1a63De0D156e7f035B4D1) | Verified on Sourcify, exact match ([job](https://sourcify-api-monad.blockvision.org/v2/verify/197e7720-567e-4e95-81d2-336d820b0aba)) |
 | AUSD (Agora) | [`0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC`](https://testnet.monadvision.com/address/0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC) | [Agora's deployments](https://docs.agora.finance/developer/contract-deployments) |
-| Segundo treasury | [`0xAdF0F9443EafD19916cBd8f7541ea5e19e69F62c`](https://testnet.monadvision.com/address/0xAdF0F9443EafD19916cBd8f7541ea5e19e69F62c) | A plain account; receives the 1% client fee |
+| SegundoKeeper (Chainlink CRE receiver) | [`0xFEf8d6A7aF00ACd33FDdd2Ef8800cab78164d80D`](https://testnet.monadvision.com/address/0xFEf8d6A7aF00ACd33FDdd2Ef8800cab78164d80D) | Verified on Sourcify, exact match ([job](https://sourcify-api-monad.blockvision.org/verify-ui/jobs/430e8de2-2f2a-4cbe-97fc-83604b0676a7)); source in `cre/contracts` |
+| Segundo treasury | [`0xAdF0F9443EafD19916cBd8f7541ea5e19e69F62c`](https://testnet.monadvision.com/address/0xAdF0F9443EafD19916cBd8f7541ea5e19e69F62c) | A plain account; receives the 1% client fee and signs its refunds |
+| Segundo relayer (key 0) | [`0xe77f8062f66767428b1786709E079cABd01ABF40`](https://testnet.monadvision.com/address/0xe77f8062f66767428b1786709E079cABd01ABF40) | Sends every gasless action, the fee and refunds |
+| Demo payout partner (cash-out) | [`0x092178787c772cbF67c2560B38D9F4f3454677e6`](https://testnet.monadvision.com/address/0x092178787c772cbF67c2560B38D9F4f3454677e6) | A plain wallet standing in for a licensed partner on testnet |
 | Agora AUSD faucet | [`0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C`](https://testnet.monadvision.com/address/0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C) | Used to fund test accounts |
 
 Deployment transactions: [forwarder](https://testnet.monadvision.com/tx/0x4ec106a8034299c0146d51b18ef56852c693ee1205eb16c93623fa3958625a15), [Till on AUSD](https://testnet.monadvision.com/tx/0x12ec03d3c85cfe1ae59fdb67c29d1b4b181af40584c189ac158b0643f30760d6). An earlier Till on Circle USDC (`0x4720B1FA15a8e3b8AEc7aA6B7b627dCacEaa1b4f`, retired, holds nothing) was replaced by the AUSD deployment on Oct 4.
@@ -48,11 +51,50 @@ TILL=0xeb6c2c519c9bcc4495364c34ac116c20098113d1 FORWARDER=0xB0Af71Dfb11df900B2B1
 
 ## The 1% fee on chain
 
-Clients pay Segundo 1% on top of every budget and top-up; freelancers pay nothing. The fee is not part of the contract. The client signs an AUSD `transferWithAuthorization` (EIP-3009) to the treasury in the same step as the open or top-up, and the relayer submits it as its own transaction right after the forwarded call lands (`web/app/api/relay/route.ts`). Fee = budget ÷ 100, rounded up to the next AUSD unit (6 decimals).
+Clients pay Segundo 1% on top of every budget and top-up; freelancers pay nothing. The fee is not part of the contract: it is an AUSD `transferWithAuthorization` (EIP-3009) from the client to the treasury, signed in the same step as the open or top-up. Fee = amount ÷ 100, rounded up to the next AUSD unit (6 decimals). The order, in `web/app/api/relay/route.ts`:
 
-So every fee is an AUSD `Transfer` log whose recipient (topic 2) is the treasury. Envio HyperRPC answers a log query over the whole range in one call (Monad's public RPC caps `eth_getLogs` at 100 blocks):
+1. **Checked.** The relayer refuses a fee from anyone but the signer, to anyone but the treasury, under 1%, or with under two minutes to run; checks the wallet holds the budget plus the fee; and simulates both the fee transfer and the open.
+2. **Fee first.** The relayer sends the fee and waits for it to land.
+3. **Then the open or top-up**, simulated again now that the fee has moved, then sent through the forwarder.
+4. **If that fails, the whole fee goes back** from the treasury straight away.
+5. **At close, 1% of the unspent budget goes back**: `floor(refunded ÷ 100)`, never more than the fees that tab actually paid (`refundClosedTab` in `web/lib/refund.ts`).
+
+Every refund is an EIP-3009 transfer **signed by the treasury and submitted by the relayer**, so the treasury never needs MON. Its nonce is derived from what is being refunded, so AUSD itself refuses a second refund of the same thing, from any server instance:
+
+```
+close refund:  nonce = keccak256("segundo:fee-refund:tab" ‖ pad32(Till) ‖ pad32(tab id))
+failed open:   nonce = keccak256("segundo:fee-refund:fee" ‖ the client's fee-authorisation nonce)
+```
+
+### One tab through the whole cycle
+
+Tab № 124, client `0xA4980bae43FC09C0ee7B764121E63cCA93b01065`, demo freelancer Tunde Bakare (`0x929835102eb2e16F5678C8c3B4830C369D1d4bE0`), $1.00 an hour, $2.00 budget, memo "Fee refund check". Every transaction was sent by the relayer `0xe77f…ABF40`; the client never held MON.
+
+| # | Step | Transaction | Block | UTC | What moved |
+|---|---|---|---|---|---|
+| 1 | Fee, first | [0xd7ccc65e…](https://testnet.monadvision.com/tx/0xd7ccc65eb21b9445d31736e1fb1af962868db197c9b36e1d8125f2f65162a3dd) | 70,683,058 | 12:34:43 | 20,000 units client → treasury (1% of 2,000,000) |
+| 2 | Open, 27 blocks later | [0x59737997…](https://testnet.monadvision.com/tx/0x59737997b5d745133c42114cc337348aa5aa9fd00dfbfeb4dd9b1e5dd5846956) | 70,683,085 | 12:34:51 | `Opened(id = 124, budget = 2,000,000)`; 2,000,000 units client → Till |
+| 3 | Close | [0xc864b77e…](https://testnet.monadvision.com/tx/0xc864b77edbb87b2ebd9cad2acdbc05ae9c59ff4685f90a6cfa7135ac4841d984) | 70,686,400 | 12:51:43 | Last 171,389 units to the freelancer; `Closed(paid = 280,000, refunded = 1,720,000)` |
+| 4 | Fee refund | [0xe431e833…](https://testnet.monadvision.com/tx/0xe431e833aef54acc52eb5b117b65b08d6b0dd95d1bce35128a3bb21a5449bb5b) | 70,686,435 | 12:51:54 | 17,200 units treasury → client = floor(1,720,000 ÷ 100) |
+
+Net: the client paid 20,000 − 17,200 = **2,800 units, exactly 1% of the 280,000 the freelancer earned**. The refund's `AuthorizationUsed` nonce is `0xee5931b8…3836`, the close-refund nonce for tab 124 above; `authorizationState(treasury, that nonce)` on AUSD returns `true`, so no second refund for tab 124 can go through.
+
+### A failed open: the whole fee back
+
+| Step | Transaction | Block | UTC | What moved |
+|---|---|---|---|---|
+| Fee for a $0.50 open | [0x61e72472…](https://testnet.monadvision.com/tx/0x61e724722028b29661b305c24a5f977118b3ab91571b0b91fbd682ea24b5464c) | 70,686,938 | 12:54:28 | 5,000 units client → treasury |
+| The open, made to fail after the fee landed | none | | | No Till event in blocks 70,686,930 to 70,686,990 |
+| Whole fee refunded | [0x1070c7ef…](https://testnet.monadvision.com/tx/0x1070c7ef593272edb33af3e63dfcabbd93f1553fab96ae94d4cd3ac209e889c8) | 70,686,951 | 12:54:32 | 5,000 units treasury → client |
+
+The refund's nonce, `0x55f7c2e7…5b7c`, is `keccak256("segundo:fee-refund:fee" ‖ 0x97c0b9c7…1b0f)`, built from the nonce of the client's own fee authorisation in the first transaction.
+
+### Find every fee and refund yourself
+
+Every fee is an AUSD `Transfer` log whose recipient (topic 2) is the treasury; every refund is one whose sender (topic 1) is the treasury. Envio HyperRPC answers a log query over the whole range in one call (Monad's public RPC caps `eth_getLogs` at 100 blocks):
 
 ```bash
+# Fees in. For refunds out, put the treasury topic in the sender position (topic 1) and null in topic 2.
 curl -s https://monad-testnet.rpc.hypersync.xyz/$ENVIO_API_TOKEN -H 'content-type: application/json' -d '{
   "jsonrpc":"2.0","id":1,"method":"eth_getLogs","params":[{
     "address":"0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC",
@@ -62,20 +104,41 @@ curl -s https://monad-testnet.rpc.hypersync.xyz/$ENVIO_API_TOKEN -H 'content-typ
     "fromBlock":"0x4300000","toBlock":"latest"}]}'
 ```
 
-(`0x4300000` is block 70,254,592, before the fee went live. If a range is too heavy, split it; `web/lib/envio.ts` reads 400,000 blocks per call. Without a token, the same filter works on `https://testnet-rpc.monad.xyz` 100 blocks at a time, or open the [treasury's token transfers on MonadVision](https://testnet.monadvision.com/address/0xAdF0F9443EafD19916cBd8f7541ea5e19e69F62c).)
+(`0x4300000` is block 70,254,592, before the fee went live. If a range is too heavy, split it. Without a token, the same filter works on `https://testnet-rpc.monad.xyz` 100 blocks at a time, or open the [treasury's token transfers on MonadVision](https://testnet.monadvision.com/address/0xAdF0F9443EafD19916cBd8f7541ea5e19e69F62c).)
 
-The first fees, found on Oct 13 2026:
+The first fees, from before the fee moved ahead of the open (the relayer then sent it right after the open). Both are from passkey end-to-end runs (`scripts/e2e-mera.cjs`), each with a fresh Mera account:
 
 | # | Fee transaction | Block | From (client) | Fee | Matching open | Block | Tab |
 |---|---|---|---|---|---|---|---|
 | 1 | [0xe1b850e8…](https://testnet.monadvision.com/tx/0xe1b850e8d7c93a155af39ee6e7173b77e42fdd2709cb823d047c936cb2888e31) | 70,674,757 | `0xca158574f9f167A186C0fe66591081a7072582f3` | 0.020000 AUSD | [0x1a67bc4a…](https://testnet.monadvision.com/tx/0x1a67bc4ac068cd905a287e028bb1d8798212ce6bc86ec609ae78278b6d206ba6) | 70,674,749 | № 20, $2.00 budget |
 | 2 | [0xf3fd946b…](https://testnet.monadvision.com/tx/0xf3fd946bbf466db65971adf340a606937ff5243e22bdea3cb8e41e66b0338d3a) | 70,676,847 | `0xAD7F23EC8C2c6c86e84ED063C525542EA6749d93` | 0.020000 AUSD | [0x7c0468f2…](https://testnet.monadvision.com/tx/0x7c0468f29b0bad2836e3ddafaadc30eae937c10d3ed664ad4f4e49d94a29e0ef) | 70,676,844 | № 21, $2.00 budget |
 
-Both are from passkey end-to-end runs (`scripts/e2e-mera.cjs`), each with a fresh Mera account. Take the first: it opened tab № 20 to the demo freelancer Tunde Bakare (`0x929835102eb2e16F5678C8c3B4830C369D1d4bE0`) at $60 an hour with a $2.00 budget (memo "API review, passkey run", the script's own). The `Opened(id = 20, payer = 0xca15…82f3, payee = 0x9298…4bE0, rate = 60,000,000, budget = 2,000,000)` event is in block 70,674,749 at 11:52:27 UTC; the fee of 20,000 units (1% of 2,000,000) left the same client eight blocks later, at 11:52:30 UTC. Both transactions were sent by the relayer `0xe77f8062f66767428b1786709e079cabd01abf40`: the open to the forwarder, the fee straight to AUSD (selector `0xe3ee160e`, `transferWithAuthorization`). The client never held MON. Fee № 2 is the same shape: `Opened(id = 21)` from `0xAD7F…9d93` in block 70,676,844 (12:03:09 UTC), its 20,000-unit fee three blocks later.
-
-More fees appear here as the demo studios open and top up tabs (they pay the fee like any client) and as people try the app. To pair a fee with its tab yourself: find an `Opened` or `ToppedUp` event from the same client at or shortly before the fee's block whose amount ÷ 100, rounded up, equals the fee. That is the rule `/api/history` uses (`feeTabs` in `web/lib/envio.ts`), and the live totals are on [the business page](https://segundo.world/business#live) and at `GET /api/stats`.
+To pair a fee with its tab yourself: find an `Opened` or `ToppedUp` event from the same client within 600 blocks of the fee, either side, whose amount ÷ 100, rounded up, equals the fee, and take the nearest. That is the rule the site uses (`feeTabs` in `web/lib/envio.ts`); a transfer into the treasury that pairs with nothing is not counted as a fee. The demo studios run their own keys and pay the fee right after their open (`bots/till-bots.mjs`). Live totals, net of refunds, are on [the business page](https://segundo.world/business#live) and at `GET /api/stats`.
 
 What the fee path guarantees, and what it doesn't, is in [SECURITY.md](SECURITY.md#the-fee-path).
+
+## Sending, cashing out and requesting
+
+Sends and cash-outs are AUSD transfer authorisations (EIP-3009) the relayer submits through `/api/send`, so nobody needs MON.
+
+- **Send by link.** `web/lib/sendlink.ts`, `web/app/claim/page.tsx`. The sender's browser makes a fresh key, sends the AUSD to its address, and puts the key after the `#` of `/claim#k=…`. Collecting is that key signing its whole balance to the receiver (`sweepFromKey` in `web/lib/relay.ts`); taking it back is the same transfer to the sender. On MonadVision a used link's address shows one transfer in and one out. `scripts/e2e-sendlink.cjs` runs it with two passkey accounts and checks the receiver ends with exactly $1.00.
+- **Send to an email.** `web/app/api/recipient/route.ts` asks Privy for that email's wallet, creating the user with a pregenerated Ethereum wallet if needed (`web/lib/privy-server.ts`); the transfer goes to that address.
+- **Cash out (simulated on testnet).** A $1.00 cash-out: [0xb983cf55…](https://testnet.monadvision.com/tx/0xb983cf55afa085dec092a40238b6ac197934e476d7ea03f6644602ca0aafa351), block 70,688,912, 1,000,000 units from `0xA498…1065` to the demo partner wallet `0x0921…77e6`. No real money moves and no partner is signed.
+- **Request a tab.** `web/lib/request.ts`: a link to `/open?to=…&rate=…&budget=…&memo=…&from=…`. Nothing is signed to make it; the open page checks every field, strips hidden characters from the name and note, and shows the address in groups of four.
+
+## Chainlink CRE on chain
+
+`cre workflow simulate --broadcast` (CRE CLI v1.38.0) ran the workflow against Monad testnet on Oct 13 2026: [0x17d86a59…](https://testnet.monadvision.com/tx/0x17d86a590a0ed22bc60d941db6d0b0e462a449a6f7fe48a43704d97ebe975d03), block 70,688,328, status success. Keeper wallet → CRE MockKeystoneForwarder `0xB9F7…D192` → `SegundoKeeper.onReport`: `RatesPosted` with six rates, then `Till.settleMany` paid tabs 4, 5 and 2 a total of **4.238888 AUSD** (`Kept`), and the forwarder's `ReportProcessed` result is `true`. Full log and decoded events: [cre/SIMULATION.md](cre/SIMULATION.md). Read the rates back:
+
+```bash
+cast call 0xFEf8d6A7aF00ACd33FDdd2Ef8800cab78164d80D "allRates()(bytes3[],uint64[],uint64[])" --rpc-url https://testnet-rpc.monad.xyz
+```
+
+## Monad under load
+
+On Oct 13 2026, 96 fresh tabs (ids 26 to 121) were settled every second for five seconds from 16 sender keys: 480 transactions, all landed (461 succeeded; 19 ran out of a deliberately tight shared gas limit) in 4.67 s, 102.8 a second, up to 96 in one block (70,681,941 and 70,681,944), send to block median 0.92 s and 90th percentile 1.56 s. A single key sending 48 consecutive nonces at once landed all 48 in block 70,681,999; one key sending one at a time and waiting for each receipt managed 1.1 a second. Average block time over the 10,000 blocks to 70,682,181: 0.305 s.
+
+Samples: [first of the burst](https://testnet.monadvision.com/tx/0x17b4822eb39ab9a457c108fd6c10c36a9ee879c84437bdd01fc85639237984a2) · [one of 96 in one block](https://testnet.monadvision.com/tx/0x71ac4e4b0c8667b90a16c2de1d81eef4dcd1fb344267d5881ee486e6836836cb) · [one of 48 from one key](https://testnet.monadvision.com/tx/0xcfa891a7eb63113bfe96faaf7ce3a6466ade71c19f567a5622cc1378b0ddfdb6) · [a revert](https://testnet.monadvision.com/tx/0x56e0d8d1ce716521d4cbf1e42bb0c5ec52034131224f26e2a91cad7a4ee96f8d). Method and what it does not show: [scripts/bench/README.md](scripts/bench/README.md); every number: [web/public/bench.json](web/public/bench.json) and [/network](https://segundo.world/network).
 
 ## Tests
 
@@ -108,14 +171,36 @@ forge test --match-contract Fork --fork-url monad_testnet     # Agora AUSD (fauc
 | An invite signature works on its own tab, contract and chain only, and once; a client cannot claim their own invite | `test_inviteSignatureIsBoundToTabContractAndChain`, `test_clientCannotClaimTheirOwnInvite` |
 | A rate change never touches a running shift and only prices the next one | `test_rateChangeNeverTouchesARunningShift` |
 
-The web app has two end-to-end tests that drive the real UI:
+The Chainlink CRE receiver, workflow and indexer have their own suites:
+
+```bash
+cd cre/contracts && forge test                                                        # SegundoKeeper: 9 tests (the 2 fork tests skip off-fork)
+forge test --mt test_fork --fork-url https://testnet-rpc.monad.xyz                    # 2 fork tests against the live Till
+cd cre/segundo-keeper && bun test                                                     # workflow: 6 tests with the CRE SDK's test runtime
+cd indexer && pnpm test                                                               # HyperIndex handlers: 5 tests
+```
+
+| Claim | Test |
+|---|---|
+| Only an allowed forwarder can deliver a report; only the owner can change the allowlist | `test_rejectsNonForwarder`, `test_onlyOwnerAdmin` |
+| A report settles the listed tabs and posts the rates; a stale report's rates are ignored but it still settles | `test_settlesAndEmitsRates`, `test_staleRatesIgnoredButStillSettles` |
+| One tab that can't be paid doesn't block the rest | `test_oneBadTabDoesNotBlockTheRest` |
+| Malformed reports are refused; with a workflow id set, other workflows are refused | `test_rejectsMalformedReport`, `test_workflowIdCheck` |
+| Works against the live Till and the CRE mock forwarder | `test_fork_settlesLiveTabs`, `test_fork_mockForwarderDelivers` |
+| The workflow parses each rate source, takes medians, picks owing tabs largest first, scans in chunks, and builds one report | `cre/segundo-keeper/workflow.test.ts` |
+
+The web app has four end-to-end tests that drive the real UI with Playwright; the passkey ones use a Chrome virtual authenticator with PRF in place of a fingerprint:
 
 - `scripts/e2e.cjs` (practice wallet): faucet, profile, open a tab to a demo freelancer, payouts while watching, pause, close and refund, then an invite joined from a second browser at phone width.
-- `scripts/e2e-mera.cjs` (passkey): a Chrome virtual authenticator with PRF stands in for a fingerprint. It creates a Mera account, waits for test AUSD, opens a tab with the 1% fee, sees the freelancer clock in and a payout land, then seals private details. Fee № 1 above is from this run.
+- `scripts/e2e-mera.cjs` (passkey): creates a Mera account, waits for test AUSD, opens a tab with the 1% fee, watches a payout land, closes the tab (the unspent budget and 1% of it come back), then seals private details. Fees № 1 and № 2 above are from this script.
+- `scripts/e2e-sendlink.cjs` (two passkey accounts): A sends $1 by one link and $0.50 by another; B opens the first at phone width, makes a passkey account and collects it, and must hold exactly $1.00; A takes the second link back, and both used links say so.
+- `scripts/e2e-keys.cjs` (one passkey, many keys): a client opens a tab by invite, clears the browser, signs back in and rebuilds the invite link, which must match exactly; a freelancer joins with it from another browser; then a verifier asks for sealed details on the income statement and the client discloses two fields, which the verifier's page opens and checks.
 
 ```bash
 node scripts/e2e.cjs <baseUrl>
 node scripts/e2e-mera.cjs <baseUrl>
+node scripts/e2e-sendlink.cjs <baseUrl>
+node scripts/e2e-keys.cjs <baseUrl>
 ```
 
 ## Claim to code
@@ -125,10 +210,23 @@ node scripts/e2e-mera.cjs <baseUrl>
 | "Pay builds up every second" | `Till._earned`: `banked + (now - since) * rate / 3600`, capped at the budget |
 | "Can only pay you or refund the client" | `Till._settle` pays `payee` only; `Till.close` refunds `payer` only; no owner or admin functions exist |
 | "No gas, one signature" | `web/lib/relay.ts` (EIP-712 forward requests, EIP-2612 permit and EIP-3009 transfers on AUSD), `web/app/api/relay/route.ts` |
-| "Clients pay 1% on top; freelancers pay nothing" | `feeFor` in `web/lib/money.ts`; `signFee` in `web/lib/relay.ts`; the relayer checks and simulates the fee before the open and sends it after (`web/app/api/relay/route.ts`); the demo studios do the same (`bots/till-bots.mjs`) |
+| "Clients pay 1% on top; freelancers pay nothing" | `feeFor` in `web/lib/money.ts`; `signFee` in `web/lib/relay.ts`; the relayer checks and simulates the fee, sends it first, then the open (`web/app/api/relay/route.ts`); the demo studios pay it right after their open (`bots/till-bots.mjs`) |
+| "If the tab can't be opened, the fee comes straight back" | `refundFee` in `web/app/api/relay/route.ts`, `fromTreasury` and `feeRefundNonce` in `web/lib/refund.ts` |
+| "1% of what you don't spend comes back at close" | `refundClosedTab` in `web/lib/refund.ts`: floor(refunded ÷ 100), capped at the fees the tab paid; nonce `tabRefundNonce(id)`; a missed refund can be retried with `POST /api/relay {"refund": "<tab id>"}` |
+| "Send by link; they need nothing but the link" | `web/lib/sendlink.ts` (`newLinkKey`, `claimLink`, `readFragment`), `sweepFromKey` in `web/lib/relay.ts`, `web/app/claim/page.tsx` |
+| "Send to an email address" | `web/app/api/recipient/route.ts`, `recipientWallet` in `web/lib/privy-server.ts` |
+| "Cash out to local money" (simulated on testnet) | `web/app/cashout/page.tsx`, `web/app/cashout/corridors.ts` (`DEMO_PARTNER`, corridors and sources) |
+| "Request a tab" | `web/lib/request.ts` (`requestLink`, `parseRequest`), `web/app/request/page.tsx`, the request banner in `web/app/open/page.tsx` |
+| "One passkey, four keys" | `SALT_LABELS` in `web/lib/keys.ts`; `familyPrfOutputs` in `web/lib/mera.ts` |
+| "Invite links rebuilt from your passkey and the chain" | `nextInviteKey`, `rebuildInviteKey` in `web/lib/keys.ts`; `web/components/RebuildInvite.tsx` |
+| "Show a verifier only the details you pick" | `web/lib/disclose.ts` (token format in its header), `web/components/Disclosure.tsx`, `/proof/<address>?request=1` |
+| "Passkeys work only on Segundo's own address" | `relyingParty` in `web/lib/mera.ts` (`NEXT_PUBLIC_RP_ID`, default `segundo.world`) |
+| "Payouts by a Chainlink CRE workflow, rates agreed by the DON" | `cre/segundo-keeper/workflow.ts`, `cre/contracts/src/SegundoKeeper.sol`, [cre/SIMULATION.md](cre/SIMULATION.md) |
+| "Monad, measured" | `scripts/bench/*.mjs`, `web/public/bench.json`, `web/app/network/page.tsx` |
+| "A pool of relayer keys" | `web/lib/pool.ts` (`pool`, `laneOf`, `richest`), `relayerFor` and `sendAndWait` in `web/lib/server.ts` |
 | "Your passkey is your account" | `web/lib/mera.ts`: PRF output → BIP-39 entropy → key at `m/44'/60'/0'/0/0` → Mera signing session; `web/lib/wallet.tsx` locks it after 15 min idle or 5 min in the background |
-| "Sealed with your passkey; our servers never see them" | `web/lib/seal.ts`: PRF with salt `sha256("segundo/seal/v1")` → HKDF-SHA-256 → AES-256-GCM, account address as additional data; stored in this browser only |
-| "Revenue, live from the chain" and income statements | `web/lib/envio.ts` reads every Till event and treasury fee through Envio HyperRPC; `web/app/api/stats`, `web/app/api/history`, `web/app/proof/[address]` |
+| "Sealed with your passkey; our servers never see them" | `web/lib/seal.ts`: PRF with salt `sha256("segundo/seal/v1")` → HKDF-SHA-256 → AES-256-GCM; account, passkey, format version and seal time as additional data (version 2); stored in this browser only |
+| "Revenue, live from the chain" and income statements | `web/lib/envio.ts` reads every Till event, every fee into the treasury and every refund out of it through Envio HyperRPC; `web/app/api/stats`, `web/app/api/history`, `web/app/proof/[address]` |
 | "Payouts every few seconds while you watch" | `web/app/tab/[id]/page.tsx` calls `/api/settle` every 6 s for the first two minutes a page is open, then every 20 s, then once a minute; it also settles once when a clock stops |
 | Live numbers on the landing page | `web/app/api/live/route.ts` reads every tab's state from the contract |
 | Pay stub from chain | `web/lib/hooks.ts` `useHistory` walks `Activity(id, prevBlock)` one exact block at a time |

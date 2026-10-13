@@ -1,7 +1,7 @@
 import { decodeEventLog, encodeFunctionData } from "viem";
 import { tillAbi } from "@/lib/abi";
 import { TILL, publicClient } from "@/lib/chain";
-import { RESERVE, clientIp, json, keeperMon, limited, revertReason, sendAndWait, signer } from "@/lib/server";
+import { clientIp, json, limited, relayerFor, revertReason, sendAndWait } from "@/lib/server";
 
 export const runtime = "nodejs";
 
@@ -30,9 +30,9 @@ export async function POST(req: Request) {
   // The tab's own last-activity block is a throttle every server instance agrees on: a few seconds.
   if (head - view.tab.lastBlock < 6n) return json({ skipped: true, reason: "Paid out moments ago." });
   try {
-    const keeper = signer("keeper");
-    const mon = await keeperMon();
-    if (mon !== null && mon < RESERVE.settle)
+    // Each tab pays out from its own relayer key (id mod pool size), so many watched tabs pay out side by side.
+    const { relayer: keeper, low } = await relayerFor(id, "settle");
+    if (low)
       return json({ skipped: true, reason: "The relayer is low on test MON and is keeping it for clock-ins and closes. Earned pay is still owed and is paid at close." });
     const data = encodeFunctionData({ abi: tillAbi, functionName: "settle", args: [id] });
     const { logs, ...landed } = await sendAndWait(keeper, { to: TILL, data });

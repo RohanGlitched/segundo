@@ -1,7 +1,12 @@
 "use client";
 import { useEffect, useState } from "react";
 
-export type Health = { status: "ok" | "payouts" | "low" | "out" | "empty" | "unknown"; paused?: string[] };
+export type Health = {
+  status: "ok" | "payouts" | "low" | "out" | "empty" | "unknown";
+  paused?: string[];
+  /** The relayer's keys: how many share the work, and the smallest balance among them (test MON, decimal string). */
+  pool?: { size: number; lowestMon: string };
+};
 
 /** The relayer's state from /api/health, refreshed every minute, so a page can say "paused" before anyone signs. */
 export function useHealth(): Health | null {
