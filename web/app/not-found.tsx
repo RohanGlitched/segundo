@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Footer } from "@/components/Footer";
 import { GrandRosette } from "@/components/home/Art";
 import styles from "./page.module.css";
 

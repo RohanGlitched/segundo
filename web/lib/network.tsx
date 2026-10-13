@@ -48,7 +48,7 @@ export function reviveTab(f: Raw): TabView {
 
 const NetworkContext = createContext<Network | null | undefined>(undefined);
 
-/** One poll of /api/live for the whole page (every 4 s), shared by every live section. */
+/** One poll of /api/live for the whole page (every 4 s while visible), shared by every live section. */
 export function NetworkProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<Network | null | undefined>(undefined);
   useEffect(() => {
@@ -73,11 +73,15 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
           });
         })
         .catch(() => !stop && setData((old) => old ?? null));
-    load();
-    const t = setInterval(load, 4000);
+    // Skips its turn while the tab is hidden, and reads again as soon as it is visible.
+    const onVisibility = () => !document.hidden && load();
+    if (!document.hidden) load();
+    const t = setInterval(() => !document.hidden && load(), 4000);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       stop = true;
       clearInterval(t);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
   return <NetworkContext.Provider value={data}>{children}</NetworkContext.Provider>;

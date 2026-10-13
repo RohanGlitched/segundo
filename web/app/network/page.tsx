@@ -3,13 +3,14 @@ import { Footer } from "@/components/Footer";
 import { Divider } from "@/components/home/Art";
 import { TILL, explorerAddress, explorerTx, publicClient } from "@/lib/chain";
 import bench from "@/public/bench.json";
+import { GAS, POLICY, headroom } from "@/components/business/economics";
 import { CrePanel } from "./CrePanel";
 import styles from "./network.module.css";
 
 // The block-time figure is read live from Monad; the rest is the recorded run in public/bench.json.
 export const revalidate = 600;
 
-const REPO = "https://github.com/RohanGlitched/till-pay/tree/main/scripts/bench";
+const REPO = "https://github.com/RohanGlitched/segundo/tree/main/scripts/bench";
 const DOCS = {
   gas: "https://docs.monad.xyz/developer-essentials/gas-pricing",
   reserve: "https://docs.monad.xyz/developer-essentials/reserve-balance",
@@ -35,11 +36,13 @@ async function blockTime() {
 const reverts = bench.failed + bench.pipelined.reverted + bench.singleSender.reverted;
 const zeroAmount = bench.succeeded - bench.paidOut;
 const peak = Math.max(...bench.perBlock.map((b) => b.ours + b.others));
+/** Gas room in the busiest block of the burst, at the block time measured during the run. */
+const room = headroom(bench.perBlock, bench.blockTime.avgMs);
 const runDay = new Date(bench.runAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
 
-function Sec({ id, title, sub, children }: { id?: string; title: string; sub?: React.ReactNode; children: React.ReactNode }) {
+function Sec({ id, nav, title, sub, children }: { id: string; nav: string; title: string; sub?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section id={id} className={`wrap ${styles.section}`}>
+    <section id={id} className={`wrap ${styles.section}`} data-nav={nav}>
       <div className={styles.sectionHead}>
         <h2 className={styles.h2}>{title}</h2>
         {sub ? <p className={styles.sub}>{sub}</p> : null}
@@ -141,13 +144,14 @@ export default async function Network() {
     <>
       <main>
         {/* ------------------------------------------------------------ the claim and the certificate */}
-        <section className={`wrap ${styles.top}`}>
+        <section id="overview" className={`wrap ${styles.top}`} data-nav="Overview">
           <div className={styles.topText}>
             <p className={styles.kicker}>Monad, measured</p>
             <h1 className={styles.h1}>Segundo on Monad, measured</h1>
             <p className={styles.model}>
               We settled the pay of <b>{bench.tabs} freelancers every second</b> for five seconds, from {bench.senders} sender keys at once. Monad put{" "}
-              <b>{bench.perBlockMax} of those payouts in a single block</b>.
+              <b>{bench.perBlockMax} of those payouts in a single block</b>, using {room.pct}% of its gas: room for about{" "}
+              <b>{n(room.perBlock)} payouts a block</b>.
             </p>
             <p className={styles.lede}>
               Per-second pay only works if many tabs can pay out at the same moment without queueing behind each other. So on {runDay} we opened{" "}
@@ -200,10 +204,13 @@ export default async function Network() {
         </section>
 
         {/* ------------------------------------------------------------ the four numbers */}
-        <section className={`wrap ${styles.stats}`} aria-label="Headline numbers">
+        <section id="headline" className={`wrap ${styles.stats}`} aria-label="Headline numbers" data-nav="Headline">
           <div className={styles.stat}>
             <span className={`denom ${styles.statFig}`}>{Math.round(bench.txPerS)}</span>
-            <span className={styles.statLabel}>payouts landed a second, against {bench.offeredPerS} a second sent</span>
+            <span className={styles.statLabel}>
+              payouts a second: {n(bench.landed)} landed within {bench.durationS.toFixed(2)} s of the first send. We sent {bench.offeredPerS} a second; a
+              slow first second at the RPC bunched payouts into later blocks
+            </span>
           </div>
           <div className={styles.stat}>
             <span className={`denom ${styles.statFig}`}>{bench.perBlockMax}</span>
@@ -215,7 +222,9 @@ export default async function Network() {
           </div>
           <div className={styles.stat}>
             <span className={`denom ${styles.statFig}`}>{bench.fullestBlockPct}%</span>
-            <span className={styles.statLabel}>of the block&apos;s gas used by the busiest block of the burst</span>
+            <span className={styles.statLabel}>
+              of the block&apos;s gas, for {room.payouts} payouts and everything else in it: room for about {n(room.perBlock)} a block
+            </span>
           </div>
         </section>
 
@@ -224,7 +233,7 @@ export default async function Network() {
         </div>
 
         {/* ------------------------------------------------------------ why it matters */}
-        <Sec title="Why this is the test that matters" sub="Paying by the second turns one invoice a month into a steady stream of small payouts. Three things decide whether that stream keeps up.">
+        <Sec id="why" nav="Why it matters" title="Why this is the test that matters" sub="Paying by the second turns one invoice a month into a steady stream of small payouts. Three things decide whether that stream keeps up.">
           <div className={styles.why}>
             <div>
               <h3>Many tabs pay out together</h3>
@@ -250,9 +259,49 @@ export default async function Network() {
           </div>
         </Sec>
 
+        {/* ------------------------------------------------------------ why Monad */}
+        <Sec
+          id="why-monad"
+          nav="Why Monad"
+          title="Why Monad, and not Base or Solana"
+          sub="Any fast chain can show a number counting up. The question is what it costs to actually pay it out, for everyone, all day."
+        >
+          <div className={styles.why}>
+            <div>
+              <h3>Counting seconds is free anywhere</h3>
+              <p>
+                Segundo counts pay from timestamps, so the counting runs on any chain, and Base, Solana and Arbitrum all have blocks fast enough to watch.
+                We don&apos;t claim the clock needs Monad.
+              </p>
+            </div>
+            <div>
+              <h3>Paying them out is the hard part</h3>
+              <p>
+                Every payout is a real EVM transaction in AUSD. In this test {room.payouts} payouts used <b>{room.pct}%</b> of one Monad block&apos;s gas,
+                which leaves room for about <b>{n(room.perBlock)} payouts a block</b>, roughly {n(room.perSecond)} a second at the{" "}
+                {(bench.blockTime.avgMs / 1000).toFixed(3)} s blocks we measured, at a fraction of a cent each. That is gas room, not a measured
+                rate: we sent {bench.offeredPerS} a second.
+              </p>
+            </div>
+            <div>
+              <h3>Built for how Monad charges</h3>
+              <p>
+                Monad charges the gas limit, not the gas used, so the relayer estimates every call, adds 15%, and refuses a request asking for more than
+                1.5 times its estimate. Payouts run from a pool of keys, each with its own nonces, so one address is never the queue.
+              </p>
+            </div>
+          </div>
+          <p className={styles.body}>
+            <b>Not yet parallel.</b> Every payout today changes the contract&apos;s AUSD balance, one storage slot, so these settles conflict under
+            Monad&apos;s parallel execution (see the caveats below). The plan for mainnet is a vault per tab: each budget in its own contract, so payouts to
+            different freelancers touch different storage and can run side by side. That is future work, not something this run shows.
+          </p>
+        </Sec>
+
         {/* ------------------------------------------------------------ the burst */}
         <Sec
           id="burst"
+          nav="The burst"
           title="The burst, block by block"
           sub={
             <>
@@ -289,6 +338,7 @@ export default async function Network() {
         {/* ------------------------------------------------------------ one key vs many */}
         <Sec
           id="one-key"
+          nav="One key or many"
           title="One key or many"
           sub="The criticism we set out to test: every transaction comes from one relayer address, in nonce order. So we ran the same payouts three ways."
         >
@@ -379,6 +429,7 @@ export default async function Network() {
         {/* ------------------------------------------------------------ the contract's part */}
         <Sec
           id="contract"
+          nav="The contract"
           title="Why a running tab costs nothing"
           sub="The other half of per-second pay at scale is not writing to the chain every second. Segundo's contract (deployed under its working name, Till) is built so it doesn't have to."
         >
@@ -404,10 +455,16 @@ export default async function Network() {
             <div className={styles.body}>
               <h3 className={styles.h3}>Who pays out when nobody is watching</h3>
               <p>
-                Pay is earned every second. While a tab is open on someone&apos;s screen, the app asks for a payout every few seconds; when nobody has it
-                open, a keeper settles every running tab that owes at least a cent, every few minutes. Segundo runs one keeper itself, and a second runs
-                as a <b>Chainlink CRE workflow</b>: several nodes each read the running tabs from Monad and fetch exchange rates from three public
-                sources, agree on one report, and SegundoKeeper settles those tabs with <span className="serial">settleMany</span> and stores the rates.
+                Pay is earned every second and paid out on a schedule. While a tab is open on someone&apos;s screen, the app asks for a payout every few
+                seconds on testnet (on mainnet, every {POLICY.onScreenS} seconds, batched with every other open tab); when nobody has it open, a keeper
+                settles every running tab that owes at least a cent, every {POLICY.offScreenS / 60} minutes. Segundo runs one keeper itself, and a second runs
+                as a <b>Chainlink CRE workflow</b>: every two hours it reads the running tabs from Monad, takes the median of three public exchange-rate
+                sources, and sends one report; SegundoKeeper settles those tabs with <span className="serial">settleMany</span> and stores the rates.
+              </p>
+              <p>
+                On testnet the workflow runs in the CRE command-line simulator with broadcast, from an always-on server, through Chainlink&apos;s mock
+                forwarder, not on a live decentralised oracle network. So only reports sent by Segundo&apos;s own CRE key or keeper key are trusted.
+                On mainnet it would run on an oracle network, with Chainlink&apos;s forwarder checking the network&apos;s signatures on every report.
               </p>
               <p>
                 Because anyone may settle any tab, neither keeper is trusted with anything: the worst either can do is stop, and then the other, the
@@ -419,7 +476,7 @@ export default async function Network() {
         </Sec>
 
         {/* ------------------------------------------------------------ honesty */}
-        <Sec id="limits" title="What this run does not show" sub="A benchmark is only worth its caveats. These are ours.">
+        <Sec id="limits" nav="Caveats" title="What this run does not show" sub="A benchmark is only worth its caveats. These are ours.">
           <ul className={styles.limits}>
             <li>
               <h3>Parallel execution</h3>
@@ -430,7 +487,8 @@ export default async function Network() {
                   2
                 </a>
                 . So these settles conflict with each other, and this run says nothing about how many ran side by side. What it measures is how many
-                landed, how fast, and how full the blocks got.
+                landed, how fast, and how full the blocks got. On the roadmap: a vault per tab, so payouts to different freelancers write different
+                storage and can run in parallel.
               </p>
             </li>
             <li>
@@ -473,7 +531,7 @@ export default async function Network() {
         </Sec>
 
         {/* ------------------------------------------------------------ block time + gas */}
-        <Sec id="numbers" title="The pace and the price">
+        <Sec id="numbers" nav="Pace and price" title="The pace and the price">
           <div className={styles.pair}>
             <div className={styles.paceBox}>
               <p className={styles.paceLabel}>Average block time, last 10,000 blocks</p>
@@ -506,12 +564,17 @@ export default async function Network() {
                   </tr>
                 </tbody>
               </table>
+              <p className={styles.source}>
+                Monad charges the gas limit, so what a payout costs depends on the limit sent with it. In this test each tab got the estimate plus about
+                8%, {bench.cost.perSettleMon} MON a payout. Segundo&apos;s relayer adds 15%, so its receipts average{" "}
+                {GAS.settle.toLocaleString("en-US")} gas a payout; <Link href="/business#units">/business</Link> prices gas from those receipts.
+              </p>
             </div>
           </div>
         </Sec>
 
         {/* ------------------------------------------------------------ receipts */}
-        <Sec id="check" title="Check it yourself" sub="Every payout in the run is a public transaction. A few to start with:">
+        <Sec id="check" nav="Check it" title="Check it yourself" sub="Every payout in the run is a public transaction. A few to start with:">
           <ul className={styles.samples}>
             {bench.samples.map((t) => (
               <li key={t.hash}>

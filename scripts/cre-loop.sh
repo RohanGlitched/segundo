@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Keeps Segundo's Chainlink CRE reports flowing until the workflow is deployed on a DON: runs
-# `cre/simulate.sh --broadcast` every 30 minutes, so SegundoKeeper's on-chain rates stay fresh (the web app prefers
+# `cre/simulate.sh --broadcast` every 2 hours, so SegundoKeeper's on-chain rates stay fresh (the web app prefers
 # them while the newest report is under 6 hours old) and running tabs keep getting settled.
 #
 #   scripts/cre-loop.sh            in WSL; stop with Ctrl-C (or kill the PID it logs)
@@ -13,7 +13,7 @@
 set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 sim="$here/../cre/simulate.sh"
-every="${CRE_LOOP_EVERY:-1800}"
+every="${CRE_LOOP_EVERY:-7200}"
 log="${CRE_LOOP_LOG:-$HOME/.cache/segundo-cre-loop.log}"
 lock="${log}.lock"
 mkdir -p "$(dirname "$log")"

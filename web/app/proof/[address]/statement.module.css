@@ -164,7 +164,7 @@
   border-radius: 999px;
   background: transparent;
   color: var(--ink);
-  font: 600 14px/1 var(--font-archivo), sans-serif;
+  font: 600 14px/1 "Segundo Dollar", var(--font-archivo), sans-serif;
   cursor: pointer;
 }
 .periods button:hover {
@@ -422,6 +422,97 @@
   aspect-ratio: 1;
   border: 1px solid var(--rule);
   border-radius: 6px;
+}
+
+/* The all-time record from the HyperIndex indexer: a ruled ledger strip above the period statement. */
+.record {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 0 16px;
+  border-top: 1.5px solid var(--ink);
+  border-bottom: 1px solid var(--rule);
+}
+.recordHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px 24px;
+  flex-wrap: wrap;
+}
+.recordHead h2 {
+  font-variation-settings: "wdth" 112;
+  font-size: 24px;
+}
+.recordSource {
+  max-width: none;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+.recordSource b {
+  color: var(--ink);
+  font-weight: 600;
+}
+.recordFacts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 2.3fr) repeat(4, minmax(0, 1fr));
+  gap: 14px 24px;
+}
+.recordFacts > div {
+  min-width: 0;
+}
+.recordFacts dt {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+.recordFacts dd {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.recordFacts dd a {
+  color: var(--ink);
+  text-decoration-color: var(--rule);
+  text-underline-offset: 3px;
+}
+.recordWide {
+  grid-row: span 2;
+}
+.recordWide dd {
+  font-size: clamp(25px, 2.9vw, 36px);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  color: var(--c);
+  line-height: 1.1;
+}
+.checkOk,
+.checkOff {
+  font-size: 13.5px;
+  padding-left: 12px;
+  border-left: 3px solid var(--ok);
+  max-width: 80ch;
+}
+.checkOff {
+  border-left-color: var(--warn);
+}
+.recordSkel {
+  height: 150px;
+}
+@media (max-width: 860px) {
+  .recordFacts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .recordWide {
+    grid-column: 1 / -1;
+    grid-row: auto;
+  }
+}
+@media (max-width: 560px) {
+  .recordFacts dd {
+    font-size: 19px;
+  }
 }
 
 .printFoot {

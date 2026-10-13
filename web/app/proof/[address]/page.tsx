@@ -18,6 +18,7 @@ import { KEEPER_ADDRESS, currency, fetchFx, formatDuration, formatFee, formatMon
 import { canSeal, hasSealedDetails, unsealDetails, type SealedDetails } from "@/lib/seal";
 import { shortAddress } from "@/lib/tabs";
 import { useWallet } from "@/lib/wallet";
+import { IndexedRecord } from "./IndexedRecord";
 import styles from "./statement.module.css";
 
 type Period = "30d" | "90d" | "12m" | "all";
@@ -179,6 +180,8 @@ function StatementFor({ address }: { address: Address }) {
         <Sealed address={address} owner={owner} wallet={wallet} />
         {owner && canSeal(wallet) ? <ShareDetails address={address} wallet={wallet} block={data ? data.head : null} /> : <RequestNotice />}
         {verified && <VerifiedDetails v={verified} />}
+
+        <IndexedRecord address={address} history={data} cur={cur} rates={rates} />
 
         <div className={styles.periods} role="radiogroup" aria-label="Period">
           {PERIODS.map((p) => (
@@ -411,6 +414,14 @@ function StatementFor({ address }: { address: Address }) {
                     <b>The statement is computed from the chain, not from Segundo&apos;s records.</b> Every event of the Segundo contract since it was
                     deployed (block <span className="serial">{FROM_BLOCK.toLocaleString("en-US")}</span>) is read from Monad through Envio HyperRPC and
                     added up on the spot. Nobody at Segundo can edit a line.
+                  </li>
+                  <li>
+                    <b>A second, independent read.</b> The all-time record at the top comes from Segundo&apos;s own indexer, built on Envio HyperIndex
+                    from the same contract events, and is checked against the HyperRPC read at the same block. Its{" "}
+                    <a href="https://github.com/RohanGlitched/segundo/tree/main/indexer" target="_blank" rel="noreferrer">
+                      source is public
+                    </a>
+                    .
                   </li>
                   <li>
                     <b>The contract is public and verified.</b> It is deployed under Segundo&apos;s working name, Till, at{" "}

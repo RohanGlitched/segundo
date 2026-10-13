@@ -4,8 +4,123 @@
   grid-template-areas: "title title" "live pitch";
   gap: 36px 44px;
   align-items: center;
-  padding-top: 56px;
-  padding-bottom: 44px;
+  padding-top: 48px;
+  padding-bottom: 8px;
+}
+.title {
+  grid-area: title;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.eyebrow {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--serial);
+  font-variation-settings: var(--semi);
+  letter-spacing: 0.02em;
+}
+.strip {
+  margin-top: 6px;
+  padding: 12px 0;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+.fee {
+  color: var(--ink);
+  font-weight: 650;
+}
+.paths {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 14px;
+}
+.paths > div {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.paths span {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  padding-left: 2px;
+}
+.liveBand {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 40px;
+}
+.stepTop {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+.who {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink-soft);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+.inspect {
+  margin-top: 28px;
+  border: 1.5px solid var(--ink);
+  border-radius: 10px;
+  background: var(--sheet);
+}
+.inspect > summary {
+  cursor: pointer;
+  list-style: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 16px;
+  padding: 18px 22px;
+}
+.inspect > summary::-webkit-details-marker {
+  display: none;
+}
+.inspect > summary::after {
+  content: "+";
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  font-size: 30px;
+  font-weight: 300;
+  line-height: 1;
+  color: var(--serial);
+  transition: transform 0.2s;
+}
+.inspect[open] > summary::after {
+  transform: rotate(45deg);
+}
+.inspectHead {
+  font-weight: 650;
+  font-size: 18px;
+}
+.inspectSub {
+  grid-column: 1;
+  font-size: 15px;
+  color: var(--ink-soft);
+}
+.inspectBody {
+  padding: 4px 22px 24px;
+  animation: open 0.25s ease-out;
+}
+@keyframes open {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+.gasless {
+  margin-top: 8px;
+  color: var(--ink-soft);
+  max-width: 72ch;
+}
+.gasless b {
+  color: var(--ink);
 }
 .pitch {
   grid-area: pitch;
@@ -17,7 +132,7 @@
 .h1 {
   grid-area: title;
   font-variation-settings: "wdth" 118;
-  font-size: clamp(38px, 6.4vw, 92px);
+  font-size: clamp(38px, 6vw, 80px);
   font-weight: 650;
   letter-spacing: -0.035em;
   line-height: 0.95;

@@ -61,7 +61,7 @@ export default async function OG() {
           >
             Get paid every second you work.
           </div>
-          <div style={{ fontSize: 27, color: "#4E6159", marginTop: 26, lineHeight: 1.35 }}>Pay that lands every second, on Monad.</div>
+          <div style={{ fontSize: 27, color: "#4E6159", marginTop: 26, lineHeight: 1.35 }}>Pay that builds up every second, on Monad.</div>
           <div style={{ fontFamily: "Archivo Semi", fontWeight: 600, fontSize: 21, letterSpacing: 1.7, color: "#C0266D", marginTop: 28 }}>
             № segundo.world
           </div>

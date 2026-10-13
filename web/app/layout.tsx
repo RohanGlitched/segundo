@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Archivo } from "next/font/google";
 import { GasNotice } from "@/components/GasNotice";
 import { Header } from "@/components/Header";
+import { PageNav } from "@/components/PageNav";
 import { Providers } from "@/components/Providers";
 import "./globals.css";
 
@@ -33,11 +34,15 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={archivo.variable}>
+      <head>
+        <link rel="preload" href="/fonts/dollar.woff2" as="font" type="font/woff2" crossOrigin="" />
+      </head>
       <body>
         <Providers>
           <Header />
           <GasNotice />
           {children}
+          <PageNav />
         </Providers>
       </body>
     </html>

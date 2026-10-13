@@ -10,7 +10,8 @@ import { SealedDetails } from "@/components/SealedDetails";
 import { SendSheet, SentLinks } from "@/components/SendSheet";
 import { TabRow } from "@/components/TabRow";
 import { GettingStarted, Ledger, WalletNote } from "@/components/WalletPanel";
-import { ErrorLine, LandedLine, SignInPanel, busyLabel, useAction } from "@/components/ui";
+import { ErrorLine, LandedLine, busyLabel, useAction } from "@/components/ui";
+import { SignInGate } from "@/components/SignInGate";
 import { dripOnce, useAutoDrip, useMyTabIds, useProfile, useTabs, useDollarBalance } from "@/lib/hooks";
 import { useLive, useChainNow } from "@/lib/live";
 import { currency, formatMoney, formatUsd, toUsd } from "@/lib/money";
@@ -54,9 +55,28 @@ export default function YourTabs() {
   if (!me)
     return (
       <main className={`wrap ${styles.page}`}>
-        <SignInPanel title="Sign in to see your tabs" level={1}>
+        <SignInGate
+          title="Sign in to see your tabs"
+          steps={[
+            {
+              title: wallet.accounts === "full" ? "Sign in, or just try it." : "Sign in with your passkey.",
+              body:
+                wallet.accounts === "full"
+                  ? "A passkey account takes a few seconds: no password, no seed phrase. Or try everything with a practice wallet and 25 free test AUSD."
+                  : "Your fingerprint, face or screen lock. No password, no seed phrase, no extension, and you never need gas.",
+            },
+            {
+              title: "Every tab in one place.",
+              body: "The tabs you pay into as a client and the ones that pay you as a freelancer, each ticking up by the second while the clock runs.",
+            },
+            {
+              title: "Move the money.",
+              body: "Add money, send AUSD to anyone by link, see what a cash-out would pay where you live, and share a proof-of-income page.",
+            },
+          ]}
+        >
           <p>Your tabs are the ones you pay into as a client and the ones that pay you as a freelancer.</p>
-        </SignInPanel>
+        </SignInGate>
         <InstallApp id="install" />
       </main>
     );
@@ -253,7 +273,8 @@ function PasskeyLock() {
     <div className={styles.lock} role="status">
       <p>
         <b>Signing is locked.</b> Your passkey unlocks it until you&rsquo;ve been away for 15 minutes, and whenever you reload or close the
-        page.
+        page. While it&rsquo;s unlocked, clocking in and out, payouts and sends up to $50 need no prompt; bigger sends and your sealed details
+        ask for the passkey again.
       </p>
       <button
         className="btn small"
@@ -283,7 +304,7 @@ function PasskeyLock() {
  */
 function AppDock({ sendOpen, onSend }: { sendOpen: boolean; onSend: () => void }) {
   return (
-    <nav className={styles.dock} aria-label="Main actions">
+    <nav className={styles.dock} aria-label="Main actions" data-bottom-dock>
       <button type="button" className={styles.dockItem} onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
         <svg viewBox="0 0 24 24" aria-hidden>
           <rect x="3" y="7" width="18" height="11" rx="1.5" />

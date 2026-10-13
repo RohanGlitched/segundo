@@ -358,9 +358,10 @@ export default function SendAbroad() {
             The rate comes from Monad, not from us
           </h2>
           <p className={styles.prose}>
-            Segundo runs a Chainlink CRE workflow. Each node fetches the dollar rate from three public sources and takes the median; the network of
-            nodes then agrees on the median across nodes and posts it to Segundo&apos;s keeper contract on Monad with a timestamp. This page, the cash-out
-            quote and every income statement read that on-chain rate while it is less than six hours old, and say so.
+            Segundo runs a Chainlink CRE workflow. It fetches the dollar rate from three public sources, takes the median and posts it to
+            Segundo&apos;s keeper contract on Monad with a timestamp. On testnet it runs in Chainlink&apos;s CRE simulator every two hours, not yet on a
+            live network of nodes, so the app only trusts reports sent by Segundo&apos;s own CRE key. This page, the cash-out quote and every income
+            statement read that on-chain rate while it is less than six hours old, and say so.
           </p>
           <div className={styles.rateSheet}>
             <table className={styles.rateTable}>

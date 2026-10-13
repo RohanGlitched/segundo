@@ -129,13 +129,31 @@ export function useMyTabIds(address?: Address) {
   return { ids, refresh };
 }
 
+/** The faucet's drip, as app/api/faucet sends it. */
+const DRIP = 25_000_000n;
+/** The last balance read for each wallet, so a drip knows what it adds to. */
+const lastBalance = new Map<string, bigint>();
+/**
+ * A drip that has landed but that the RPC node answering the next read may not have seen yet (a public RPC is many
+ * nodes, some a block behind). Until a read shows the balance has moved off `before`, or `until` passes, every balance
+ * on the page shows at least `min`, so "25 test AUSD arrived" is never followed by "$0.00 in your wallet".
+ */
+const expected = new Map<string, { before: bigint; min: bigint; until: number }>();
+const expectListeners = new Set<() => void>();
+
 export function useDollarBalance(address?: Address) {
   const [balance, setBalance] = useState<bigint | null>(null);
   const refresh = useCallback(async () => {
     if (!address) return setBalance(null);
+    const k = address.toLowerCase();
     try {
-      setBalance((await publicClient.readContract({ address: DOLLAR, abi: dollarAbi, functionName: "balanceOf", args: [address] })) as bigint);
+      const read = (await publicClient.readContract({ address: DOLLAR, abi: dollarAbi, functionName: "balanceOf", args: [address] })) as bigint;
       noteRpcOk();
+      const x = expected.get(k);
+      if (x && Date.now() < x.until && read === x.before) return setBalance((b) => (b != null && b > x.min ? b : x.min));
+      expected.delete(k);
+      lastBalance.set(k, read);
+      setBalance(read);
     } catch (e) {
       noteRpcError(e);
     }
@@ -145,8 +163,18 @@ export function useDollarBalance(address?: Address) {
     setBalance(null);
     refresh();
     const t = setInterval(() => !rpcResting() && refresh(), 2500);
-    return () => clearInterval(t);
-  }, [refresh]);
+    // A drip landing anywhere on the page shows here at once, then the read confirms it.
+    const onExpect = () => {
+      const x = address && expected.get(address.toLowerCase());
+      if (x) setBalance((b) => (b != null && b > x.min ? b : x.min));
+      refresh();
+    };
+    expectListeners.add(onExpect);
+    return () => {
+      clearInterval(t);
+      expectListeners.delete(onExpect);
+    };
+  }, [refresh, address]);
   return { balance, refresh };
 }
 
@@ -165,7 +193,14 @@ export function dripOnce(address: Address): Promise<Landed> {
     try {
       sessionStorage.setItem(`till.drip.${k}`, "1");
     } catch {}
-    p = requestTestDollars(address).finally(() => drips.delete(k));
+    const before = lastBalance.get(k) ?? 0n;
+    p = requestTestDollars(address)
+      .then((r) => {
+        expected.set(k, { before, min: before + DRIP, until: Date.now() + 10_000 });
+        expectListeners.forEach((f) => f());
+        return r;
+      })
+      .finally(() => drips.delete(k));
     drips.set(k, p);
   }
   return p;
@@ -237,6 +272,8 @@ export type StubLine = {
 export function useHistory(id: bigint | null, lastBlock: bigint | undefined, max = 14) {
   const [lines, setLines] = useState<StubLine[] | null>(null);
   const [more, setMore] = useState(false);
+  // True until the first walk for this tab finishes: the lines shown meanwhile are only its newest few.
+  const [loading, setLoading] = useState(true);
   const seen = useRef<{ id: string; head: bigint; lines: StubLine[] }>({ id: "", head: 0n, lines: [] });
   const walking = useRef(false);
   const queued = useRef<bigint | null>(null);
@@ -253,6 +290,7 @@ export function useHistory(id: bigint | null, lastBlock: bigint | undefined, max
       seen.current = { id: sid, head: 0n, lines: [] };
       retries.current = 0;
       setLines(null);
+      setLoading(true);
     }
     if (lastBlock === seen.current.head) return;
     if (walking.current) {
@@ -331,7 +369,10 @@ export function useHistory(id: bigint | null, lastBlock: bigint | undefined, max
       const merged = [...fresh, ...seen.current.lines].slice(0, 80);
       seen.current = { id: sid, head: lastBlock, lines: merged };
       setLines(merged);
-      setMore(block > 0n && block !== stopAt);
+      // A walk from a newer head down to the last one read leaves the older end as it was: still short if it was.
+      const short = block > 0n && block !== stopAt;
+      setMore((m) => short || (stopAt > 0n && m));
+      setLoading(false);
     })()
       .catch((e) => {
         if (cancelled()) return;
@@ -340,7 +381,10 @@ export function useHistory(id: bigint | null, lastBlock: bigint | undefined, max
         const limited = noteRpcError(e);
         const tries = ++retries.current;
         if (limited || tries <= 6) setTimeout(() => !cancelled() && setAgain((n) => n + 1), limited ? 4000 : 1000 * tries);
-        else setLines((l) => l ?? []);
+        else {
+          setLines((l) => l ?? []);
+          setLoading(false);
+        }
       })
       .finally(() => {
         walking.current = false;
@@ -351,5 +395,5 @@ export function useHistory(id: bigint | null, lastBlock: bigint | undefined, max
       });
   }, [id, lastBlock, max, again]);
 
-  return { lines, more };
+  return { lines, more, loading };
 }

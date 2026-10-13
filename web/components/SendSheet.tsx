@@ -20,7 +20,7 @@ import {
   updateSentLink,
   type SentLink,
 } from "@/lib/sendlink";
-import { useWallet } from "@/lib/wallet";
+import { PROMPT_FREE_LABEL, asksForPasskey, useWallet, type Wallet } from "@/lib/wallet";
 import styles from "./SendSheet.module.css";
 
 type Mode = "link" | "contact" | "address";
@@ -213,6 +213,21 @@ function AmountRow({ id, amount, setAmount, cur, setCur }: { id: string; amount:
   );
 }
 
+/**
+ * Passkey accounts: which sends ask for the passkey again (lib/wallet.tsx enforces it in the signer). Nothing for
+ * email and practice wallets, whose sends are unchanged.
+ */
+function PasskeyNote({ wallet, value }: { wallet: Wallet; value: bigint }) {
+  if (wallet.kind !== "mera") return null;
+  return (
+    <p className={styles.fine}>
+      {asksForPasskey(wallet, value)
+        ? `Over ${PROMPT_FREE_LABEL}, Segundo asks for your passkey again before the money goes.`
+        : `Up to ${PROMPT_FREE_LABEL} sends with no prompt while signing is unlocked; over ${PROMPT_FREE_LABEL}, Segundo asks for your passkey again.`}
+    </p>
+  );
+}
+
 function LinkForm({ max, fromName, onMoved, onBusy }: { max: bigint; fromName: string; onMoved: () => void; onBusy: (b: boolean) => void }) {
   const wallet = useWallet();
   const [amount, setAmount] = useState("");
@@ -302,6 +317,7 @@ function LinkForm({ max, fromName, onMoved, onBusy }: { max: bigint; fromName: s
         </button>
         {problem && amount && <span className="soft">{problem}</span>}
       </div>
+      <PasskeyNote wallet={wallet} value={value} />
       <ErrorLine error={act.error} />
     </form>
   );
@@ -516,6 +532,7 @@ function ContactForm({ max, fromName, onMoved, onBusy }: { max: bigint; fromName
         </button>
         {problem && (who || amount) && <span className="soft">{problem}</span>}
       </div>
+      <PasskeyNote wallet={wallet} value={value} />
       <ErrorLine error={look.error ?? act.error} />
     </form>
   );
@@ -578,6 +595,7 @@ function AddressForm({ max, onMoved, onBusy }: { max: bigint; onMoved: () => voi
         </button>
         {problem && (to || amount) && <span className="soft">{problem}</span>}
       </div>
+      <PasskeyNote wallet={wallet} value={value} />
       <ErrorLine error={act.error} />
       <LandedLine landed={act.landed} />
     </form>

@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 /**
  * Exchange rates per US dollar, shown to people and never used to move money.
  * For the currencies Segundo's Chainlink CRE workflow posts (PHP, NGN, INR, BRL, KES, EUR), the rate is the one the
- * DON agreed on and wrote to SegundoKeeper on Monad, as long as the newest report is under 6 hours old; `sources`
+ * workflow posted to SegundoKeeper on Monad (trusted reports only, see lib/cre.ts), as long as the newest is under 6 hours old; `sources`
  * names the block. Every other currency, or all of them when the keeper is quiet, uses the daily reference rate from
  * open.er-api.com (no key).
  */
@@ -41,7 +41,7 @@ export async function GET() {
       cre: onChain ? { keeper: onChain.keeper, block: onChain.lastBlock, at: onChain.lastAt, tx: onChain.lastTx } : null,
     },
     200,
-    // Short enough that a new report shows within minutes of landing (they arrive about every half hour).
+    // Short enough that a new report shows within minutes of landing (they arrive about every two hours).
     { "cache-control": reference ? "public, s-maxage=300, stale-while-revalidate=3600" : "public, s-maxage=60" },
   );
 }

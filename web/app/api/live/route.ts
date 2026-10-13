@@ -10,6 +10,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 let cache: { at: number; body: unknown } | null = null;
+/** The same for every visitor (no cookies or per-user data), so the CDN can fold every tab's poll into one read every few seconds. */
+const SHARED = { "cache-control": "public, s-maxage=3, stale-while-revalidate=15" };
 
 /**
  * Network-wide numbers for the landing page, read straight from contract state (no indexer):
@@ -17,7 +19,7 @@ let cache: { at: number; body: unknown } | null = null;
  * feature, and the latest payouts (found by following each tab's Activity link to its last block).
  */
 export async function GET() {
-  if (cache && Date.now() - cache.at < 4000) return json(cache.body, 200, { "cache-control": "no-store" });
+  if (cache && Date.now() - cache.at < 4000) return json(cache.body, 200, SHARED);
   try {
     const count = (await publicClient.readContract({ address: TILL, abi: tillAbi, functionName: "tabCount" })) as bigint;
     // The load-test tabs (see /network) are closed and left out of the live numbers.
@@ -94,7 +96,7 @@ export async function GET() {
       profiles,
     };
     cache = { at: Date.now(), body };
-    return json(body, 200, { "cache-control": "no-store" });
+    return json(body, 200, SHARED);
   } catch {
     return json({ tabs: null }, 200, { "cache-control": "no-store" });
   }

@@ -1,0 +1,164 @@
+/* The signed-out gate: sign-in choices beside a preview of what happens next. */
+.gate {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: 56px;
+  align-items: start;
+}
+.panel {
+  min-width: 0;
+}
+.panel > div {
+  max-width: none;
+  box-shadow: var(--shadow);
+}
+.aside {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  padding-top: 6px;
+}
+.stepsTitle {
+  font-size: 14px;
+  font-weight: 650;
+  font-variation-settings: normal;
+  letter-spacing: 0.02em;
+  color: var(--serial);
+  margin-top: 8px;
+}
+.steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+  border-top: 1.5px solid var(--ink);
+}
+.steps li {
+  counter-increment: step;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 6px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+.steps li::before {
+  content: counter(step);
+  font-variation-settings: var(--wide);
+  font-size: 26px;
+  font-weight: 300;
+  color: var(--serial);
+  line-height: 1;
+}
+.steps b {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+/* A freelancer's request, read from the link before sign-up: who asked, the rate, the budget, where the pay goes. */
+.terms {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px 24px;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--serial);
+  border-radius: 10px;
+}
+.termsHead {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.termsLabel {
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--serial);
+}
+.termsName {
+  font-size: 24px;
+  font-weight: 650;
+  font-variation-settings: "wdth" 112;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+.termsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 12px 0;
+  border-top: 1.5px solid var(--ink);
+  border-bottom: 1px solid var(--rule);
+}
+.termsGrid div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.termsGrid dt {
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.termsGrid dd {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.termsGrid dd small {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+.termsMemo {
+  font-size: 15px;
+}
+.termsFine {
+  font-size: 14px;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+.previewLabel {
+  font-weight: 600;
+  font-size: 14.5px;
+  color: var(--ink-soft);
+}
+.sample {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px 20px;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--intaglio);
+  border-radius: 10px;
+  font-size: 14.5px;
+}
+.sample code {
+  font-size: 13.5px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .gate {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 32px;
+  }
+}
+@media (max-width: 560px) {
+  .termsGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .termsGrid div:last-child {
+    grid-column: 1 / -1;
+  }
+  .terms {
+    padding: 18px;
+  }
+}

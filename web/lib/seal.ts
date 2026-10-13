@@ -1,6 +1,7 @@
 /**
  * Sealed details: a freelancer's legal name, address, tax ID and payout account, encrypted in the browser with a
- * key that only their passkey can produce. Segundo's servers never receive them, sealed or open.
+ * key that only their passkey can produce. Segundo's servers never receive them open: they keep only the sealed
+ * envelope (app/api/seal), so a fresh browser on any device finds it and the same passkey opens it there.
  *
  * Key derivation (see lib/mera.ts for the PRF itself):
  *   prf  = passkey PRF(credential, rpId, salt = sha256("segundo/seal/v1"))   one fingerprint prompt
@@ -17,7 +18,7 @@
  * bound in as additional data (version 2), so a sealed file can't be passed off as another account's or another
  * passkey's, and its date can't be edited. Version 1 envelopes, which bound only the account, still open.
  */
-import type { Address } from "viem";
+import { toHex, type Address } from "viem";
 import type { Wallet } from "./wallet";
 
 export type PayoutKind = "bank" | "mobile";
@@ -128,7 +129,12 @@ function parseEnvelope(value: unknown): SealedEnvelope {
   };
 }
 
-/** The sealed copy kept in this browser for an account, if any. Reading it needs no passkey: it's ciphertext. */
+/**
+ * The sealed copy kept in this browser for an account, if any. Reading it needs no passkey: it's ciphertext. The same
+ * envelope is kept on Segundo's server (uploadSealed, fetchSealed), so on another device or a fresh browser profile
+ * loadSealed finds it and the same passkey opens it there; the backup file (downloadSealedBackup, restoreSealedBackup)
+ * still works without the server.
+ */
 export function readSealed(address: string | undefined): SealedEnvelope | null {
   if (!address) return null;
   try {
@@ -139,8 +145,83 @@ export function readSealed(address: string | undefined): SealedEnvelope | null {
   }
 }
 
+/** True when this browser holds a sealed copy. When it doesn't, looks for the server copy once in the background:
+ *  if there is one, it is cached here and a "segundo:sealed" event fires. */
 export function hasSealedDetails(address: string | undefined): boolean {
-  return readSealed(address) != null;
+  const here = readSealed(address) != null;
+  if (!here && address && typeof window !== "undefined") void fetchSealed(address);
+  return here;
+}
+
+/* ---------- The server copy (ciphertext only) ---------- */
+
+const fetched = new Map<string, Promise<SealedEnvelope | null>>();
+
+async function sha256Hex(text: string): Promise<string> {
+  const d = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)));
+  return Array.from(d, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** What the account signs to store an envelope; app/api/seal/route.ts checks the same text. */
+export async function sealUploadMessage(address: string, envelopeText: string, signedAt: string): Promise<string> {
+  return `segundo/sealed/v1:${address.toLowerCase()}:${await sha256Hex(envelopeText)}:${signedAt}`;
+}
+
+/**
+ * The envelope Segundo's server keeps for an account, cached in this browser when found. Null when there is none, the
+ * deployment keeps no server copies (503), or the network fails: the caller carries on with what this browser has.
+ * One request per address per page load unless `again`.
+ */
+export function fetchSealed(address: string, again = false): Promise<SealedEnvelope | null> {
+  const k = address.toLowerCase();
+  if (!again && fetched.has(k)) return fetched.get(k)!;
+  const p = (async () => {
+    try {
+      const r = await fetch(`/api/seal?address=${k}`, { cache: "no-store" });
+      if (!r.ok) return null;
+      const envelope = parseEnvelope(await r.text());
+      if (envelope.account.toLowerCase() !== k) return null;
+      const local = readSealed(address);
+      // Never replace a newer copy this browser sealed with an older one from the server.
+      if (!local || (envelope.sealedAt || "") > (local.sealedAt || "")) store(envelope);
+      return envelope;
+    } catch {
+      return null;
+    }
+  })();
+  fetched.set(k, p);
+  return p;
+}
+
+/** This browser's sealed copy, or the server's when this browser has none (then cached here). */
+export async function loadSealed(address: string | undefined): Promise<SealedEnvelope | null> {
+  if (!address) return null;
+  return readSealed(address) ?? (await fetchSealed(address));
+}
+
+/**
+ * Keeps the envelope on Segundo's server, signed by the account so nobody else can replace it. Passkey accounts sign
+ * this without a prompt inside an unlocked session (and with one when signing is locked). Returns false, without
+ * throwing, when the deployment keeps no server copies, the prompt is closed or the network fails: the browser copy
+ * and the backup file still hold the details.
+ */
+export async function uploadSealed(wallet: Wallet, envelope: SealedEnvelope): Promise<boolean> {
+  if (!canSeal(wallet) || envelope.account.toLowerCase() !== wallet.address!.toLowerCase()) return false;
+  try {
+    const text = JSON.stringify(envelope);
+    const signedAt = new Date().toISOString();
+    const message = await sealUploadMessage(envelope.account, text, signedAt);
+    const signature = await wallet.signMessage(toHex(new TextEncoder().encode(message)));
+    const r = await fetch("/api/seal", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ address: envelope.account, envelope: text, sealedAt: signedAt, signature }),
+    });
+    if (r.ok) fetched.set(envelope.account.toLowerCase(), Promise.resolve(envelope));
+    return r.ok;
+  } catch {
+    return false;
+  }
 }
 
 function store(envelope: SealedEnvelope) {
@@ -159,7 +240,8 @@ async function open(wallet: Wallet, envelope: SealedEnvelope, withKey?: CryptoKe
   if (!canSeal(wallet)) throw new Error("Sealed details open only with a passkey account.");
   if (envelope.account.toLowerCase() !== wallet.address!.toLowerCase())
     throw new Error(`These details belong to a different Segundo account (${envelope.account.slice(0, 6)}…${envelope.account.slice(-4)}).`);
-  const key = withKey ?? (await wallet.mera!.sealingKey());
+  // Reading details always asks for the passkey, even mid-session: the plain text is never one unattended tap away.
+  const key = withKey ?? (await wallet.mera!.sealingKey({ fresh: true }));
   let plain: ArrayBuffer;
   try {
     plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64url(envelope.nonce), additionalData: aad(envelope) }, key, unb64url(envelope.ciphertext));
@@ -170,7 +252,7 @@ async function open(wallet: Wallet, envelope: SealedEnvelope, withKey?: CryptoKe
   return { ...EMPTY_DETAILS, ...parsed };
 }
 
-/** Encrypt and keep the details in this browser. Prompts for the passkey unless it was confirmed in the last few minutes. */
+/** Encrypt and keep the details in this browser (uploadSealed then keeps the envelope on the server). Prompts for the passkey unless the sealing key is already in this session. */
 export async function sealDetails(wallet: Wallet, details: SealedDetails): Promise<SealedEnvelope> {
   if (!canSeal(wallet)) throw new Error("Sealing needs a passkey account.");
   const key = await wallet.mera!.sealingKey();
@@ -191,14 +273,14 @@ export async function sealDetails(wallet: Wallet, details: SealedDetails): Promi
 
 /**
  * For any page that prints your own details (invoices, your income statement): returns them, asking for the passkey
- * if it wasn't confirmed in the last few minutes. Null when the account can't seal (email or practice) or nothing is
- * sealed in this browser. Throws an Error with a plain-English message if the prompt is closed or the passkey differs.
+ * every time (a fresh assertion on the sealing salt, even inside an unlocked session). Null when the account can't seal (email or practice) or nothing is
+ * sealed in this browser or on Segundo's server. Throws an Error with a plain-English message if the prompt is closed or the passkey differs.
  * `withKey` is a sealing key the caller already derived (sharing with a verifier gets it in the same prompt as the
- * disclosure key, lib/disclose.ts).
+ * disclosure key, lib/disclose.ts), so that prompt is the fresh one.
  */
 export async function unsealDetails(wallet: Wallet, withKey?: CryptoKey): Promise<SealedDetails | null> {
   if (!canSeal(wallet)) return null;
-  const envelope = readSealed(wallet.address);
+  const envelope = await loadSealed(wallet.address);
   if (!envelope) return null;
   return open(wallet, envelope, withKey);
 }

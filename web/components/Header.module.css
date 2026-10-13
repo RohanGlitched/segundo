@@ -216,3 +216,52 @@
   font-size: 14px;
   color: var(--ink-soft);
 }
+
+/* The page links fold into one menu on narrow screens. */
+.menuWrap {
+  display: none;
+}
+.nav :global(.btn) {
+  white-space: nowrap;
+}
+.menuBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1.5px solid var(--rule);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink);
+  font: 600 14px/1 "Segundo Dollar", var(--font-archivo), sans-serif;
+  cursor: pointer;
+}
+.menuBtn[aria-expanded="true"] {
+  border-color: var(--ink);
+}
+.mainMenu {
+  width: min(290px, calc(100vw - 32px));
+}
+.mainMenu .item[aria-current="page"] {
+  font-weight: 650;
+  color: var(--serial);
+}
+@media (max-width: 760px) {
+  .menuWrap {
+    display: block;
+  }
+  .extra {
+    display: none;
+  }
+}
+@media (max-width: 480px) {
+  .tabsLink {
+    display: none;
+  }
+}
+@media (max-width: 420px) {
+  .menuBtn {
+    padding: 0 10px;
+  }
+}

@@ -145,12 +145,12 @@ a.cityLink:hover {
 .axis {
   font-size: 13px;
   fill: var(--ink-soft);
-  font-family: var(--font-archivo), sans-serif;
+  font-family: "Segundo Dollar", var(--font-archivo), sans-serif;
 }
 .lineLabel {
   font-size: 15px;
   font-weight: 650;
-  font-family: var(--font-archivo), sans-serif;
+  font-family: "Segundo Dollar", var(--font-archivo), sans-serif;
 }
 .chartCap {
   font-size: 13.5px;
@@ -200,7 +200,7 @@ a.cityLink:hover {
   stroke-width: 1;
 }
 .specimenCode {
-  font-family: var(--font-archivo), sans-serif;
+  font-family: "Segundo Dollar", var(--font-archivo), sans-serif;
   font-variation-settings: "wdth" 125;
   font-weight: 700;
   font-size: 18px;
@@ -247,6 +247,7 @@ a.cityLink:hover {
 .blocks {
   grid-area: blocks;
   display: flex;
+  justify-content: flex-end;
   gap: 4px;
   height: 64px;
   align-items: flex-end;
@@ -261,11 +262,12 @@ a.cityLink:hover {
   height: 34px;
   border-radius: 2px;
   background: color-mix(in srgb, var(--ink) 22%, transparent);
-  animation: arrive 0.4s ease-out;
 }
+/* Only the newest block arrives (transform and opacity only); the rest of the tape stays still. */
 .block:last-child {
   background: var(--ink);
   height: 44px;
+  animation: arrive 0.4s ease-out;
 }
 .blockPaid {
   background: var(--serial) !important;
@@ -675,4 +677,108 @@ a.receiptLine:hover span:first-child {
   .load {
     padding: 16px 16px 18px;
   }
+}
+
+/* ---------------------------------------------------------------- one part of the tape on its own */
+.tapeOne {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "blocks" "meta" "receipt";
+  grid-template-rows: auto;
+}
+.loadFigs .loadWhy {
+  margin-top: 6px;
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0;
+  color: var(--ink);
+}
+
+/* ---------------------------------------------------------------- the rest of the questions */
+.more > summary {
+  cursor: pointer;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+  padding: 10px 16px;
+  border: 1.5px solid var(--rule);
+  border-radius: var(--radius);
+  font-weight: 600;
+  font-size: 15px;
+}
+.more > summary::-webkit-details-marker {
+  display: none;
+}
+.more > summary:hover {
+  border-color: var(--ink);
+}
+.more[open] > summary {
+  margin-bottom: 4px;
+}
+.more[open] > summary::after {
+  content: "";
+}
+
+/* ---------------------------------------------------------------- world clocks on a phone: one row per city */
+@media (max-width: 640px) {
+  .world {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cityItem,
+  .cityItem:nth-child(4) {
+    border-left: 0;
+  }
+  .cityItem + .cityItem {
+    border-top: 1px solid var(--rule);
+  }
+  .cityLink {
+    display: grid;
+    grid-template-columns: 46px minmax(0, 1fr) auto;
+    grid-template-areas: "dial city amount" "dial person state";
+    align-items: center;
+    gap: 2px 12px;
+    padding: 12px 2px;
+  }
+  .dial {
+    grid-area: dial;
+    width: 46px;
+    height: 46px;
+    margin: 0;
+  }
+  .city {
+    grid-area: city;
+    font-size: 15.5px;
+  }
+  .person {
+    grid-area: person;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cityAmount {
+    grid-area: amount;
+    margin: 0;
+    font-size: 17px;
+    text-align: right;
+    overflow-wrap: normal;
+    white-space: nowrap;
+  }
+  .cityState {
+    grid-area: state;
+    justify-self: end;
+    font-size: 12.5px;
+  }
+}
+.moneyNext {
+  font-size: 14.5px;
+  color: var(--ink-soft);
+  border-left: 2px solid var(--serial);
+  padding-left: 12px;
+}
+.moneyNext span {
+  color: var(--ink);
+  font-weight: 650;
 }

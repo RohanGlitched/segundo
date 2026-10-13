@@ -10,7 +10,7 @@ import styles from "./home.module.css";
  */
 const W = 1000;
 const H = 360;
-const PAD = { l: 92, r: 46, t: 52, b: 48 };
+const PAD = { l: 92, r: 46, t: 64, b: 48 };
 const DAYS = 21;
 const TOTAL = 1200;
 const x = (day: number) => PAD.l + (day / DAYS) * (W - PAD.l - PAD.r);
@@ -35,7 +35,12 @@ export function ArrivalChart() {
   const area = `${tillPath()} L${x(DAYS)} ${y(0)} Z`;
   return (
     <figure className={styles.chartFig}>
-      <svg viewBox={`0 0 ${W} ${H}`} className={styles.chart} role="img" aria-label="Money received over three weeks for one week of work: Segundo pays during each working day; a marketplace pays about ten days after the week; a bank wire arrives around day 20 with 6.36% lost to fees.">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className={styles.chart}
+        role="img"
+        aria-label="Money received over three weeks for one week of work: Segundo pays during each working day; a marketplace pays about ten days after the week; a bank wire arrives around day 20 with 6.36% lost to fees."
+      >
         <defs>
           <pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(35)">
             <line x1="0" y1="0" x2="0" y2="7" stroke="var(--serial)" strokeWidth="1" opacity="0.28" />
@@ -63,13 +68,16 @@ export function ArrivalChart() {
         <path d={step(MARKET_DAY, TOTAL)} fill="none" stroke="var(--ink)" strokeWidth="2" strokeDasharray="8 6" />
         <path d={tillPath()} fill="none" stroke="var(--serial)" strokeWidth="3" strokeLinejoin="round" />
         <text x={x(5.3)} y={y(TOTAL) - 14} className={styles.lineLabel} fill="var(--serial)">
-          Segundo: every second, as it&apos;s earned
+          Segundo: all $1,200 by Friday
         </text>
-        <text x={x(MARKET_DAY) - 8} y={y(TOTAL / 2)} textAnchor="end" className={styles.lineLabel} fill="var(--ink)">
+        <text x={x(MARKET_DAY) - 8} y={y(TOTAL * 0.6)} textAnchor="end" className={styles.lineLabel} fill="var(--ink)">
           Marketplace: day 16
         </text>
-        <text x={x(WIRE_DAY) - 8} y={y(TOTAL / 4)} textAnchor="end" className={styles.lineLabel} fill="var(--ink-soft)">
-          Wire: day 20, less 6.36%
+        <text x={x(WIRE_DAY) - 8} y={y(TOTAL / 4) - 10} textAnchor="end" className={styles.lineLabel} fill="var(--ink-soft)">
+          <tspan x={x(WIRE_DAY) - 8}>Wire: day 20,</tspan>
+          <tspan x={x(WIRE_DAY) - 8} dy="1.25em">
+            less $76 in fees
+          </tspan>
         </text>
       </svg>
       <figcaption className={styles.chartCap}>

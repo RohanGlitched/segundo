@@ -426,6 +426,8 @@
     place-items: center;
     min-height: 0;
     cursor: default;
+    /* Horizontal swipes reach the deck; vertical pans stay with the browser. */
+    touch-action: pan-y;
   }
   .slide {
     display: none;
@@ -493,7 +495,7 @@
     border: 1.5px solid var(--rule);
     background: transparent;
     color: var(--ink);
-    font: 600 16px/1 var(--font-archivo), sans-serif;
+    font: 600 16px/1 "Segundo Dollar", var(--font-archivo), sans-serif;
     cursor: pointer;
   }
   .ctl:hover:not(:disabled) {
@@ -585,4 +587,38 @@
   .steps {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+}
+
+/* Business model: one tab-hour, priced. */
+.unit {
+  margin: 0;
+  font-size: var(--fs-body);
+}
+.unit > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--gap);
+  padding: calc(var(--gap) * 0.45) 0;
+  border-bottom: 1px dashed var(--rule);
+}
+.unit dt {
+  color: var(--ink-soft);
+}
+.unit dd {
+  margin: 0;
+  font-size: calc(var(--fs-big) * 0.55);
+  font-weight: 450;
+  line-height: 1;
+  white-space: nowrap;
+}
+.unit > .unitTotal {
+  border-bottom: 1.5px solid var(--ink);
+}
+.unitTotal dt {
+  color: var(--ink);
+  font-weight: 650;
+}
+.unitTotal dd {
+  color: var(--serial);
 }

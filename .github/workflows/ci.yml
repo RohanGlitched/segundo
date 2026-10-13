@@ -20,9 +20,49 @@ jobs:
       - name: Unit and fuzz tests
         working-directory: contracts
         run: forge test -vv
-      - name: Rehearsal on a Monad testnet fork with Agora AUSD
+
+  fork:
+    name: Rehearsal on a Monad testnet fork
+    # Depends on Monad's public RPC, which is sometimes slow or rate limited: a failure here doesn't fail CI.
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          submodules: recursive
+      - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
+      - name: Till with Agora AUSD on a fork
         working-directory: contracts
         run: forge test --match-contract Fork --fork-url https://testnet-rpc.monad.xyz -vv
+      - name: SegundoKeeper against the live Till on a fork
+        working-directory: cre/contracts
+        run: forge test --mt test_fork --fork-url https://testnet-rpc.monad.xyz -vv
+
+  cre:
+    name: Chainlink CRE (receiver and workflow)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          submodules: recursive
+      - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
+      - name: SegundoKeeper tests
+        working-directory: cre/contracts
+        run: forge test -vv
+      - uses: oven-sh/setup-bun@ecf28ddc73e819eb6fa29df6b34ef8921c743461 # v2.1.3
+        with:
+          bun-version: 1.4.3
+      # --ignore-scripts skips the SDK's postinstall (`cre-setup`), which only fetches the WASM compiler that
+      # `cre workflow simulate` needs; the unit tests run on the SDK's test runtime without it.
+      - name: Install workflow dependencies
+        working-directory: cre/segundo-keeper
+        run: bun install --frozen-lockfile --ignore-scripts
+      - name: Workflow tests
+        working-directory: cre/segundo-keeper
+        run: bun test
+      - name: Workflow typecheck
+        working-directory: cre/segundo-keeper
+        run: bunx tsc --noEmit
 
   web:
     name: Web app

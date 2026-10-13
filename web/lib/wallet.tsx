@@ -1,11 +1,13 @@
 "use client";
 
-import { PrivyProvider, useCreateWallet, useExportWallet, usePrivy, useWallets, type EIP1193Provider, type PrivyClientConfig } from "@privy-io/react-auth";
-import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { createWalletClient, custom, type Address, type Hex, type TypedDataDefinition } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { monadTestnet } from "./chain";
+import { TREASURY, monadTestnet } from "./chain";
 import type { MeraUnlocked } from "./mera";
+import type { PrivyCalls, PrivyMountProps, PrivyState } from "./privy-bridge";
+import { FRESH_MS, PROMPT_FREE_UNITS } from "./mera-policy";
+import { formatUsd, toUsd } from "./money";
 
 /**
  * One wallet interface for the app. The main way in is a passkey account made with Mera: the passkey's PRF output
@@ -48,8 +50,17 @@ export type Wallet = {
   lock?: () => void;
   /** Mera only: ask for the passkey now, so the next signatures don't have to. */
   unlock?: () => Promise<void>;
-  /** Mera only: the passkey behind the account and its sealing key for private details (lib/seal.ts). */
-  mera?: { credentialId: string; sealingKey: () => Promise<CryptoKey> };
+  /**
+   * Passkey accounts: ask for the passkey again before a sensitive action, even inside an unlocked session (see
+   * PROMPT_FREE_UNITS). Resolves at once for email and practice wallets. `reason` ("Sending $120.00") names the
+   * action if the prompt is closed. Call it first in a tap handler: Safari only shows a passkey prompt shortly after a tap.
+   */
+  confirmWithPasskey: (reason: string) => Promise<void>;
+  /**
+   * Mera only: the passkey behind the account and its sealing key for private details (lib/seal.ts). `fresh` asks
+   * the passkey even if the key is in memory: opening (reading) details always does; sealing them doesn't.
+   */
+  mera?: { credentialId: string; sealingKey: (opts?: { fresh?: boolean }) => Promise<CryptoKey> };
   usePractice: () => void;
   signOut: () => void;
   signTypedData: (data: TypedDataDefinition) => Promise<Hex>;
@@ -57,6 +68,32 @@ export type Wallet = {
 };
 
 export type AccountsMode = "full" | "mera" | "pending";
+
+/* ---------- What asks for the passkey ---------- */
+
+/**
+ * The policy (lib/mera-policy.ts) is enforced here, in the signer: Mera's signTypedData below reads what is being
+ * signed, so every page follows it. Over $50, an AUSD transfer or permit needs a fresh passkey check. Segundo's 1% fee
+ * is exempt: it signs with the open or top-up whose permit already asked. A passkey prompt finished in the last minute
+ * (signing in, unlocking, an invite key) counts once, so nothing asks twice in a row. Email (Privy) and practice
+ * wallets are unchanged.
+ */
+export { PROMPT_FREE_LABEL, PROMPT_FREE_UNITS, asksForPasskey } from "./mera-policy";
+
+const usdOf = (units: bigint) => formatUsd(toUsd(units));
+
+/** The action a typed-data signature stands for, if it needs a fresh passkey check; null when the session covers it. */
+function sensitiveReason(data: TypedDataDefinition): string | null {
+  const m = data.message as Record<string, unknown> | undefined;
+  const value = typeof m?.value === "bigint" ? m.value : null;
+  if (value == null || value <= PROMPT_FREE_UNITS) return null;
+  if (data.primaryType === "TransferWithAuthorization") {
+    const to = typeof m?.to === "string" ? m.to.toLowerCase() : "";
+    return to === TREASURY.toLowerCase() ? null : `Sending ${usdOf(value)}`;
+  }
+  if (data.primaryType === "Permit") return `Putting ${usdOf(value)} into a tab`;
+  return null;
+}
 
 const WalletContext = createContext<Wallet | null>(null);
 const PRACTICE_KEY = "till.practice.v1";
@@ -170,6 +207,10 @@ function useMeraAccount(onSignedIn: () => void) {
   const sealKey = useRef<CryptoKey | null>(null);
   const sealPending = useRef<Promise<CryptoKey> | null>(null);
   const lastActive = useRef(0);
+  /** The passkey prompt (lib/mera.ts lastAssertion) already spent on a sensitive action: each prompt covers one. */
+  const spentAssertion = useRef(0);
+  /** Set by confirmWithPasskey: the next sensitive signature within a minute uses that check instead of asking again. */
+  const grant = useRef(0);
   /** Bumped by every lock: a passkey prompt that finishes after a lock or sign-out must not sign anyone back in. */
   const epoch = useRef(0);
   const signedInHook = useRef(onSignedIn);
@@ -192,6 +233,7 @@ function useMeraAccount(onSignedIn: () => void) {
     live.current?.session.end();
     live.current = null;
     sealKey.current = null;
+    grant.current = 0;
     setUnlocked(false);
     // Anything showing unsealed details (components/SealedDetails.tsx) clears itself on this.
     window.dispatchEvent(new Event("segundo:lock"));
@@ -273,9 +315,54 @@ function useMeraAccount(onSignedIn: () => void) {
     return pending.current;
   }, [adopt]);
 
+  /**
+   * A fresh passkey check for one sensitive action. A prompt this passkey finished in the last minute that no other
+   * sensitive action has used counts (signing in, then sending $80, is one prompt). Otherwise it asks: the assertion
+   * re-derives the account, must give the same address, and replaces the signing session, so a locked session is
+   * unlocked by the same prompt.
+   */
+  const check = useCallback(
+    async (reason: string): Promise<void> => {
+      const r = recordRef.current;
+      if (!r?.signedIn) throw new Error("Sign in first.");
+      const m = meraModule ?? (await loadMera());
+      const at = m.lastAssertion(r.credentialId);
+      if (at > spentAssertion.current && Date.now() - at < FRESH_MS) {
+        spentAssertion.current = at;
+        return;
+      }
+      const started = epoch.current;
+      let u: MeraUnlocked;
+      try {
+        u = await m.unlockAccount({ credentialId: r.credentialId, transports: r.transports });
+      } catch (e) {
+        throw new Error(m.promptClosed(e) ? `${reason} needs your passkey again, and the prompt was closed. Nothing was signed; try again.` : m.meraMessage(e));
+      }
+      if (epoch.current !== started) {
+        u.session.end();
+        throw new Error("Signing was locked while the passkey prompt was open. Try again.");
+      }
+      if (u.address.toLowerCase() !== r.address.toLowerCase()) {
+        u.session.end();
+        throw new Error("That passkey opens a different Segundo account. Use the passkey you signed in with.");
+      }
+      spentAssertion.current = m.lastAssertion(r.credentialId);
+      adopt(u);
+    },
+    [adopt],
+  );
+
+  const confirmWithPasskey = useCallback(
+    async (reason: string) => {
+      await check(reason);
+      grant.current = Date.now() + FRESH_MS;
+    },
+    [check],
+  );
+
   /** The AES key for sealed details: its own passkey prompt (a separate PRF salt), then kept until the session locks. */
-  const sealingKey = useCallback(async (): Promise<CryptoKey> => {
-    if (sealKey.current) {
+  const sealingKey = useCallback(async (opts?: { fresh?: boolean }): Promise<CryptoKey> => {
+    if (sealKey.current && !opts?.fresh) {
       lastActive.current = Date.now();
       return sealKey.current;
     }
@@ -365,7 +452,14 @@ function useMeraAccount(onSignedIn: () => void) {
     signOut,
     lock,
     sealingKey,
+    confirmWithPasskey,
     signTypedData: async (data: TypedDataDefinition) => {
+      // Above $50 the session alone isn't enough: one fresh passkey check per transfer or permit (see PROMPT_FREE_UNITS).
+      const reason = sensitiveReason(data);
+      if (reason) {
+        if (grant.current > Date.now()) grant.current = 0;
+        else await check(reason);
+      }
       const u = await ensure();
       try {
         return await u.account.signTypedData(data as never);
@@ -404,6 +498,7 @@ function meraWallet(mera: MeraAccount, base: Base, alsoOut: () => void): Wallet 
     lock: mera.lock,
     unlock: mera.unlock,
     mera: { credentialId: mera.credentialId!, sealingKey: mera.sealingKey },
+    confirmWithPasskey: mera.confirmWithPasskey,
     signOut: () => {
       mera.signOut();
       alsoOut();
@@ -412,6 +507,9 @@ function meraWallet(mera: MeraAccount, base: Base, alsoOut: () => void): Wallet 
     signMessage: mera.signMessage,
   };
 }
+
+/** Email (Privy) and practice wallets: no passkey to ask, so sensitive actions behave as before. */
+const noPrompt = async (): Promise<void> => {};
 
 const signInFirst = async (): Promise<never> => {
   throw new Error("Sign in first.");
@@ -429,6 +527,7 @@ function signedOutWallet(practice: Practice | null, mera: MeraAccount, base: Bas
     passkeySignIn: mera.signIn,
     hasPasskeyHere: mera.known,
     unlocked: true,
+    confirmWithPasskey: noPrompt,
     signOut: practice?.forget ?? (() => {}),
     signTypedData: account ? (data) => account.signTypedData(data) : signInFirst,
     signMessage: account ? (raw) => account.signMessage({ message: { raw } }) : signInFirst,
@@ -437,70 +536,42 @@ function signedOutWallet(practice: Practice | null, mera: MeraAccount, base: Bas
 
 /* ---------- Privy (email) ---------- */
 
-/** What the page needs to know about the Privy session: plain values, so changes are cheap to compare. */
-type PrivyState = { ready: boolean; authenticated: boolean; address?: Address; email?: string };
-/** The latest Privy actions, kept in a ref so the wallet always calls the current ones. */
-type PrivyCalls = { login: () => void; logout: () => Promise<void>; provider: () => Promise<EIP1193Provider>; exportKey: () => Promise<void> };
+/**
+ * Privy's SDK (lib/privy-bridge.tsx) is a large chunk and opens an iframe, so it loads only when it's needed: when
+ * someone picks "Continue with email" (Privy's window opens as soon as it's ready), or when this browser had an email
+ * session before (the flag below, set while signed in with email and cleared on sign-out). Passkey and practice
+ * sign-in never load it, and the passkey-only site never does either.
+ */
+const PRIVY_FLAG = "segundo:privy";
+/** How long a queued email sign-in waits for Privy before giving up, so the buttons don't stay disabled. */
+const LOGIN_WAIT_MS = 20_000;
+type PrivyMountType = ComponentType<PrivyMountProps>;
 
-// Kept outside the component: a new config object on every render would make Privy start over.
-const PRIVY_CONFIG: PrivyClientConfig = {
-  // Passkeys go through Mera (one passkey story); Privy is the email way in and its embedded wallet. Email is also
-  // how money reaches someone who isn't on Segundo yet: app/api/recipient makes their wallet ahead of time.
-  loginMethods: ["email"],
-  appearance: { theme: "light", accentColor: "#17332B", landingHeader: "Sign in to Segundo", showWalletLoginFirst: false },
-  embeddedWallets: { ethereum: { createOnLogin: "all-users" }, showWalletUIs: false },
-  defaultChain: monadTestnet,
-  supportedChains: [monadTestnet],
-};
-
-/** Reads the Privy session and reports it up; renders nothing. */
-function PrivyBridge({ onState, calls }: { onState: (s: PrivyState) => void; calls: RefObject<PrivyCalls | null> }) {
-  const { ready, authenticated, login, logout, user } = usePrivy();
-  const { wallets, ready: walletsReady } = useWallets();
-  const { createWallet } = useCreateWallet();
-  const { exportWallet } = useExportWallet();
-  const creating = useRef(false);
-  const embedded = wallets.find((w) => w.walletClientType === "privy");
-
-  // Make sure every email user has an embedded wallet (people sent money by email already have one, made in advance).
-  useEffect(() => {
-    if (!ready || !authenticated || !walletsReady || embedded || creating.current) return;
-    creating.current = true;
-    createWallet()
-      .catch((e) => console.warn("createWallet", e))
-      .finally(() => {
-        creating.current = false;
-      });
-  }, [ready, authenticated, walletsReady, embedded, createWallet]);
-
-  useEffect(() => {
-    calls.current = {
-      login,
-      logout,
-      provider: () => (embedded ? embedded.getEthereumProvider() : Promise.reject(new Error("Sign in first."))),
-      exportKey: () => (embedded ? exportWallet({ address: embedded.address }) : Promise.reject(new Error("Sign in first."))),
-    };
-  });
-
-  const address = embedded?.address as Address | undefined;
-  const email = user?.email?.address ?? user?.google?.email;
-  useEffect(() => {
-    onState({ ready, authenticated, address, email });
-  }, [onState, ready, authenticated, address, email]);
-  return null;
+let privyChunk: Promise<PrivyMountType> | null = null;
+function loadPrivy(): Promise<PrivyMountType> {
+  privyChunk ??= import("./privy-bridge")
+    .then((m) => m.default)
+    .catch((e) => {
+      privyChunk = null;
+      throw e;
+    });
+  return privyChunk;
 }
 
-/**
- * Privy sits beside the page rather than around it, so it can be left out (passkey-only mode) or added once the mode
- * is known without remounting the page. Its sign-in window is a fixed overlay, so its place in the tree doesn't matter.
- */
-const PrivyMount = memo(function PrivyMount(props: { onState: (s: PrivyState) => void; calls: RefObject<PrivyCalls | null> }) {
-  return (
-    <PrivyProvider appId={PRIVY_APP_ID!} config={PRIVY_CONFIG}>
-      <PrivyBridge {...props} />
-    </PrivyProvider>
-  );
-});
+function readPrivyFlag(): boolean {
+  try {
+    return localStorage.getItem(PRIVY_FLAG) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writePrivyFlag(on: boolean) {
+  try {
+    if (on) localStorage.setItem(PRIVY_FLAG, "1");
+    else localStorage.removeItem(PRIVY_FLAG);
+  } catch {}
+}
 
 const PRIVY_NOTE = "Your wallet is created and secured by Privy; Segundo pays the gas.";
 
@@ -512,16 +583,76 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const mera = useMeraAccount(practice.forget);
   const [privy, setPrivy] = useState<PrivyState | null>(null);
   const calls = useRef<PrivyCalls | null>(null);
+  /** Privy's component, once its chunk has loaded. */
+  const [Mount, setMount] = useState<PrivyMountType | null>(null);
+  /** Whether this browser had an email session (null until checked after mount): if so, wait for Privy before `ready`. */
+  const [restore, setRestore] = useState<boolean | null>(null);
+  const [wanted, setWanted] = useState(false);
+  /** "Continue with email" was picked before Privy was ready: open its window once it is. */
+  const [loginQueued, setLoginQueued] = useState(false);
+
+  useEffect(() => {
+    if (!withPrivy) return;
+    const had = readPrivyFlag();
+    setRestore(had);
+    if (had) setWanted(true);
+  }, [withPrivy]);
+
+  useEffect(() => {
+    if (!wanted || Mount) return;
+    let stop = false;
+    loadPrivy()
+      .then((C) => {
+        if (!stop) setMount(() => C);
+      })
+      .catch((e) => {
+        console.warn("Privy failed to load", e);
+        if (stop) return;
+        setWanted(false);
+        setRestore(false);
+        setLoginQueued(false);
+      });
+    return () => {
+      stop = true;
+    };
+  }, [wanted, Mount]);
+
+  useEffect(() => {
+    if (!loginQueued) return;
+    if (privy?.ready && calls.current) {
+      setLoginQueued(false);
+      if (!privy.authenticated) calls.current.login();
+      return;
+    }
+    const t = setTimeout(() => setLoginQueued(false), LOGIN_WAIT_MS);
+    return () => clearTimeout(t);
+  }, [loginQueued, privy]);
+
+  // Remember an email session so the next visit loads Privy straight away; forget it once Privy says signed out.
+  const privyReady = !!privy?.ready;
+  const privyAuthed = !!privy?.authenticated;
+  useEffect(() => {
+    if (privyReady) writePrivyFlag(privyAuthed);
+  }, [privyReady, privyAuthed]);
 
   const value = useMemo<Wallet>(() => {
+    const emailSignIn = () => {
+      const c = calls.current;
+      if (privy?.ready && c) return c.login();
+      setWanted(true);
+      setLoginQueued(true);
+    };
     const base: Base = {
       accounts,
       privyEnabled: withPrivy,
-      signIn: withPrivy ? () => calls.current?.login() : full ? practice.create : () => {},
+      signIn: withPrivy ? emailSignIn : full ? practice.create : () => {},
       usePractice: full ? practice.create : () => {},
     };
     const privyOut = () => {
-      if (privy?.authenticated) void calls.current?.logout();
+      if (privy?.authenticated) {
+        writePrivyFlag(false);
+        void calls.current?.logout();
+      }
     };
     if (mera.signedIn)
       return meraWallet(mera, base, () => {
@@ -548,6 +679,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         passkeySignIn: mera.signIn,
         hasPasskeyHere: mera.known,
         unlocked: true,
+        confirmWithPasskey: noPrompt,
         signOut: () => {
           practice.forget();
           privyOut();
@@ -557,18 +689,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       };
     }
     if (full) {
-      // Signed in with email but the embedded wallet isn't there yet (it's being made): not ready, as before.
-      const privySettled = !withPrivy || (!!privy?.ready && (!privy.authenticated || !!privy.address));
+      // Without an email session to restore, Privy isn't loaded and holds nothing up. With one (or while an email
+      // sign-in waits for Privy), wait for it; signed in but the embedded wallet still being made: not ready, as before.
+      const privySettled =
+        !withPrivy || (restore !== null && !loginQueued && (privy?.ready ? !privy.authenticated || !!privy.address : !restore));
       return signedOutWallet(practice, mera, { ...base, ready: privySettled && practice.loaded && mera.loaded });
     }
     // Passkey only: never the practice wallet, even if this browser kept one from the full site.
     return signedOutWallet(null, mera, { ...base, ready: accounts === "mera" && mera.loaded });
-  }, [accounts, full, withPrivy, privy, practice, mera]);
+  }, [accounts, full, withPrivy, privy, practice, mera, restore, loginQueued]);
 
   return (
     <>
       <WalletContext.Provider value={value}>{children}</WalletContext.Provider>
-      {withPrivy && <PrivyMount onState={setPrivy} calls={calls} />}
+      {withPrivy && Mount && <Mount appId={PRIVY_APP_ID!} onState={setPrivy} calls={calls} />}
     </>
   );
 }

@@ -157,7 +157,7 @@
     border-radius: var(--radius);
     background: none;
     color: var(--ink);
-    font: 600 12.5px/1.1 var(--font-archivo), sans-serif;
+    font: 600 12.5px/1.1 "Segundo Dollar", var(--font-archivo), sans-serif;
     text-decoration: none;
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;

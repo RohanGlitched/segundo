@@ -5,7 +5,9 @@ import { useEffect, useState } from "react";
 import { decodeEventLog, isAddress, zeroAddress, type Address, type Hex } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { Note } from "@/components/Note";
-import { ErrorLine, LandedLine, SignInPanel, busyLabel, useAction } from "@/components/ui";
+import { ErrorLine, LandedLine, busyLabel, useAction } from "@/components/ui";
+import { SignInGate } from "@/components/SignInGate";
+import gate from "@/components/SignInGate.module.css";
 import { tillAbi } from "@/lib/abi";
 import { explorerTx, publicClient } from "@/lib/chain";
 import { DEMO_FREELANCERS } from "@/lib/demo";
@@ -18,10 +20,12 @@ import { MIN_RATE_USD, currency, feeFor, formatDuration, formatFee, formatMoney,
 import { relay, signFee, signPermit, type Landed } from "@/lib/relay";
 import { groupedAddress, parseRequest } from "@/lib/request";
 import { gasPaused, useHealth } from "@/lib/health";
-import { useWallet } from "@/lib/wallet";
+import { PROMPT_FREE_LABEL, asksForPasskey, useWallet } from "@/lib/wallet";
 import styles from "./open.module.css";
 
 type Who = "invite" | "demo" | "address";
+/** A freelancer's request link, as read from the address bar (lib/request.ts checks every field). */
+type Asked = { from: string; to: Address; rate?: number; budget?: number; memo?: string };
 
 /** What the page shows once a tab is open; kept in sessionStorage so Back from the tab page brings it back. */
 type Receipt = { id: bigint; link?: string; next: string; landed?: Landed & { what: string } };
@@ -65,11 +69,12 @@ export default function OpenTab() {
   const faucet = useAction();
   const drip = useAutoDrip(me, balance, refreshBalance);
   // While the first 25 test AUSD are on their way, don't tell people their wallet is empty.
-  const shownBalance = drip.sending ? null : balance;
+  // The same for a faucet tap; once a drip lands, lib/hooks.ts counts it in before the RPC node has caught up.
+  const shownBalance = drip.sending || faucet.busy ? null : balance;
 
   // Back from a tab just opened (/open?opened=N): the receipt again, not an empty form that invites a second tab.
   // Otherwise, a freelancer's request link (/open?to=&rate=&budget=&memo=&from=) fills in the form.
-  const [asked, setAsked] = useState<{ from: string; to: Address } | null>(null);
+  const [asked, setAsked] = useState<Asked | null>(null);
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
     const back = q.get("opened");
@@ -82,7 +87,7 @@ export default function OpenTab() {
     if (r.rate != null) setRate(String(r.rate));
     if (r.budget != null) setBudget(String(r.budget));
     if (r.memo) setMemo(r.memo);
-    setAsked({ from: r.from, to: r.to });
+    setAsked({ from: r.from, to: r.to, rate: r.rate, budget: r.budget, memo: r.memo });
   }, []);
   const askedBanner = asked && (
     <p className="notice" role="status" style={{ overflowWrap: "anywhere" }}>
@@ -93,15 +98,7 @@ export default function OpenTab() {
   );
 
   if (!wallet.ready) return <main className={`wrap ${styles.page}`} aria-busy="true" />;
-  if (!me)
-    return (
-      <main className={`wrap ${styles.page}`}>
-        <SignInPanel title="Sign in to open a tab" level={1}>
-          {askedBanner}
-          <p>You fund the tab with test AUSD; the freelancer is paid every second they&apos;re clocked in.</p>
-        </SignInPanel>
-      </main>
-    );
+  if (!me) return <SignedOutOpen asked={asked} />;
 
   // Typed amounts go through one parser (lib/money.ts): "2,5" is two and a half, "1e3" is refused.
   const rateIn = parseAmount(rate);
@@ -146,6 +143,10 @@ export default function OpenTab() {
 
   const submit = () =>
     act.run("Tab opened", async (sent) => {
+      // Over $50 a passkey account confirms again (lib/wallet.tsx). Ask now, while the tap is fresh; when an invite key
+      // is about to be made, its own passkey prompt is that confirmation.
+      const inviteAsks = who === "invite" && hasPasskeyKeys(wallet) && !inviteKeysHeld(wallet);
+      if (asksForPasskey(wallet, budgetUnits) && !inviteAsks) await wallet.confirmWithPasskey(`Opening a ${formatUsd(budgetN)} tab`);
       let inviteKey: Hex | null = null;
       let invite: Address = zeroAddress;
       if (who === "invite") {
@@ -263,7 +264,9 @@ export default function OpenTab() {
               <input type="radio" name="who" checked={who === "invite"} onChange={() => setWho("invite")} />
               <span>
                 <b>Someone I&apos;ll invite by link</b>
-                <span className="soft">You get a link to send by email or chat. They sign in with their email and join.</span>
+                <span className="soft">
+                  You get a link to send by email or chat. They open it, sign in with a passkey{wallet.accounts === "full" && wallet.privyEnabled ? " or email" : ""}, and join.
+                </span>
               </span>
             </label>
             <label className={styles.choice}>
@@ -352,7 +355,12 @@ export default function OpenTab() {
           {problem && <p className={styles.why}>{problem}</p>}
           {paused && !problem && <p className={styles.why}>The relayer is short of test MON right now, so opening a tab is paused. Try again in a little while; your wallet and balance are unchanged.</p>}
           <p className="soft">
-            Your account signs three things in one step: permission to take the budget, the 1% fee, and the tab itself. No pop-ups, no gas.
+            Your account signs three things in one step: permission to take the budget, the 1% fee, and the tab itself.{" "}
+            {asksForPasskey(wallet, budgetUnits)
+              ? `No gas. Over ${PROMPT_FREE_LABEL}, Segundo asks for your passkey again before the budget moves.`
+              : wallet.kind === "mera"
+                ? `No pop-ups up to ${PROMPT_FREE_LABEL}, no gas; over ${PROMPT_FREE_LABEL}, Segundo asks for your passkey again.`
+                : "No pop-ups, no gas."}
             {who === "invite" &&
               hasPasskeyKeys(wallet) &&
               ` The invite key comes from your passkey, so you can rebuild the link on any device${inviteKeysHeld(wallet) ? "" : "; your passkey asks once to make it"}.`}
@@ -421,5 +429,124 @@ function FeeLine({ fee }: { fee?: Landed["fee"] }) {
       </a>
       .
     </p>
+  );
+}
+
+/**
+ * Signed out: the ways in beside what happens next. A request link's terms (who asked, the rate, the budget, where the
+ * pay goes) show here before anyone makes an account, so a client knows what they'd be agreeing to.
+ */
+function SignedOutOpen({ asked }: { asked: Asked | null }) {
+  const wallet = useWallet();
+  const { rates } = useLive();
+  const practice = wallet.accounts === "full";
+  const pick = DEMO_FREELANCERS[0]!;
+  const name = asked ? asked.from || "Your freelancer" : pick.name;
+  const first = asked ? asked.from.split(" ")[0] || "the freelancer" : pick.name.split(" ")[0]!;
+  const rateN = asked ? (asked.rate ?? 0) : 30;
+  const budgetN = asked ? (asked.budget ?? 0) : 5;
+  const covers = rateN > 0 && budgetN > 0 ? formatDuration((budgetN / rateN) * 3600) : null;
+  const budgetUnits = BigInt(Math.round(budgetN * 1e6));
+  const cur = currency(asked ? "USD" : pick.currency);
+  const place = asked ? "anywhere" : pick.place;
+
+  const terms = asked && (
+    <section className={gate.terms} aria-label="The request">
+      <div className={gate.termsHead}>
+        <span className={gate.termsLabel}>A request for a tab from</span>
+        <span className={gate.termsName}>{asked.from || "A freelancer"}</span>
+      </div>
+      <dl className={gate.termsGrid}>
+        <div>
+          <dt>Hourly rate</dt>
+          <dd className="denom">{asked.rate != null ? <>{formatUsd(asked.rate)}<small> /h</small></> : <small>You set it</small>}</dd>
+        </div>
+        <div>
+          <dt>Suggested budget</dt>
+          <dd className="denom">{asked.budget != null ? formatUsd(asked.budget) : <small>You set it</small>}</dd>
+        </div>
+        <div>
+          <dt>Covers</dt>
+          <dd className="denom">{covers ?? <small>—</small>}</dd>
+        </div>
+      </dl>
+      {asked.memo && (
+        <p className={gate.termsMemo}>
+          For: <b>{asked.memo}</b>
+        </p>
+      )}
+      {budgetUnits > 0n && (
+        <p className={gate.termsFine}>
+          With Segundo&apos;s 1% on top you&apos;d pay {formatFee(budgetUnits + feeFor(budgetUnits))}. {first} pays nothing, and unspent budget comes back
+          when the tab closes.
+        </p>
+      )}
+      <p className={gate.termsFine}>
+        The pay goes to <span className="serial">{groupedAddress(asked.to)}</span>. These are {first}&apos;s suggestions, read from the link: check the
+        address with them, and change anything once you&apos;re in. Nothing moves until you sign the tab.
+      </p>
+    </section>
+  );
+
+  return (
+      <main className={`wrap ${styles.page}`}>
+        <SignInGate
+          title={asked ? `${asked.from || "A freelancer"} asked you to open a tab` : "Sign in to open a tab"}
+          preview={
+            <>
+              {terms}
+              <p className={gate.previewLabel}>{asked ? `What ${first} will see` : "What a tab looks like"}</p>
+              <Note
+                id={0}
+                usd={0}
+                cur={cur}
+                rates={rates}
+                payee={{ name, place }}
+                payer={{ name: "You", place: "abroad" }}
+                rateUsd={rateN}
+                hours={0}
+                live={false}
+                lines={{
+                  sub: "$0.00 in AUSD",
+                  main: (
+                    <>
+                      Paid to <b>{name}</b>, {place}
+                    </>
+                  ),
+                  extra: `by you, at ${formatUsd(rateN)} an hour`,
+                }}
+                status={covers ? `Ready to clock in, up to ${covers}` : "Set a rate and a budget"}
+              />
+            </>
+          }
+          steps={[
+            {
+              title: practice ? "Sign in, or just try it." : "Sign in with your passkey.",
+              body: practice
+                ? "A passkey account takes a few seconds: no password, no seed phrase. Or skip sign-up with a practice wallet that comes with 25 free test AUSD."
+                : "Your fingerprint, face or screen lock. No password, no seed phrase, no extension, and you never need gas.",
+            },
+            asked
+              ? {
+                  title: `Check ${first}'s request.`,
+                  body: "The rate, the budget and the address arrive filled in. Read the address back to them; you can change anything before you fund it.",
+                }
+              : {
+                  title: "Choose who you're paying.",
+                  body: "A demo freelancer who clocks in on their own, someone you invite by link, or a wallet address. Then an hourly rate and a budget.",
+                },
+            {
+              title: asked ? `Fund it, and ${first} is paid by the second.` : "Pay lands as they work.",
+              body: "The budget sits in the Segundo contract, not with us, and pays only for time on the clock. Pause pay or close the tab whenever you like; unspent budget comes straight back.",
+            },
+          ]}
+        >
+          <p>
+            {asked
+              ? `${asked.rate != null ? `${formatUsd(asked.rate)} an hour${asked.budget != null ? `, ${formatUsd(asked.budget)} budget suggested. ` : ". "}` : ""}Sign in to check the request and fund it with test AUSD; ${first} is paid every second they're clocked in.`
+              : "You fund the tab with test AUSD; the freelancer is paid every second they're clocked in."}
+          </p>
+        </SignInGate>
+      </main>
   );
 }

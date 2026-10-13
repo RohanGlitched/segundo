@@ -5,6 +5,15 @@ import { clientIp, json, limited, relayerFor, revertReason, sendAndWait } from "
 
 export const runtime = "nodejs";
 
+/** True when the request comes from the home page (its referrer path is "/"). */
+function fromHome(req: Request): boolean {
+  try {
+    return new URL(req.headers.get("referer") ?? "").pathname === "/";
+  } catch {
+    return false;
+  }
+}
+
 
 /**
  * Pays out whatever a tab has earned. Anyone may ask (money only ever goes to the freelancer);
@@ -16,6 +25,8 @@ export async function POST(req: Request) {
   if (!b?.id || !/^\d{1,12}$/.test(b.id)) return json({ error: "Which tab?" }, 400);
   const id = BigInt(b.id);
   if (limited(`settle:${id}`, 1, 2_500)) return json({ skipped: true, reason: "Paid out moments ago." });
+  // The home page's hero asks for one payout per visit; reloads and a crowd of visitors share one payout per tab every 20 s.
+  if (fromHome(req) && limited(`settle-home:${id}`, 1, 20_000)) return json({ skipped: true, reason: "Paid out moments ago." });
   if (limited(`settle-ip:${clientIp(req)}`, 30, 60_000) || limited("settle:all", 40, 60_000))
     return json({ skipped: true, reason: "The relayer is paying other tabs right now. Next payout in a moment." });
   const [view, head] = await Promise.all([

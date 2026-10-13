@@ -98,6 +98,28 @@ async function openSession(prfOutput: Uint8Array<ArrayBuffer>) {
   }
 }
 
+/**
+ * When this tab last got a user-verified assertion from a Segundo passkey, and from which one. lib/wallet.tsx reads it
+ * so a sensitive action right after a passkey prompt (signing in, unlocking, an invite key) doesn't ask twice. Only
+ * a time and a public credential id: nothing secret.
+ */
+let asserted: { credentialId: string; at: number } | null = null;
+const markAsserted = (credentialId: string) => {
+  asserted = { credentialId, at: Date.now() };
+};
+
+/** Milliseconds-since-epoch of this passkey's last completed prompt in this tab, or 0. */
+export function lastAssertion(credentialId: string): number {
+  return asserted?.credentialId === credentialId ? asserted.at : 0;
+}
+
+/** The person closed the passkey prompt or let it run out (as opposed to a passkey that can't do PRF). */
+export function promptClosed(e: unknown): boolean {
+  if (!isMeraError(e) || e.code !== "PASSKEY_OPERATION_FAILED") return false;
+  const cause = (e as { cause?: unknown }).cause;
+  return cause instanceof Error && (cause.name === "NotAllowedError" || cause.name === "AbortError");
+}
+
 /** First visit: make a new passkey for Segundo on this device and open its account. One or two prompts. */
 export async function createAccount(): Promise<MeraUnlocked> {
   const day = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
@@ -105,6 +127,7 @@ export async function createAccount(): Promise<MeraUnlocked> {
     rp: { id: rpId(), name: RP_NAME },
     user: { name: `Segundo account, ${day}`, displayName: "Segundo account" },
   });
+  markAsserted(created.credentialId);
   const credential: PasskeyCredentialMetadata = {
     credentialId: created.credentialId,
     ...(created.transports ? { transports: [...created.transports] } : {}),
@@ -118,6 +141,7 @@ export async function createAccount(): Promise<MeraUnlocked> {
  */
 export async function unlockAccount(credential?: PasskeyCredentialMetadata): Promise<MeraUnlocked> {
   const got = await getPasskeyPrfOutput({ rpId: rpId(), ...(credential ? { credential } : {}) });
+  markAsserted(got.credentialId);
   const same = credential?.credentialId === got.credentialId;
   const meta: PasskeyCredentialMetadata = same && credential ? credential : { credentialId: got.credentialId };
   return { credential: meta, ...(await openSession(got.prfOutput)) };
@@ -180,6 +204,7 @@ async function familyAssertion(credential: PasskeyCredentialMetadata, family: Fa
     got.prfOutput.fill(0);
     throw new Error("That passkey belongs to a different Segundo account. Use the passkey you signed in with.");
   }
+  markAsserted(got.credentialId);
   return got.prfOutput;
 }
 

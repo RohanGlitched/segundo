@@ -442,3 +442,39 @@
     grid-row: 2;
   }
 }
+
+/* ---------------------------------------------------------------- Agora settlement (partner leg) */
+.settle {
+  width: 100%;
+  padding-top: 10px;
+  border-top: 1px dashed var(--rule);
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+.settleErr {
+  color: var(--serial);
+}
+.settleTag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 7px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  vertical-align: 1px;
+}
+
+/* ---------------------------------------------------------------- currency inks */
+.inks {
+  max-width: none;
+}
+.sub {
+  max-width: 44em;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}

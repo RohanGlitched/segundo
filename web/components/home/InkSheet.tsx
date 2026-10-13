@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { bandPaths, bandsFor, seedOf, wavePath } from "@/lib/guilloche";
-import { useLive } from "@/lib/live";
+import { useRates } from "@/lib/live";
 import { useMounted } from "@/lib/mounted";
 import { CURRENCIES, noteParts, type Currency } from "@/lib/money";
 import styles from "./home.module.css";
@@ -53,7 +53,7 @@ function Specimen({ cur, usd, rates }: { cur: Currency; usd: number; rates: Reco
 }
 
 export function InkSheet({ usd = 30 }: { usd?: number }) {
-  const { rates, ratesUpdated } = useLive();
+  const { rates, ratesUpdated } = useRates();
   return (
     <>
       <div className={styles.sheet}>

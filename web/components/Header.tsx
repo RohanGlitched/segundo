@@ -179,6 +179,44 @@ function AccountMenu() {
   );
 }
 
+const MENU = [
+  { href: "/app", label: "Your tabs" },
+  { href: "/#how", label: "How it works" },
+  { href: "/business", label: "How Segundo makes money" },
+  { href: "/network", label: "Measured on Monad" },
+  { href: "/send", label: "Send dollars abroad" },
+  { href: "/cashout", label: "Cash out to local money" },
+  { href: "/proof", label: "Check an income statement" },
+  { href: "/keys", label: "One passkey, many keys" },
+  { href: "/deck", label: "Pitch deck" },
+];
+
+/** On narrow screens the page links fold into one menu, so every page stays one tap away. */
+function MainMenu() {
+  const path = usePathname();
+  const { open, setOpen, box } = usePopover();
+  useEffect(() => setOpen(false), [path, setOpen]);
+  return (
+    <div className={`${styles.account} ${styles.menuWrap}`} ref={box}>
+      <button className={styles.menuBtn} onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-controls="main-menu">
+        <svg width="16" height="12" viewBox="0 0 16 12" aria-hidden>
+          <path d="M1 1.5h14M1 6h14M1 10.5h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+        Menu
+      </button>
+      {open && (
+        <div className={`${styles.menu} ${styles.mainMenu}`} id="main-menu">
+          {MENU.map((m) => (
+            <Link key={m.href} href={m.href} className={styles.item} aria-current={path === m.href ? "page" : undefined} onClick={() => setOpen(false)}>
+              {m.label}
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Header() {
   const wallet = useWallet();
   const path = usePathname();
@@ -200,9 +238,10 @@ export function Header() {
           <Link href="/network" className={`${styles.link} ${styles.extra}`} aria-current={path?.startsWith("/network") ? "page" : undefined}>
             On Monad
           </Link>
-          <Link href="/app" className={styles.link} aria-current={path?.startsWith("/app") ? "page" : undefined}>
+          <Link href="/app" className={`${styles.link} ${styles.tabsLink}`} aria-current={path?.startsWith("/app") ? "page" : undefined}>
             Your tabs
           </Link>
+          <MainMenu />
           {wallet.address ? <AccountMenu /> : <SignInMenu />}
         </nav>
       </div>

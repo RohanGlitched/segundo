@@ -82,7 +82,7 @@
   border: 0;
   background: transparent;
   color: var(--ink);
-  font: 600 14.5px/1.15 var(--font-archivo), sans-serif;
+  font: 600 14.5px/1.15 "Segundo Dollar", var(--font-archivo), sans-serif;
   cursor: pointer;
 }
 .modes button + button {

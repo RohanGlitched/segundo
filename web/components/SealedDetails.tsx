@@ -6,10 +6,12 @@ import {
   EMPTY_DETAILS,
   canSeal,
   downloadSealedBackup,
+  fetchSealed,
   readSealed,
   restoreSealedBackup,
   sealDetails,
   unsealDetails,
+  uploadSealed,
   type SealedDetails as Details,
   type SealedEnvelope,
 } from "@/lib/seal";
@@ -17,7 +19,7 @@ import { useWallet } from "@/lib/wallet";
 import styles from "./SealedDetails.module.css";
 
 const PROMISE =
-  "Sealed with your passkey. Segundo's servers never see these; they appear on your invoices and income statements only when you unlock them with your fingerprint.";
+  "Sealed with your passkey. Segundo keeps only the sealed copy, which it can't read; your details appear on your invoices and income statements only when you unlock them with your fingerprint, every time.";
 
 const when = (iso: string) => (iso ? new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "");
 
@@ -37,16 +39,39 @@ export function SealedDetails() {
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const file = useRef<HTMLInputElement>(null);
+  // Whether Segundo's server holds this account's sealed copy: "kept", "none" (not found, or no server copies on this
+  // deployment), or null while it's being checked.
+  const [remote, setRemote] = useState<"kept" | "none" | null>(null);
   const sealable = canSeal(wallet);
+  const unlocked = wallet.unlocked;
 
   const reread = useCallback(() => setEnvelope(readSealed(wallet.address)), [wallet.address]);
   useEffect(() => {
     reread();
     setOpen(null);
     setDraft(null);
+    setRemote(null);
     window.addEventListener("segundo:sealed", reread);
     return () => window.removeEventListener("segundo:sealed", reread);
   }, [reread]);
+  // A fresh browser has no copy of its own: fetch the server's (ciphertext; cached here and announced by "segundo:sealed").
+  useEffect(() => {
+    if (!wallet.address || !sealable) return;
+    let live = true;
+    void fetchSealed(wallet.address).then((e) => live && setRemote(e ? "kept" : "none"));
+    return () => {
+      live = false;
+    };
+  }, [wallet.address, sealable]);
+
+  // Sealed in this browser before server copies existed: keep it there too, but only when that needs no passkey prompt.
+  const kept = useRef(false);
+  useEffect(() => {
+    if (remote !== "none" || !envelope || !unlocked || kept.current) return;
+    kept.current = true;
+    void uploadSealed(wallet, envelope).then((ok) => ok && setRemote("kept"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remote, envelope, unlocked]);
   useEffect(() => {
     const drop = () => {
       setOpen(null);
@@ -76,17 +101,27 @@ export function SealedDetails() {
 
   const save = (d: Details) =>
     attempt("seal", async () => {
-      await sealDetails(wallet, d);
+      const sealed = await sealDetails(wallet, d);
       setOpen({ ...d, updatedAt: new Date().toISOString() });
       setDraft(null);
-      setNote("Sealed. Download a backup to open these on another device.");
+      const ok = await uploadSealed(wallet, sealed);
+      setRemote(ok ? "kept" : "none");
+      setNote(
+        ok
+          ? "Sealed. The encrypted copy is also kept on Segundo's server, as ciphertext Segundo can't read: sign in with this passkey on any device and they open there."
+          : "Sealed in this browser. To open them on another device or browser, download the sealed backup and restore it there with the same passkey.",
+      );
     });
 
   const restore = (f: File) =>
     attempt("restore", async () => {
       if (f.size > 64_000) throw new Error("That file isn't a Segundo sealed backup.");
-      setOpen(await restoreSealedBackup(wallet, await f.text()));
-      setNote("Restored from your backup and kept in this browser.");
+      const details = await restoreSealedBackup(wallet, await f.text());
+      setOpen(details);
+      const restored = readSealed(wallet.address);
+      const ok = restored ? await uploadSealed(wallet, restored) : false;
+      if (ok) setRemote("kept");
+      setNote(ok ? "Restored from your backup, kept in this browser and on Segundo's server as ciphertext." : "Restored from your backup and kept in this browser.");
     });
 
   const backup = () => {
@@ -116,6 +151,14 @@ export function SealedDetails() {
       />
     </>
   );
+
+  // Email and practice wallets have no passkey to seal with: one line where the card would be, not a card they can't use.
+  if (!sealable && wallet.kind !== "mera")
+    return (
+      <p className={styles.needs} id="sealed">
+        Make a passkey account to seal your legal name and tax ID for invoices. <Link href="/keys">How sealing works</Link>
+      </p>
+    );
 
   return (
     <section className={styles.box} id="sealed" aria-labelledby="sealed-title">
@@ -152,7 +195,8 @@ export function SealedDetails() {
         <>
           <Redacted />
           <p className={styles.meta}>
-            Sealed {when(envelope.sealedAt)} in this browser. Opens with passkey <span className="serial">{envelope.credentialId.slice(0, 8)}</span>.
+            Sealed {when(envelope.sealedAt)}
+            {remote === "kept" ? ", kept here and on Segundo’s server as ciphertext" : " in this browser"}. Opens with passkey <span className="serial">{envelope.credentialId.slice(0, 8)}</span>.
           </p>
           <div className={styles.actions}>
             <button className="btn small primary" onClick={unseal} disabled={!!busy}>
@@ -163,6 +207,7 @@ export function SealedDetails() {
             </button>
             {restoreButton}
           </div>
+          <p className={styles.policy}>Opening your details asks for your passkey every time, even while signing is unlocked.</p>
         </>
       ) : (
         <>
@@ -176,6 +221,11 @@ export function SealedDetails() {
             </button>
             {restoreButton}
           </div>
+          <p className={styles.policy}>
+            {remote === null
+              ? "Looking for a sealed copy of your details…"
+              : "Sealed them on another device? Signing in with the same passkey brings them here from Segundo's sealed copy; a backup file you downloaded restores them too."}
+          </p>
         </>
       )}
 
@@ -191,8 +241,9 @@ export function SealedDetails() {
       )}
       {sealable && (
         <p className={styles.fine}>
-          AES-256-GCM in this browser, with a key your passkey derives on its own salt, kept apart from the key that signs your payments. The sealed copy
-          stays in this browser; the backup file is the same ciphertext, so keep it anywhere. Lose the passkey and the details can&rsquo;t be opened by
+          AES-256-GCM in this browser, with a key your passkey derives on its own salt, kept apart from the key that signs your payments. The encrypted copy
+          is kept in this browser and on Segundo&rsquo;s server, as ciphertext Segundo can&rsquo;t read, so any device you sign in on with the same passkey
+          opens it; the backup file, the same ciphertext, still works without the server. Lose the passkey and the details can&rsquo;t be opened by
           anyone, including Segundo.
         </p>
       )}

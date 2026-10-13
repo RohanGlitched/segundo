@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, type CSSProperties } from "react";
 import { Footer } from "@/components/Footer";
+import { InkSheet } from "@/components/home/InkSheet";
 import { ErrorLine, SignInPanel, busyLabel, useAction } from "@/components/ui";
 import { explorerAddress, explorerTx } from "@/lib/chain";
 import { gasPaused, useHealth } from "@/lib/health";
@@ -11,7 +12,7 @@ import { useLive } from "@/lib/live";
 import { KEEPER_ADDRESS, currency, fetchFx, formatMoney, formatUsd, rateSourceLine, toUnits, toUsd, type FxReply } from "@/lib/money";
 import { sendDollars } from "@/lib/relay";
 import { useWallet } from "@/lib/wallet";
-import { CORRIDORS, DEMO_PARTNER, SEGUNDO_SHARE, SOURCES, SPREAD_DEFAULT, SPREAD_MAX, SPREAD_MIN, type Corridor, type SourceKey } from "./corridors";
+import { AGORA_PAIR, CORRIDORS, DEMO_PARTNER, SEGUNDO_SHARE, SOURCES, SPREAD_DEFAULT, SPREAD_MAX, SPREAD_MIN, type Corridor, type SourceKey } from "./corridors";
 import styles from "./cashout.module.css";
 
 const ORDER = Object.keys(SOURCES) as SourceKey[];
@@ -24,7 +25,30 @@ function Ref({ k }: { k: SourceKey }) {
   );
 }
 
-type Done = { hash: `0x${string}`; block: number; ms: number; usd: number; local: string; into: string; corridor: Corridor };
+/** The partner leg on testnet: the partner swaps the AUSD it received for Agora's CTK through Agora's Instant Settlement pair (api/cashout). */
+type Settlement =
+  | { state: "pending" }
+  | { state: "settled"; hash: `0x${string}`; block: number; ausd: string; ctk: string; capped: boolean }
+  | { state: "error"; error: string }
+  | { state: "off" };
+type Done = { hash: `0x${string}`; block: number; ms: number; usd: number; local: string; into: string; corridor: Corridor; settlement: Settlement };
+
+/** Asks the server to settle a landed cash-out through Agora; never throws, since the cash-out itself has already landed. */
+async function settleThroughAgora(transfer: `0x${string}`): Promise<Settlement> {
+  try {
+    const res = await fetch("/api/cashout", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ transfer }) });
+    const r = (await res.json().catch(() => ({ error: "The settlement reply was unreadable." }))) as {
+      settled?: { hash: `0x${string}`; block: number; ausd: string; ctk: string; capped: boolean };
+      skipped?: string;
+      error?: string;
+    };
+    if (r.settled) return { state: "settled", ...r.settled };
+    if (r.skipped) return { state: "off" };
+    return { state: "error", error: r.error || "Agora settlement didn't go through." };
+  } catch {
+    return { state: "error", error: "Couldn't reach the server for the Agora settlement." };
+  }
+}
 
 export default function CashOut() {
   const wallet = useWallet();
@@ -88,8 +112,10 @@ export default function CashOut() {
     act.run("Cashed out", async (sent) => {
       sent();
       const landed = await sendDollars(wallet, DEMO_PARTNER, units);
-      setDone({ ...landed, usd, local: local(net), into: rail.into, corridor });
+      setDone({ ...landed, usd, local: local(net), into: rail.into, corridor, settlement: { state: "pending" } });
       refresh();
+      // The partner leg runs after the receipt is on screen; it never holds up or undoes the cash-out.
+      settleThroughAgora(landed.hash).then((settlement) => setDone((d) => (d && d.hash === landed.hash ? { ...d, settlement } : d)));
       return landed;
     });
 
@@ -107,7 +133,12 @@ export default function CashOut() {
           </p>
           <p className={styles.testnet}>
             <b>On testnet this is a simulation.</b> Cashing out sends your test AUSD to Segundo&apos;s demo partner wallet; no real money moves and nothing
-            reaches a bank. No partner is signed yet.
+            reaches a bank. No partner is signed yet. The partner&apos;s local-currency payout is mocked by swapping the AUSD for Agora&apos;s test token CTK
+            through{" "}
+            <a href={explorerAddress(AGORA_PAIR)} target="_blank" rel="noreferrer">
+              Agora&apos;s Instant Settlement contract
+            </a>{" "}
+            on Monad testnet; on mainnet a licensed partner pays out in local money.
           </p>
         </header>
 
@@ -282,6 +313,7 @@ export default function CashOut() {
                   </a>
                   . No gas, no fee.
                 </p>
+                <SettlementLine s={done.settlement} />
                 <button type="button" className="btn small" onClick={() => setDone(null)}>
                   Cash out again
                 </button>
@@ -303,6 +335,14 @@ export default function CashOut() {
           </aside>
         </div>
 
+        <section className={`${styles.section} ${styles.inks}`} aria-labelledby="inks">
+          <h2 id="inks" className={styles.h2}>
+            Every currency, its own ink
+          </h2>
+          <p className={styles.sub}>Freelancers see their pay in the money they think in. Twelve currencies so far, each printed in its own colour.</p>
+          <InkSheet />
+        </section>
+
         <section className={styles.section} aria-labelledby="mainnet">
           <h2 id="mainnet" className={styles.h2}>
             How it works on mainnet
@@ -318,7 +358,8 @@ export default function CashOut() {
             <li>
               <b>The partner pays out on the local rail,</b> {corridor.code === "BRL" ? "Pix" : corridor.code === "KES" ? "M-Pesa" : corridor.code === "INR" ? "UPI or IMPS" : corridor.code === "NGN" ? "NIP" : "InstaPay"}{" "}
               in {corridor.country}, from its own local currency balance. It is the licensed company in the country and does the identity checks local law
-              asks for.
+              asks for. On testnet this step is mocked on chain: the demo partner swaps the AUSD for Agora&apos;s test token CTK through Agora&apos;s
+              Instant Settlement pair, at the pair&apos;s fixed price.
             </li>
             <li>
               <b>Segundo earns a share of the partner&apos;s spread.</b> No fee on top, and nothing from the freelancer otherwise: the share comes out of
@@ -384,6 +425,39 @@ export default function CashOut() {
       </main>
       <Footer />
     </>
+  );
+}
+
+function SettlementLine({ s }: { s: Settlement }) {
+  if (s.state === "off") return null;
+  if (s.state === "pending")
+    return (
+      <p className={styles.settle} aria-live="polite">
+        <span className={styles.settleTag}>Partner leg</span> Settling through Agora Instant Settlement…
+      </p>
+    );
+  if (s.state === "error")
+    return (
+      <p className={`${styles.settle} ${styles.settleErr}`}>
+        <span className={styles.settleTag}>Partner leg</span> {s.error} Your cash-out above has landed either way.
+      </p>
+    );
+  const ausd = Number(s.ausd) / 1e6;
+  const ctk = Number(s.ctk) / 1e18;
+  return (
+    <p className={styles.settle}>
+      <span className={styles.settleTag}>Partner leg</span> Settled through{" "}
+      <a href={explorerAddress(AGORA_PAIR)} target="_blank" rel="noreferrer">
+        Agora Instant Settlement
+      </a>
+      : the partner swapped {ausd.toFixed(2)} AUSD for {ctk.toLocaleString("en-US", { maximumFractionDigits: 2 })} CTK
+      {s.capped ? " (the testnet cap is $100 per cash-out)" : ""},{" "}
+      <a className="serial" href={explorerTx(s.hash)} target="_blank" rel="noreferrer">
+        block {s.block.toLocaleString("en-US")}
+      </a>
+      . On testnet the partner&apos;s local-currency payout is mocked by swapping AUSD for Agora&apos;s test token CTK through Agora&apos;s Instant
+      Settlement contract; on mainnet a licensed partner pays out in local money.
+    </p>
   );
 }
 

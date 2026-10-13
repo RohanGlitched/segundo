@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 /**
- * Segundo's Chainlink CRE keeper as Monad sees it: reports landed, the block and DON time of the newest rates,
+ * Segundo's Chainlink CRE keeper as Monad sees it: reports landed, the block and report time of the newest trusted rates,
  * tabs settled and AUSD paid through it, and the rate per currency (units per 1 USD, times 10^6).
  */
 export async function GET() {

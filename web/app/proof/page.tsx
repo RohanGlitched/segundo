@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Footer } from "@/components/Footer";
 import { DEMO_FREELANCERS } from "@/lib/demo";
 import { LookupForm } from "./LookupForm";
+import { NetworkLedger } from "./NetworkLedger";
 import styles from "./lookup.module.css";
 
 export const metadata: Metadata = {
@@ -105,10 +106,26 @@ export default function ProofLookup() {
               HyperRPC and added up when the page opens.
             </li>
             <li>
+              <b>Two reads that must agree.</b> Segundo&apos;s own Envio HyperIndex indexer folds the same events into each person&apos;s all-time
+              record, and the statement checks one against the other at the same block.
+            </li>
+            <li>
               <b>Any line can be checked by hand.</b> Click a block number and MonadVision, an independent block explorer, shows the same transfer.
             </li>
           </ol>
           <p className={styles.note}>Segundo runs on Monad testnet with test AUSD for now. The contract is deployed under Segundo&apos;s working name, Till.</p>
+        </section>
+
+        <section className={styles.section} aria-labelledby="ledger">
+          <p className={styles.kicker}>Indexed by Envio HyperIndex</p>
+          <h2 id="ledger" className={styles.h2}>
+            The ledger behind every statement
+          </h2>
+          <p className={styles.sub}>
+            Every tab, payout and shift on the Segundo contract, folded into daily totals by Segundo&apos;s own indexer as each block lands. The
+            all-time record on every statement is read from this same indexer, one person at a time.
+          </p>
+          <NetworkLedger />
         </section>
 
         <section className={styles.section} aria-labelledby="samples">

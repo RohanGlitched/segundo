@@ -134,6 +134,12 @@ Sends and cash-outs are AUSD transfer authorisations (EIP-3009) the relayer subm
 cast call 0xFEf8d6A7aF00ACd33FDdd2Ef8800cab78164d80D "allRates()(bytes3[],uint64[],uint64[])" --rpc-url https://testnet-rpc.monad.xyz
 ```
 
+Since then an always-on server runs the same simulation with `--broadcast` every 2 hours (`scripts/cre-loop.sh`), signed by the loop's own key `0x022875424E1556FEC66Fdc5A7D52820dea4dBb8D`. The workflow isn't deployed to a live DON. The mock forwarder relays a report from anyone, so the stored `allRates` can be written by anyone on testnet. The app uses a `RatesPosted` report only when its transaction's `from` is that key (or the keeper key `0xe77f…BF40`, which signed the first runs) and its time is at most 5 minutes past its block (`web/lib/cre.ts`). To check a report yourself:
+
+```bash
+cast tx <report tx hash> from --rpc-url https://testnet-rpc.monad.xyz   # expect 0x0228…Bb8D
+```
+
 ## Monad under load
 
 On Oct 13 2026, 96 fresh tabs (ids 26 to 121) were settled every second for five seconds from 16 sender keys: 480 transactions, all landed (461 succeeded; 19 ran out of a deliberately tight shared gas limit) in 4.67 s, 102.8 a second, up to 96 in one block (70,681,941 and 70,681,944), send to block median 0.92 s and 90th percentile 1.56 s. A single key sending 48 consecutive nonces at once landed all 48 in block 70,681,999; one key sending one at a time and waiting for each receipt managed 1.1 a second. Average block time over the 10,000 blocks to 70,682,181: 0.305 s.
@@ -144,7 +150,7 @@ Samples: [first of the burst](https://testnet.monadvision.com/tx/0x17b4822eb39ab
 
 ```bash
 cd contracts
-forge test                                                    # 53 tests: units, edges, adversary, a 1,000-run fuzz, stateful invariants (the fork rehearsal is skipped off-fork)
+forge test                                                    # 52 tests pass: units, edges, adversary, a 1,000-run fuzz, stateful invariants (+1 fork rehearsal, skipped off-fork)
 forge test --match-contract Fork --fork-url monad_testnet     # Agora AUSD (faucet, permit, transferWithAuthorization) on a Monad fork
 ```
 
@@ -221,7 +227,7 @@ node scripts/e2e-keys.cjs <baseUrl>
 | "Invite links rebuilt from your passkey and the chain" | `nextInviteKey`, `rebuildInviteKey` in `web/lib/keys.ts`; `web/components/RebuildInvite.tsx` |
 | "Show a verifier only the details you pick" | `web/lib/disclose.ts` (token format in its header), `web/components/Disclosure.tsx`, `/proof/<address>?request=1` |
 | "Passkeys work only on Segundo's own address" | `relyingParty` in `web/lib/mera.ts` (`NEXT_PUBLIC_RP_ID`, default `segundo.world`) |
-| "Payouts by a Chainlink CRE workflow, rates agreed by the DON" | `cre/segundo-keeper/workflow.ts`, `cre/contracts/src/SegundoKeeper.sol`, [cre/SIMULATION.md](cre/SIMULATION.md) |
+| "Payouts and rates from a Chainlink CRE workflow" (run with `cre workflow simulate --broadcast` every 2 hours; not on a live DON) | `cre/segundo-keeper/workflow.ts`, `cre/contracts/src/SegundoKeeper.sol`, `scripts/cre-loop.sh`, the trust filter in `web/lib/cre.ts`, [cre/SIMULATION.md](cre/SIMULATION.md) |
 | "Monad, measured" | `scripts/bench/*.mjs`, `web/public/bench.json`, `web/app/network/page.tsx` |
 | "A pool of relayer keys" | `web/lib/pool.ts` (`pool`, `laneOf`, `richest`), `relayerFor` and `sendAndWait` in `web/lib/server.ts` |
 | "Your passkey is your account" | `web/lib/mera.ts`: PRF output → BIP-39 entropy → key at `m/44'/60'/0'/0/0` → Mera signing session; `web/lib/wallet.tsx` locks it after 15 min idle or 5 min in the background |
@@ -230,3 +236,16 @@ node scripts/e2e-keys.cjs <baseUrl>
 | "Payouts every few seconds while you watch" | `web/app/tab/[id]/page.tsx` calls `/api/settle` every 6 s for the first two minutes a page is open, then every 20 s, then once a minute; it also settles once when a clock stops |
 | Live numbers on the landing page | `web/app/api/live/route.ts` reads every tab's state from the contract |
 | Pay stub from chain | `web/lib/hooks.ts` `useHistory` walks `Activity(id, prevBlock)` one exact block at a time |
+
+## Agora Instant Settlement
+
+Agora's bounty asks teams to mock any real movement of funds with its Instant Settlement contract on Monad testnet. On testnet, the cash-out's local-currency payout is mocked that way. After a freelancer's cash-out lands at the demo partner wallet `0x0921…77e6`, the partner swaps that AUSD for Agora's test token CTK. The swap goes through Agora's AUSD/CTK Instant Settlement pair [`0x1Aa8958Aa34cEC8096EF4381cb335effe977b0ae`](https://testnet.monadvision.com/address/0x1Aa8958Aa34cEC8096EF4381cb335effe977b0ae) (factory `0x8468587Af422ad440F58a57E955eCA6A970b5375`; token0 is CTK, token1 is the same AUSD Segundo pays in). The swap runs at the pair's fixed price of 1 AUSD to 1 CTK, and each cash-out is capped at 100 AUSD. On mainnet, a licensed partner pays out in local money instead. The code is in `web/lib/settlement.ts` and `web/app/api/cashout/route.ts`, and the receipt line is `SettlementLine` in `web/app/cashout/page.tsx`. The one-time setup and the manual swap use `scripts/agora-settle.mjs`.
+
+| Step | Transaction | What it shows |
+|---|---|---|
+| Whitelist the partner | [`0xfa4325fa…`](https://testnet.monadvision.com/tx/0xfa4325fa21904fb03f8b16efd423897970e8f3a51e4383a738a45daec93fee53), block 70,742,905 | `Whitelister(0x7c10F56d6f04a51376393a1C3670e966863F6BD5).setApprovedSwapper(0x0921…77e6)`. The partner now holds the pair's `APPROVED_SWAPPER` role (`hasRole("APPROVED_SWAPPER", partner)` returns true). |
+| Allowance | [`0x445524fa…`](https://testnet.monadvision.com/tx/0x445524fa7cbf728ad10e551ae49694a5785083827778465601ce74a0b29b4149), block 70,742,918 | `AUSD.approve(pair, max)` from the partner. This happens once. |
+| Test swap, 1 AUSD | [`0xf5ab4e39…`](https://testnet.monadvision.com/tx/0xf5ab4e398b1320123b05c4e1797683bcb1de4544a2e604392d2170ec461353eb), block 70,742,951 | `swapExactTokensForTokens(1000000, 1e18, [AUSD, CTK], partner, deadline)`: 1 AUSD goes from the partner into the pair, and 1 CTK comes back. |
+| A cash-out through the app ($1.50) | Transfer [`0x42b38185…`](https://testnet.monadvision.com/tx/0x42b38185411d6fcc960ae2d556b1e6b766d1581d842e310a2155ab53185f8924), block 70,750,454. Settlement [`0x9b4ba904…`](https://testnet.monadvision.com/tx/0x9b4ba904b09c9772dd314df841d9357b4e9d1741dec398d7cc4aaeee247a04ee), block 70,750,631 | Step one: a practice wallet signs an EIP-3009 transfer of 1.50 AUSD to the partner, and the relayer submits it. Step two: the server swaps those 1.50 AUSD for 1.5 CTK through the pair. The /cashout receipt links both transactions. |
+
+To check it yourself, read `hasRole("APPROVED_SWAPPER", 0x092178787c772cbF67c2560B38D9F4f3454677e6)` and `getAmountsOut(1000000, [AUSD, CTK])` on the pair. You can also run `node scripts/agora-settle.mjs status` from the repository root to see the partner's MON, AUSD and CTK, its role, and the pair's reserves.

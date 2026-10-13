@@ -404,7 +404,7 @@
   display: block;
 }
 .loopNo {
-  font-family: var(--font-archivo), sans-serif;
+  font-family: "Segundo Dollar", var(--font-archivo), sans-serif;
   font-variation-settings: "wdth" 125;
   font-weight: 600;
   font-size: 17px;
@@ -445,4 +445,21 @@
     max-width: 240px;
     justify-self: center;
   }
+}
+
+/* Calculator: batched or one payout per transaction. */
+.calcToggle {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.calcToggle :global(.btn)[aria-pressed="true"] {
+  border-color: var(--serial);
+  color: var(--serial);
+  box-shadow: inset 0 0 0 1px var(--serial);
+}
+.calcToggle .hint {
+  flex-basis: 100%;
 }

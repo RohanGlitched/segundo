@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Footer } from "@/components/Footer";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
@@ -6,5 +7,10 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 }
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  return children;
+  return (
+    <>
+      {children}
+      <Footer />
+    </>
+  );
 }

@@ -19,12 +19,12 @@
   }
 }
 .lab {
-  font-family: var(--font-archivo), sans-serif;
+  font-family: "Segundo Dollar", var(--font-archivo), sans-serif;
   font-size: 13px;
   fill: var(--ink-soft);
 }
 .val {
-  font-family: var(--font-archivo), sans-serif;
+  font-family: "Segundo Dollar", var(--font-archivo), sans-serif;
   font-size: 14px;
   font-weight: 650;
   fill: var(--ink);

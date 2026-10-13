@@ -1,4 +1,15 @@
 /* Till: security paper, intaglio ink, serial red. Plan in DESIGN.md. */
+
+/* Archivo's wide dollar sign loses its stroke at small sizes and reads as an "s" ($4.00 as s4.00, R$ as Rs).
+   This face holds only the "$", from Space Grotesk (OFL), and sits in front of Archivo in every stack. */
+@font-face {
+  font-family: "Segundo Dollar";
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url("/fonts/dollar.woff2") format("woff2");
+  unicode-range: U+24;
+}
 :root {
   --paper: #edf1ec;
   --sheet: #f7f9f6;
@@ -58,7 +69,7 @@ body {
   margin: 0;
   background: var(--paper);
   color: var(--ink);
-  font-family: var(--font-archivo), system-ui, sans-serif;
+  font-family: "Segundo Dollar", var(--font-archivo), system-ui, sans-serif;
   font-size: 16px;
   line-height: 1.55;
   font-variant-numeric: tabular-nums;
@@ -130,7 +141,7 @@ a {
   border: 1.5px solid var(--ink);
   background: transparent;
   color: var(--ink);
-  font: 600 15.5px/1 var(--font-archivo), sans-serif;
+  font: 600 15.5px/1 "Segundo Dollar", var(--font-archivo), sans-serif;
   text-decoration: none;
   cursor: pointer;
   transition: background 0.15s, color 0.15s, transform 0.06s;
@@ -190,7 +201,7 @@ a {
   background: var(--sheet);
   color: var(--ink);
   padding: 0 14px;
-  font: 500 16px/1 var(--font-archivo), sans-serif;
+  font: 500 16px/1 "Segundo Dollar", var(--font-archivo), sans-serif;
 }
 .input:focus {
   border-color: var(--intaglio);

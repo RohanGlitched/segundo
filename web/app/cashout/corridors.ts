@@ -6,6 +6,13 @@ import type { Address } from "viem";
  */
 export const DEMO_PARTNER: Address = "0x092178787c772cbF67c2560B38D9F4f3454677e6";
 
+/**
+ * Agora's AUSD/CTK Instant Settlement pair on Monad testnet (factory 0x8468587Af422ad440F58a57E955eCA6A970b5375).
+ * After a cash-out lands, the demo partner swaps the AUSD it received for CTK here (lib/settlement.ts), mocking the
+ * local-currency payout a licensed partner makes on mainnet.
+ */
+export const AGORA_PAIR: Address = "0x1Aa8958Aa34cEC8096EF4381cb335effe977b0ae";
+
 export type Src = { name: string; url: string };
 
 export const SOURCES = {

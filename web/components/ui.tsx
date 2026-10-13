@@ -130,10 +130,10 @@ export function SignInChoices({ compact, onDone }: { compact?: boolean; onDone?:
           <p className={styles.or}>
             <span>or</span>
           </p>
-          <div className={styles.signinActions}>
+          <div className={styles.alt}>
             {wallet.privyEnabled && (
               <button
-                className="btn quiet"
+                className={`btn quiet ${styles.full}`}
                 onClick={() => {
                   wallet.signIn();
                   onDone?.();
@@ -143,15 +143,17 @@ export function SignInChoices({ compact, onDone }: { compact?: boolean; onDone?:
                 Continue with email
               </button>
             )}
+            {/* The no-sign-up way in, as a real button: a judge or a curious client can try the whole flow in one tap. */}
             <button
-              className={wallet.privyEnabled ? styles.textBtn : "btn quiet"}
+              className={`btn ${styles.full} ${styles.practice}`}
               onClick={() => {
                 wallet.usePractice();
                 onDone?.();
               }}
               disabled={off}
             >
-              Use a practice wallet instead
+              <span className={styles.practiceMain}>Try it without signing up</span>
+              <span className={styles.practiceSub}>Use a practice wallet instead: 25 free test AUSD, in this browser only</span>
             </button>
           </div>
         </>

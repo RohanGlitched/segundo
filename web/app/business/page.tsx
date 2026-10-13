@@ -6,6 +6,7 @@ import { UnderLoad } from "@/components/home/UnderLoad";
 import { Calculator } from "@/components/business/Calculator";
 import { LiveRevenue } from "@/components/business/LiveRevenue";
 import { Loop } from "@/components/business/Loop";
+import { AT_DEFAULTS, BATCH_EXTRA, EXAMPLE, GAS, POLICY, PRICES, breakEvenEvery, feePerMonth } from "@/components/business/economics";
 import { TREASURY, explorerAddress } from "@/lib/chain";
 import { DEMO_FREELANCERS } from "@/lib/demo";
 import styles from "./business.module.css";
@@ -49,6 +50,8 @@ const SRC = {
   },
   monadGas: { name: "Monad docs, Gas pricing", url: "https://docs.monad.xyz/developer-essentials/gas-pricing" },
   monPrice: { name: "The Block, Monad (MON) price", url: "https://www.theblock.co/price/380273/monad-mon-usd" },
+  vda: { name: "Income Tax Department of India, Taxation of virtual digital assets", url: "https://incometaxindia.gov.in/w/taxation-of-virtual-digital-asset-vda-" },
+  genius: { name: "Congress.gov, S.1582, the GENIUS Act (119th Congress)", url: "https://www.congress.gov/bill/119th-congress/senate-bill/1582" },
 } satisfies Record<string, Src>;
 
 type Key = keyof typeof SRC;
@@ -74,8 +77,48 @@ const COSTS: { who: string; what: string; cost: ReactNode; src: Key[]; us?: bool
   { who: "Remote", what: "Contractor management, paid by the company", cost: "From $29 per contractor a month", src: ["remote"] },
   { who: "Payoneer", what: "Receiving from a client, then converting to a local bank", cost: "Up to 3.99% + $0.49 by card, 1% by US bank debit; 1.2% to 4% to convert and withdraw", src: ["payoneer"] },
   { who: "Wise", what: "Receiving a US dollar wire, then converting", cost: "$6.11 per wire received; conversion from 0.23%", src: ["wise", "wiseConvert"] },
-  { who: "Sending money abroad", what: "Global average cost of sending $200", cost: "6.36% (Q3 2025)", src: ["rpw"] },
-  { who: "Segundo", what: "Paid by the client, on what they spend", cost: "1%. Unspent budget and its fee come back. The freelancer pays nothing, and gas is paid for them", src: [], us: true },
+  {
+    who: "Sending money abroad",
+    what: "Global average cost of sending $200, a consumer remittance; the business services above charge less",
+    cost: "6.36% (Q3 2025)",
+    src: ["rpw"],
+  },
+  { who: "Segundo", what: "Paid by the client, on what they spend", cost: "1%. Unspent budget and its fee come back. The freelancer pays nothing to be paid, and gas is paid for them", src: [], us: true },
+];
+
+/** Moved from the homepage: the same week of work, three ways. */
+const SIDE: { what: string; wire: ReactNode; market: string; till: string }[] = [
+  {
+    what: "When the money arrives",
+    wire: "Days after the invoice is finally paid",
+    market: "About 10 days after the work week (Upwork hourly)",
+    till: "In your wallet while you work",
+  },
+  {
+    what: "What it costs to receive",
+    wire: (
+      <>
+        6.36% on average to send $200 across borders, the World Bank&apos;s consumer figure (Q3 2025)
+        <Ref k="rpw" />. Business services such as Wise and Payoneer charge from under 1% to about 4%
+        <Ref k="wise" />
+        <Ref k="payoneer" />
+      </>
+    ),
+    market: "A platform fee on every payment, then a withdrawal fee",
+    till: "Nothing for freelancers to be paid. Clients pay 1% of what they spend. Network fees are paid for you.",
+  },
+  {
+    what: "Who holds the money meanwhile",
+    wire: "The banks in between",
+    market: "The platform, through its security period",
+    till: "A public contract that can only pay you or refund the client",
+  },
+  {
+    what: "If the client disappears",
+    wire: "You chase an unpaid invoice",
+    market: "You open a dispute",
+    till: "Every second you worked is already paid out or locked to you",
+  },
 ];
 
 const LINES: { title: string; status: "live" | "next" | "later"; label: string; body: ReactNode }[] = [
@@ -90,8 +133,12 @@ const LINES: { title: string; status: "live" | "next" | "later"; label: string; 
           from the treasury, so the fee comes to 1% of what was actually paid to the freelancer. Fund $1,000, use $900: the fee is $9.
         </p>
         <p>
-          Freelancers pay nothing, and Segundo pays the gas for every action out of the fee; the calculator below shows what that costs and where it
-          breaks even. This is the line we can show working today: the panel above counts it as it lands.
+          Freelancers pay nothing to be paid, and Segundo pays the gas for every action out of the fee; the calculator below shows what that costs and
+          where it breaks even. At {EXAMPLE.hours} hours a week and ${EXAMPLE.rate} an hour, 1% is about <b>${Math.round(feePerMonth())} a month per freelancer</b>,
+          against $49 on Deel
+          <Ref k="deel" /> and from $29 on Remote
+          <Ref k="remote" />, and it is only charged when work happens. This is the line we can show working today: the panel above counts it as it
+          lands.
         </p>
       </>
     ),
@@ -123,7 +170,8 @@ const LINES: { title: string; status: "live" | "next" | "later"; label: string; 
       <>
         <p>
           Freelancers want pesos, naira, rupees, shillings and reais in a bank account or a mobile wallet, not a token. Licensed local partners do the last
-          step; Segundo earns a share of the spread on each cash-out, shown before the freelancer confirms. It isn&apos;t live yet: today pay lands in
+          step. Turning dollars into pesos costs the partner&apos;s spread, shown before the freelancer confirms; Segundo&apos;s share comes out of that
+          spread, never on top. It isn&apos;t live yet: today pay lands in
           the freelancer&apos;s wallet as AUSD and stays there until they move it. <Link href="/cashout">See how cash-out will work</Link>, with a simulated
           partner on testnet.
         </p>
@@ -205,7 +253,7 @@ const ALTS: { name: string; examples: string; forWho: string; when: string; cost
     name: "Crypto streaming",
     examples: "Sablier, Superfluid, LlamaPay",
     forWho: "Crypto-native teams paying salaries and vesting",
-    when: "Continuously by calendar time, whether anyone is working or not",
+    when: "By calendar time: the payer starts, changes, pauses or stops the stream. No clock-in, and no cap per hour of work",
     cost: (
       <>
         Gas in the chain&apos;s token, a wallet and a seed phrase; Sablier&apos;s app adds $0.99 per withdrawal, LlamaPay streams are free
@@ -220,8 +268,8 @@ const ALTS: { name: string; examples: string; forWho: string; when: string; cost
     name: "Segundo",
     examples: "",
     forWho: "Clients paying freelancers abroad by the hour",
-    when: "Earned every second on the clock; paid out every few seconds while the tab is on screen, and in full at close. Anyone can trigger a payout",
-    cost: "1% of what the client spends. Nothing for the freelancer; gas is covered",
+    when: `Earned every second on the clock; paid out on a schedule (on mainnet every ${POLICY.onScreenS} s on screen, every ${POLICY.offScreenS / 60} minutes otherwise), and in full at close. Anyone can trigger a payout`,
+    cost: "1% of what the client spends. Nothing for the freelancer to be paid; gas is covered",
     holds: "A public contract that can only pay the freelancer for time worked or refund the client",
     gone: "Every second worked is paid out or locked to the freelancer; the rest of the budget can only go back to the client",
     us: true,
@@ -229,7 +277,10 @@ const ALTS: { name: string; examples: string; forWho: string; when: string; cost
 ];
 
 const DIFFS = [
-  { t: "Paid while you work", d: "Not ten days after the week. Pay lands in the wallet every few seconds while the tab is on screen, and anyone can trigger a payout." },
+  {
+    t: "Paid while you work",
+    d: `Not ten days after the week. Earned every second, and paid out every few seconds while the tab is on screen (every ${POLICY.onScreenS} s, batched, on mainnet). Anyone can trigger a payout.`,
+  },
   { t: "The budget is locked before you start", d: "The money is in the contract before the first second, so there is no invoice to chase." },
   { t: "Clients pay only for time worked", d: "The clock runs only while the freelancer is on it, and the client can pause it at once." },
   { t: "No wallet app, no gas, no seed phrase", d: "A passkey or an email. Segundo creates the wallet and pays the gas." },
@@ -315,6 +366,16 @@ const ROAD: { when: string; status: "live" | "next" | "later"; label: string; it
       <>
         <b>A yield-share agreement</b> with Agora for budgets waiting in tabs
       </>,
+      <>
+        <b>Batched payouts</b>: every tab on screen paid in one settleMany every {POLICY.onScreenS} seconds, with the relayer&apos;s gas capped at{" "}
+        {POLICY.gasCap * 100}% of a tab&apos;s fee
+      </>,
+      <>
+        <b>An on-ramp partner</b> so a client can fund a tab from a euro or dollar bank account
+      </>,
+      <>
+        <b>Client invoices</b>: each tab&apos;s statement, built from the chain, exported as the invoice a client files
+      </>,
     ],
   },
   {
@@ -325,9 +386,30 @@ const ROAD: { when: string; status: "live" | "next" | "later"; label: string; it
       <>
         <b>Advances</b> against verified on-chain income, with a lending partner
       </>,
+      <>
+        <b>A vault per tab</b>: each budget in its own contract, so payouts to different freelancers touch different storage and can run in
+        parallel on Monad
+      </>,
     ],
   },
 ];
+
+/** The page's sections, in order: the contents row under the title and the section navigator both read these. */
+const NAV: { id: string; label: string }[] = [
+  { id: "live", label: "Revenue" },
+  { id: "today", label: "Today's cost" },
+  { id: "lines", label: "Revenue lines" },
+  { id: "units", label: "Unit economics" },
+  { id: "market", label: "Market" },
+  { id: "competition", label: "Competition" },
+  { id: "gtm", label: "Go to market" },
+  { id: "money-in", label: "Money in" },
+  { id: "compliance", label: "Compliance" },
+  { id: "road", label: "Milestones" },
+  { id: "founder", label: "Team" },
+  { id: "sources", label: "Sources" },
+];
+const nav = (id: string) => NAV.find((x) => x.id === id)!.label;
 
 function Status({ status, children }: { status: "live" | "next" | "later"; children: ReactNode }) {
   return (
@@ -342,12 +424,26 @@ export default function Business() {
     <>
       <main>
         {/* ------------------------------------------------------------ the model in one line */}
-        <section className={`wrap ${styles.top}`}>
+        <section id="overview" className={`wrap ${styles.top}`} data-nav="Overview">
           <div className={styles.topText}>
             <p className={styles.kicker}>Business model</p>
             <h1 className={styles.h1}>How Segundo makes money</h1>
+            <nav className={styles.contents} aria-label="On this page">
+              <ol>
+                {NAV.map((x, i) => (
+                  <li key={x.id}>
+                    <a href={`#${x.id}`}>
+                      <span className="serial" aria-hidden>
+                        {String(i + 1).padStart(2, "0")}
+                      </span>
+                      {x.label}
+                    </a>
+                  </li>
+                ))}
+              </ol>
+            </nav>
             <p className={styles.model}>
-              Clients pay <b>1%</b> of what they spend. Freelancers pay <b>nothing</b>.
+              Clients pay <b>1%</b> of what they spend. Freelancers pay <b>nothing</b> to be paid.
             </p>
             <p className={styles.lede}>
               Today a freelancer abroad gives up a cut of every hour to a marketplace, waits ten days for it, and pays again to bring it home. Segundo charges
@@ -394,7 +490,7 @@ export default function Business() {
                 <dd className="denom">$909.00</dd>
               </div>
               <div>
-                <dt>The freelancer pays</dt>
+                <dt>The freelancer pays to be paid</dt>
                 <dd className="denom">$0.00</dd>
               </div>
             </dl>
@@ -409,7 +505,7 @@ export default function Business() {
         </section>
 
         {/* ------------------------------------------------------------ live revenue */}
-        <section id="live" className={`wrap ${styles.section} ${styles.tight}`} aria-labelledby="live-h">
+        <section id="live" className={`wrap ${styles.section} ${styles.tight}`} aria-labelledby="live-h" data-nav={nav("live")}>
           <div className={styles.sectionHead}>
             <h2 id="live-h" className={styles.h2}>
               Revenue, live from the chain
@@ -463,6 +559,10 @@ export default function Business() {
               <Link href="/network">load test</Link> did exactly that, so those tabs owe no fee. Segundo&apos;s 1% pays for what sits around the contract,
               the way a front end does: no gas for either side, passkey sign-up, and cash-out to local money as it arrives.
             </p>
+            <p>
+              Anyone could fork the front end and charge less. What a fork doesn&apos;t get is what grows around use: the invite loop that brings each
+              client&apos;s freelancers in, the contracts with cash-out partners, and the income history that advances are priced on.
+            </p>
           </div>
         </section>
 
@@ -471,9 +571,9 @@ export default function Business() {
         </div>
 
         {/* ------------------------------------------------------------ what it costs today */}
-        <section className={`wrap ${styles.section} ${styles.tight}`} aria-labelledby="today">
+        <section id="today" className={`wrap ${styles.section} ${styles.tight}`} aria-labelledby="today-h" data-nav={nav("today")}>
           <div className={styles.sectionHead}>
-            <h2 id="today" className={styles.h2}>
+            <h2 id="today-h" className={styles.h2}>
               What hourly work across borders costs today
             </h2>
             <p className={styles.sub}>
@@ -516,15 +616,58 @@ export default function Business() {
               </div>
             ))}
           </div>
+          <p className={styles.marketNote}>
+            On price alone, a business paying through Wise or Payoneer already pays far less than the 6.36% world average, which is for a $200 consumer
+            transfer. Once a cash-out partner&apos;s spread is added, Segundo costs a freelancer about what those services do. The difference is timing
+            and the guarantee: pay arrives while the work happens, from a budget locked before the first second. On price, Segundo wins against
+            marketplaces (up to 15% plus up to 7.99%) and payroll seats ($29 to $49 a month).
+          </p>
+
+          <h3 className={styles.h3}>Side by side: a wire, a marketplace and Segundo</h3>
+          <div className={styles.side} role="table" aria-label="Bank wire, marketplace and Segundo compared">
+            <div className={`${styles.sideRow} ${styles.sideHead}`} role="row">
+              <span role="columnheader" />
+              <span role="columnheader">Bank wire</span>
+              <span role="columnheader">Freelance marketplace</span>
+              <span role="columnheader" className={styles.sideUs}>
+                Segundo
+              </span>
+            </div>
+            {SIDE.map((c) => (
+              <div className={styles.sideRow} role="row" key={c.what}>
+                <span role="rowheader" className={styles.sideWhat}>
+                  {c.what}
+                </span>
+                <span role="cell" data-label="Bank wire">
+                  {c.wire}
+                </span>
+                <span role="cell" data-label="Marketplace">
+                  {c.market}
+                </span>
+                <span role="cell" data-label="Segundo" className={styles.sideUs}>
+                  {c.till}
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className={styles.source}>
+            Marketplace release times from Upwork
+            <Ref k="upworkHourly" />; the wire figure from the World Bank
+            <Ref k="rpw" />.
+          </p>
         </section>
 
         {/* ------------------------------------------------------------ revenue lines */}
-        <section className={`wrap ${styles.section}`} aria-labelledby="lines">
+        <section id="lines" className={`wrap ${styles.section}`} aria-labelledby="lines-h" data-nav={nav("lines")}>
           <div className={styles.sectionHead}>
-            <h2 id="lines" className={styles.h2}>
+            <h2 id="lines-h" className={styles.h2}>
               Four ways Segundo earns, in the order they arrive
             </h2>
-            <p className={styles.sub}>One is live. The other three grow out of the money that already passes through a tab, and none of them charge the freelancer for being paid.</p>
+            <p className={styles.sub}>
+              One is live. The other three grow out of the money that already passes through a tab. Freelancers pay nothing to be paid; turning dollars
+              into local money costs the cash-out partner&apos;s spread, shown before they confirm, and Segundo&apos;s share comes out of that spread,
+              never on top.
+            </p>
           </div>
           <ol className={styles.lines}>
             {LINES.map((l, i) => (
@@ -543,20 +686,72 @@ export default function Business() {
         </section>
 
         {/* ------------------------------------------------------------ unit economics */}
-        <section className={`wrap ${styles.section}`} aria-labelledby="units">
+        <section id="units" className={`wrap ${styles.section}`} aria-labelledby="units-h" data-nav={nav("units")}>
           <div className={styles.sectionHead}>
-            <h2 id="units" className={styles.h2}>
+            <h2 id="units-h" className={styles.h2}>
               Unit economics
             </h2>
             <p className={styles.sub}>
-              Change any figure. The fee is what Segundo charges today, and gas is what the relayer actually spends, measured from its receipts. The yield
-              share and the MON price, marked in amber, are assumptions until there is an agreement with Agora and a mainnet to price gas on.
+              At {EXAMPLE.hours} hours a week and ${EXAMPLE.rate} an hour, 1% is about ${Math.round(feePerMonth())} a month per freelancer, against $49 on
+              Deel and from $29 on Remote, charged only when work happens. What it costs Segundo is gas, and that depends on how often pay is paid out.
             </p>
           </div>
+          <div className={styles.cadence}>
+            <div className={styles.cadenceLead}>
+              <h3>Earned every second. Paid out on a schedule.</h3>
+              <p>
+                The contract works out what a freelancer has earned from timestamps, so nothing is written while the clock runs and the earning is exact
+                to the second. A <b>payout</b> is a separate transaction that moves what has been earned into their wallet, and each one costs the relayer
+                gas. How often to send one is a policy, and the policy has to fit inside the fee.
+              </p>
+            </div>
+            <dl className={styles.cadenceList}>
+              <div>
+                <dt>One payout, sent alone</dt>
+                <dd>
+                  <span className="denom">{GAS.settle.toLocaleString("en-US")}</span> gas, about ${(GAS.settle * PRICES.gasGwei * 1e-9 * PRICES.monPrice).toFixed(5)}{" "}
+                  at {PRICES.gasGwei} gwei and ${PRICES.monPrice} a MON. At ${EXAMPLE.rate} an hour the 1% fee pays for one every{" "}
+                  <b>{breakEvenEvery(GAS.settle).toFixed(1)} s</b>.
+                </dd>
+              </div>
+              <div>
+                <dt>Each extra tab in a batch</dt>
+                <dd>
+                  About <span className="denom">{BATCH_EXTRA.toLocaleString("en-US")}</span> gas in one settleMany, about $
+                  {(BATCH_EXTRA * PRICES.gasGwei * 1e-9 * PRICES.monPrice).toFixed(5)}. Batched, the fee pays for a payout every{" "}
+                  <b>{breakEvenEvery(BATCH_EXTRA).toFixed(1)} s</b> at ${EXAMPLE.rate} an hour, and every{" "}
+                  <b>{breakEvenEvery(BATCH_EXTRA, EXAMPLE.rate * 2).toFixed(1)} s</b> at ${EXAMPLE.rate * 2}.
+                </dd>
+              </div>
+              <div>
+                <dt>On testnet today</dt>
+                <dd>
+                  A tab on screen asks for a payout every few seconds, each its own settle, at most one per tab every six blocks and only once half a cent
+                  is owed. The keeper pays every other running tab every {POLICY.offScreenS / 60} minutes in one settleMany. Sent alone every few seconds,
+                  payouts cost more than a $20 tab&apos;s fee while it is on screen: fine for a demo on test MON, not for mainnet.
+                </dd>
+              </div>
+              <div className={styles.cadencePolicy}>
+                <dt>The policy for mainnet</dt>
+                <dd>
+                  A tab on screen is paid every <b>{POLICY.onScreenS} seconds</b>, batched with every other open tab into one settleMany. Off screen, the
+                  keeper pays every <b>{POLICY.offScreenS / 60} minutes</b>. The relayer slows a tab&apos;s payouts rather than spend more than{" "}
+                  <b>{POLICY.gasCap * 100}% of its fee</b> on gas. With the calculator&apos;s defaults below, gas comes to{" "}
+                  <b>{(AT_DEFAULTS.gasShare * 100).toFixed(0)}% of the fee</b>, about ${AT_DEFAULTS.gasTabHour.toFixed(3)} a tab-hour against $
+                  {AT_DEFAULTS.feeTabHour.toFixed(2)}, and the fee covers gas until MON reaches ${AT_DEFAULTS.breakEvenMon.toFixed(2)}.
+                </dd>
+              </div>
+            </dl>
+          </div>
+          <p className={styles.sub}>
+            Change any figure. The fee is what Segundo charges today, and gas is what the relayer actually spends, measured from its receipts. The yield
+            share, the MON price and the share of time a tab is on screen, marked in amber, are assumptions until there is an agreement with Agora and a
+            mainnet to price gas on.
+          </p>
           <Calculator marketFee={0.1} marketLabel="On a marketplace taking 10% (Upwork's range is 0–15%)" wireCost={0.0636} />
           <p className={styles.source}>
             Marketplace range from Upwork&apos;s published freelancer fees
-            <Ref k="upworkFee" />; wire cost is the World Bank&apos;s global average for Q3 2025
+            <Ref k="upworkFee" />; the 6.36% is the World Bank&apos;s global average for sending $200 in Q3 2025
             <Ref k="rpw" />. Monad&apos;s minimum base fee
             <Ref k="monadGas" />; MON price reference
             <Ref k="monPrice" />.
@@ -568,9 +763,9 @@ export default function Business() {
         </div>
 
         {/* ------------------------------------------------------------ market */}
-        <section className={`wrap ${styles.section} ${styles.tight}`} aria-labelledby="market">
+        <section id="market" className={`wrap ${styles.section} ${styles.tight}`} aria-labelledby="market-h" data-nav={nav("market")}>
           <div className={styles.sectionHead}>
-            <h2 id="market" className={styles.h2}>
+            <h2 id="market-h" className={styles.h2}>
               The market
             </h2>
             <p className={styles.sub}>Hundreds of millions of people work online, and the money they earn crosses a border to reach them.</p>
@@ -614,7 +809,7 @@ export default function Business() {
               <span role="rowheader">People already paid across borders every month</span>
               <span role="cell" className="denom">536,000</span>
               <span role="cell" className={styles.samSrc}>
-                Payoneer&apos;s active customers at the end of 2025, each averaging over $500 a month
+                Payoneer&apos;s active customers at the end of 2025, each moving over $500 a month
                 <Ref k="payoneer25" />
               </span>
             </div>
@@ -635,7 +830,7 @@ export default function Business() {
               <span role="rowheader">Their pay in a year, and 1% of it</span>
               <span role="cell" className="denom">$3.2–10.5B</span>
               <span role="cell" className={styles.samSrc}>
-                536,000 × $6,000 up to 536,000 × $19,500. At 1%: <b>$32–105 million a year</b>
+                536,000 × $6,000 up to 536,000 × $19,500 of pay a year. At 1%: <b>$32–105 million a year in revenue</b>
               </span>
             </div>
           </div>
@@ -648,9 +843,9 @@ export default function Business() {
         </section>
 
         {/* ------------------------------------------------------------ competition */}
-        <section className={`wrap ${styles.section}`} aria-labelledby="competition">
+        <section id="competition" className={`wrap ${styles.section}`} aria-labelledby="competition-h" data-nav={nav("competition")}>
           <div className={styles.sectionHead}>
-            <h2 id="competition" className={styles.h2}>
+            <h2 id="competition-h" className={styles.h2}>
               The competition, honestly
             </h2>
             <p className={styles.sub}>
@@ -713,9 +908,9 @@ export default function Business() {
         </div>
 
         {/* ------------------------------------------------------------ go to market */}
-        <section className={`wrap ${styles.section} ${styles.tight}`} aria-labelledby="gtm">
+        <section id="gtm" className={`wrap ${styles.section} ${styles.tight}`} aria-labelledby="gtm-h" data-nav={nav("gtm")}>
           <div className={styles.sectionHead}>
-            <h2 id="gtm" className={styles.h2}>
+            <h2 id="gtm-h" className={styles.h2}>
               Go to market
             </h2>
             <p className={styles.sub}>
@@ -756,19 +951,135 @@ export default function Business() {
             <div>
               <h3>Why now</h3>
               <p>
-                Digital dollars are becoming everyday money, and AUSD&apos;s issuer shares the yield on its reserves with partners. Monad made a block every
-                0.305 seconds on average over the last 10,000 we measured, and our payouts landed 0.6 to 2.6 seconds after they were sent, so pay arrives
-                while you watch (see <Link href="/network">Monad under load</Link>). Passkeys make a wallet as easy as unlocking a phone.
+                The US now has a federal law for dollar stablecoins, the GENIUS Act
+                <Ref k="genius" />, so a business can hold and pay in one with clearer rules, and AUSD&apos;s issuer shares the yield on its reserves
+                with partners. Upwork&apos;s freelancer fee now varies from 0% to 15% a contract
+                <Ref k="upworkFee" />, so freelancers are watching what they pay. Monad made a block every 0.305 seconds on average over the last
+                10,000 we measured, and our payouts landed 0.6 to 2.6 seconds after they were sent (see <Link href="/network">Monad under load</Link>).
+                Passkeys make a wallet as easy as unlocking a phone.
               </p>
             </div>
           </div>
           <UnderLoad />
         </section>
 
-        {/* ------------------------------------------------------------ milestones */}
-        <section className={`wrap ${styles.section}`} aria-labelledby="road">
+        {/* ------------------------------------------------------------ money in */}
+        <section id="money-in" className={`wrap ${styles.section}`} aria-labelledby="money-in-h" data-nav={nav("money-in")}>
           <div className={styles.sectionHead}>
-            <h2 id="road" className={styles.h2}>
+            <h2 id="money-in-h" className={styles.h2}>
+              Money in: how a client funds a tab
+            </h2>
+            <p className={styles.sub}>
+              A tab is funded in AUSD on Monad. A five-person studio in Berlin has euros in a bank, not AUSD, so the route from a bank account to a tab
+              decides whether there is a customer at all. Here is what exists and what doesn&apos;t.
+            </p>
+          </div>
+          <ol className={styles.routes}>
+            <li>
+              <Status status="live">Live on testnet</Status>
+              <h3>A faucet, for trying it</h3>
+              <p>
+                Every Segundo account can take test AUSD in one tap and fund a tab with it. It isn&apos;t money, and it proves only the flow after the
+                dollars arrive.
+              </p>
+            </li>
+            <li>
+              <Status status="next">Exists on mainnet, not wired in</Status>
+              <h3>Agora, for larger studios</h3>
+              <p>
+                Agora issues AUSD to institutions: a business with an Agora account wires dollars from its bank and receives AUSD, and redeems it the same
+                way
+                <Ref k="agoraHome" />. That suits an agency with a treasury, not a small studio.
+              </p>
+            </li>
+            <li>
+              <Status status="next">Exists on mainnet, not wired in</Status>
+              <h3>Exchanges and apps that support Monad</h3>
+              <p>
+                Anyone can buy AUSD, or buy another dollar stablecoin and swap it, and withdraw it to their Segundo address on Monad. It works, but it
+                asks a client to run an exchange account.
+              </p>
+            </li>
+            <li>
+              <Status status="later">Needs a partner</Status>
+              <h3>Bank or card, inside Segundo</h3>
+              <p>
+                A licensed on-ramp partner turns a SEPA, ACH or card payment into AUSD in the client&apos;s own Segundo account, with one price in euros or
+                dollars shown before they fund. The partner runs the identity checks; the tab contract doesn&apos;t change. No partner is signed yet, so
+                the app doesn&apos;t offer it.
+              </p>
+            </li>
+          </ol>
+          <p className={styles.marketNote}>
+            Every tab also produces a statement from the chain, with each shift, hour and payout. Exported per period, that is the invoice a client files
+            for their books, the one a freelancer used to have to chase.
+          </p>
+        </section>
+
+        {/* ------------------------------------------------------------ compliance */}
+        <section id="compliance" className={`wrap ${styles.section}`} aria-labelledby="compliance-h" data-nav={nav("compliance")}>
+          <div className={styles.sectionHead}>
+            <h2 id="compliance-h" className={styles.h2}>
+              Compliance and risks
+            </h2>
+            <p className={styles.sub}>
+              How we plan to handle the rules around moving money across borders. These are plans and considerations for mainnet, not legal advice, and
+              each one needs review in each market before launch.
+            </p>
+          </div>
+          <div className={styles.risks}>
+            <div>
+              <h3>Segundo doesn&apos;t hold the money</h3>
+              <p>
+                Budgets sit in a contract with no admin key, and fees go to a public treasury. Nobody at Segundo can move what is in a tab: it can only
+                pay the freelancer or go back to the client.
+              </p>
+            </div>
+            <div>
+              <h3>Identity checks at each end, by licensed partners</h3>
+              <p>
+                Money enters through an on-ramp partner and leaves through a cash-out partner, and each runs its own KYC and AML checks under its own
+                licence. Moving money into and out of local currency is the regulated step, and we plan to leave it with those partners rather than
+                become a money transmitter ourselves.
+              </p>
+            </div>
+            <div>
+              <h3>Sanctions screening</h3>
+              <p>
+                Today the relayer submits anything a valid signature asks for. On mainnet it should screen addresses against sanctions lists before it
+                submits, and refuse to sponsor gas for any that match, alongside the partners&apos; own screening.
+              </p>
+            </div>
+            <div>
+              <h3>A payment tool, not an employer</h3>
+              <p>
+                Segundo doesn&apos;t employ anyone or decide how a client classifies a contractor; that stays with the client. What it gives both sides is
+                the record: a statement per tab for the client&apos;s books and a pay history for the freelancer.
+              </p>
+            </div>
+            <div>
+              <h3>India: AUSD is a virtual digital asset</h3>
+              <p>
+                India taxes gains on transferring a virtual digital asset at 30% and deducts 1% tax at source (section 194S) above small yearly
+                thresholds
+                <Ref k="vda" />. A cash-out partner would deduct the 1% and show it before the freelancer confirms; the pay itself is income they
+                declare as usual.
+              </p>
+            </div>
+            <div>
+              <h3>Licensing in each corridor</h3>
+              <p>
+                Each corridor needs a partner licensed there, such as a virtual asset service provider registered with the Bangko Sentral ng Pilipinas
+                for Manila. <Link href="/cashout">The cash-out page</Link> lists what each one needs. No partner is signed yet.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* ------------------------------------------------------------ milestones */}
+        <section id="road" className={`wrap ${styles.section}`} aria-labelledby="road-h" data-nav={nav("road")}>
+          <div className={styles.sectionHead}>
+            <h2 id="road-h" className={styles.h2}>
               Milestones
             </h2>
             <p className={styles.sub}>What exists today, and what has to happen before the first real paycheck.</p>
@@ -791,8 +1102,8 @@ export default function Business() {
         </section>
 
         {/* ------------------------------------------------------------ founder */}
-        <section className={`wrap ${styles.section}`} aria-labelledby="founder">
-          <h2 id="founder" className={styles.h2}>
+        <section id="founder" className={`wrap ${styles.section}`} aria-labelledby="founder-h" data-nav={nav("founder")}>
+          <h2 id="founder-h" className={styles.h2}>
             Who is building it
           </h2>
           <div className={styles.founder}>
@@ -809,13 +1120,14 @@ export default function Business() {
                 .
               </p>
               <p>India is one of the five corridors Segundo starts with.</p>
+              <p>Hiring next: a payments and compliance lead, once the first cash-out corridor is signed.</p>
             </div>
           </div>
         </section>
 
         {/* ------------------------------------------------------------ sources */}
-        <section className={`wrap ${styles.section}`} aria-labelledby="sources">
-          <h2 id="sources" className={styles.h2}>
+        <section id="sources" className={`wrap ${styles.section}`} aria-labelledby="sources-h" data-nav={nav("sources")}>
+          <h2 id="sources-h" className={styles.h2}>
             Sources
           </h2>
           <p className={styles.sub}>
@@ -833,7 +1145,7 @@ export default function Business() {
           </ol>
         </section>
 
-        <section className={`wrap ${styles.closing}`} aria-labelledby="close">
+        <section id="start" className={`wrap ${styles.closing}`} aria-labelledby="close" data-nav="Start">
           <h2 id="close" className={styles.closingH}>
             The client pays 1%. The freelancer keeps every second.
           </h2>

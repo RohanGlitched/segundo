@@ -16,7 +16,7 @@ import { ago, currency, feeFor, formatCents, formatDuration, formatFee, formatMo
 import { relay, settleNow, signFee, signPermit, type Landed } from "@/lib/relay";
 import { DEMO_FREELANCERS } from "@/lib/demo";
 import { earnedAt, isZero, stateOf } from "@/lib/tabs";
-import { useWallet } from "@/lib/wallet";
+import { PROMPT_FREE_LABEL, asksForPasskey, useWallet } from "@/lib/wallet";
 import styles from "./tab.module.css";
 
 /**
@@ -45,7 +45,7 @@ export default function TabPage() {
   const now = useChainNow();
   const { rates } = useLive();
   const act = useAction();
-  const { lines, more } = useHistory(id, view?.tab.lastBlock, 30);
+  const { lines, more, loading: historyLoading } = useHistory(id, view?.tab.lastBlock, 30);
   const [copied, setCopied] = useState(false);
   const [payouts, setPayouts] = useState<(Landed & { amount: number })[]>([]);
   const [topUp, setTopUp] = useState("");
@@ -169,7 +169,9 @@ export default function TabPage() {
       <span className={styles.confirm} role="group" aria-label="Confirm closing the tab">
         <span>
           Close for good?{" "}
-          {iAmPayer
+          {iAmPayer && remaining <= 0n
+            ? `${payee.name} keeps everything they earned. The budget is used up, so nothing comes back.`
+            : iAmPayer
             ? `${payee.name} keeps what they earned and ${formatUsd(toUsd(remaining > 0n ? remaining : 0n))} comes back to you, with Segundo's 1% fee on it.`
             : `You keep what you earned; the rest goes back to ${payer.name}.`}
         </span>
@@ -303,7 +305,7 @@ export default function TabPage() {
                     Top up
                   </button>
                 )}
-                {state !== "closed" && closeButton(`Close and get ${formatUsd(toUsd(remaining > 0n ? remaining : 0n))} back`)}
+                {state !== "closed" && closeButton(remaining > 0n ? `Close and get ${formatUsd(toUsd(remaining))} back` : "Close the tab")}
               </div>
               {state === "closed" && (
                 <p className="soft">
@@ -317,6 +319,8 @@ export default function TabPage() {
                     e.preventDefault();
                     if (topUpProblem) return;
                     act.run(`Topped up ${formatUsd(toUsd(topUpUnits))}`, async (sent) => {
+                      // Over $50 a passkey account confirms again (lib/wallet.tsx): ask now, while the tap is fresh.
+                      if (asksForPasskey(wallet, topUpUnits)) await wallet.confirmWithPasskey(`Adding ${formatUsd(toUsd(topUpUnits))}`);
                       const permit = await signPermit(wallet, topUpUnits);
                       const fee = await signFee(wallet, topUpUnits);
                       const p = relay(wallet, "topUpWithPermit", [view!.id, topUpUnits, permit.deadline, permit.v, permit.r, permit.s], fee);
@@ -337,6 +341,7 @@ export default function TabPage() {
                         ? `Top-up ${formatUsd(toUsd(topUpUnits))} · Segundo fee (1%) ${formatFee(topUpFee)} · You pay ${formatFee(topUpUnits + topUpFee)}. `
                         : ""}
                       Wallet: {balance == null ? "…" : formatUsd(toUsd(balance))}
+                      {wallet.kind === "mera" && `. Over ${PROMPT_FREE_LABEL}, Segundo asks for your passkey again.`}
                     </span>
                   </div>
                   <button className="btn primary" disabled={!!topUpProblem || act.busy}>
@@ -460,7 +465,7 @@ export default function TabPage() {
             {more ? "The most recent stretch of this tab. " : ""}Red is time on the clock, hatched is pay paused, and the line is money that has
             reached the freelancer.
           </p>
-          <TimeCard lines={lines} now={now} earnedUsd={toUsd(earned)} running={state === "working"} partial={more} />
+          <TimeCard lines={lines} now={now} earnedUsd={toUsd(earned)} running={state === "working"} partial={more} loading={historyLoading} since={Number(t.since)} />
         </section>
       )}
 

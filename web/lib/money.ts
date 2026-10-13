@@ -104,13 +104,13 @@ export const fetchFx = (): Promise<FxReply | null> =>
       return null;
     }));
 
-/** "Rate: Chainlink DON consensus posted on Monad, block 70,700,945", or the reference-rate line. */
+/** "Rate: Chainlink CRE workflow, median of three sources, posted on Monad in block 70,700,945", or the reference-rate line. */
 export function rateSourceLine(code: string, fx: FxReply | null): string {
   const s = fx?.sources[code];
   if (s?.source === "chainlink-cre")
     return s.block != null
-      ? `Rate: Chainlink DON consensus posted on Monad, block ${s.block.toLocaleString("en-US")}`
-      : `Rate: Chainlink DON consensus posted on Monad, ${new Date(s.at * 1000).toUTCString().slice(5, 22)} UTC`;
+      ? `Rate: Chainlink CRE workflow, median of three sources, posted on Monad in block ${s.block.toLocaleString("en-US")}`
+      : `Rate: Chainlink CRE workflow, median of three sources, posted on Monad ${new Date(s.at * 1000).toUTCString().slice(5, 22)} UTC`;
   if (!fx) return "Rate: loading where it comes from…";
   const day = fx.updated ? new Date(fx.updated).toLocaleDateString("en-GB", { day: "numeric", month: "long" }) : null;
   return `Rate: daily reference rate from open.er-api.com${day ? `, updated ${day}` : ""}`;

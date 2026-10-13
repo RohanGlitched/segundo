@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { bandPaths, bandsFor, ringPath, ringsFor, seedOf, wavePath } from "@/lib/guilloche";
 import { currency as currencyOf, formatUsd, noteParts, type Currency, type Rates } from "@/lib/money";
 import { Odometer } from "./Odometer";
@@ -40,23 +40,76 @@ const initials = (name: string) =>
     .map((w) => w[0]!.toUpperCase())
     .join("") || "T";
 
+/** The engraved border, the same on every note. */
+let borderCache: string[] | null = null;
+function borderPaths() {
+  if (borderCache) return borderCache;
+  const out: string[] = [];
+  for (let i = 0; i < 3; i++) {
+    const ph = (i * Math.PI * 2) / 3;
+    out.push(wavePath(34, 28, W - 68, 7, 34, ph));
+    out.push(wavePath(34, H - 28, W - 68, 7, 34, ph + 1));
+    out.push(wavePath(28, 34, H - 68, 7, 34, ph, true));
+    out.push(wavePath(W - 28, 34, H - 68, 7, 34, ph + 2, true));
+  }
+  return (borderCache = out);
+}
+
+type Geometry = { core: string[]; bands: ReturnType<typeof bandsFor>; paths: string[][] };
+
+/**
+ * The static engraving: paper, border, watermark and the bands already printed. Memoized and on its own
+ * compositing layer (see .art in Note.module.css), so the live parts above it never make it repaint.
+ */
+const NoteArt = memo(function NoteArt({ seed, geo, done }: { seed: number; geo: Geometry; done: number }) {
+  const { core, bands, paths } = geo;
+  const border = borderPaths();
+  return (
+    <svg className={`${styles.art} ${styles.static}`} viewBox={`0 0 ${W} ${H}`} aria-hidden>
+      <defs>
+        <pattern id={`waves-${seed}`} width="60" height="9" patternUnits="userSpaceOnUse">
+          <path d="M0 4.5 Q15 0.5 30 4.5 T60 4.5" fill="none" stroke="currentColor" strokeWidth="0.6" />
+        </pattern>
+        <radialGradient id={`glow-${seed}`}>
+          <stop offset="0" stopColor="var(--note-paper)" stopOpacity="1" />
+          <stop offset="1" stopColor="var(--note-paper)" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+      <rect width={W} height={H} rx="14" className={styles.paper} />
+      <rect x="40" y="40" width={W - 80} height={H - 80} fill={`url(#waves-${seed})`} className={styles.lithograph} />
+      <g className={styles.border}>
+        {border.map((d, i) => (
+          <path key={i} d={d} pathLength={1} />
+        ))}
+      </g>
+      <rect x="46" y="46" width={W - 92} height={H - 92} rx="6" className={styles.frame} />
+      <g className={styles.rosette}>
+        <circle cx={CX} cy={CY} r={SIZE + 22} fill={`url(#glow-${seed})`} />
+        <g className={styles.watermark}>
+          {paths.flat().map((d, i) => (
+            <path key={i} d={d} />
+          ))}
+        </g>
+        <g className={styles.rings}>
+          {core.map((d, i) => (
+            <path key={`c${i}`} d={d} strokeWidth={0.6} pathLength={1} />
+          ))}
+          {paths.slice(0, done).map((band, i) =>
+            band.map((d, j) => <path key={`${i}-${j}`} d={d} strokeWidth={bands[i]!.weight} pathLength={1} />),
+          )}
+        </g>
+      </g>
+    </svg>
+  );
+});
+
 /** A tab drawn as a banknote that prints itself while the freelancer works. */
 export function Note(p: NoteProps) {
   const seed = seedOf("till", p.id.toString());
   const core = useMemo(() => ringsFor(seed, 2).map((r, i) => ringPath(CX, CY, SIZE * (i ? 0.33 : 0.29), { ...r, scale: 1 })), [seed]);
   const bands = useMemo(() => bandsFor(seed, 7), [seed]);
   const paths = useMemo(() => bands.map((b) => bandPaths(CX, CY, SIZE, b)), [bands]);
-  const border = useMemo(() => {
-    const out: string[] = [];
-    for (let i = 0; i < 3; i++) {
-      const ph = (i * Math.PI * 2) / 3;
-      out.push(wavePath(34, 28, W - 68, 7, 34, ph));
-      out.push(wavePath(34, H - 28, W - 68, 7, 34, ph + 1));
-      out.push(wavePath(28, 34, H - 68, 7, 34, ph, true));
-      out.push(wavePath(W - 28, 34, H - 68, 7, 34, ph + 2, true));
-    }
-    return out;
-  }, []);
+  const geo = useMemo<Geometry>(() => ({ core, bands, paths }), [core, bands, paths]);
 
   // Bands engrave quickly at first and slower later (2, 5, 10, 20, 40, 60, 120 minutes), so a tab
   // shows its first band within minutes and a long one keeps growing for hours.
@@ -102,37 +155,11 @@ export function Note(p: NoteProps) {
       style={{ ["--note-ink" as string]: cur.ink, ["--note-ink-night" as string]: cur.inkNight }}
       aria-label={`Tab ${serial}: ${parts ? `${parts.symbol}${parts.whole}.${parts.frac}` : formatUsd(p.usd)} earned by ${p.payee.name}${p.span ? ` ${p.span}` : ""}. ${p.status}.`}
     >
+      <NoteArt seed={seed} geo={geo} done={done >= 7 ? 6 : done} />
+      {/* The live layer: the band printing now, then everything drawn above it, in the original order. */}
       <svg className={styles.art} viewBox={`0 0 ${W} ${H}`} aria-hidden>
-        <defs>
-          <pattern id={`waves-${seed}`} width="60" height="9" patternUnits="userSpaceOnUse">
-            <path d="M0 4.5 Q15 0.5 30 4.5 T60 4.5" fill="none" stroke="currentColor" strokeWidth="0.6" />
-          </pattern>
-          <radialGradient id={`glow-${seed}`}>
-            <stop offset="0" stopColor="var(--note-paper)" stopOpacity="1" />
-            <stop offset="1" stopColor="var(--note-paper)" stopOpacity="0" />
-          </radialGradient>
-        </defs>
-        <rect width={W} height={H} rx="14" className={styles.paper} />
-        <rect x="40" y="40" width={W - 80} height={H - 80} fill={`url(#waves-${seed})`} className={styles.lithograph} />
-        <circle cx={CX} cy={CY} r={SIZE + 22} fill={`url(#glow-${seed})`} />
-        <g className={styles.border}>
-          {border.map((d, i) => (
-            <path key={i} d={d} pathLength={1} />
-          ))}
-        </g>
-        <rect x="46" y="46" width={W - 92} height={H - 92} rx="6" className={styles.frame} />
-        <g className={styles.watermark}>
-          {paths.flat().map((d, i) => (
-            <path key={i} d={d} />
-          ))}
-        </g>
+        <g className={styles.rosette}>
         <g className={styles.rings}>
-          {core.map((d, i) => (
-            <path key={`c${i}`} d={d} strokeWidth={0.6} pathLength={1} />
-          ))}
-          {paths.slice(0, done >= 7 ? 6 : done).map((band, i) =>
-            band.map((d, j) => <path key={`${i}-${j}`} d={d} strokeWidth={bands[i]!.weight} pathLength={1} />),
-          )}
           {progress > 0.001 &&
             paths[current]!.map((d, j) => (
               <path
@@ -149,6 +176,7 @@ export function Note(p: NoteProps) {
         <text x={CX} y={CY + 15} textAnchor="middle" className={styles.monogram}>
           {initials(p.payee.name)}
         </text>
+        </g>
         <text x="58" y={H - 54} className={`${styles.micro} ${styles.microFull}`}>
           {microprint.slice(0, 260)}
         </text>

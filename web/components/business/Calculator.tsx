@@ -1,9 +1,10 @@
 "use client";
 
 import { Fragment, useId, useState } from "react";
+import { BATCH_EXTRA, DEFAULTS, GAS, POLICY, SHIFT_HOURS, unitEconomics } from "./economics";
 import styles from "./parts.module.css";
 
-type Key = "people" | "hours" | "rate" | "days" | "yieldPct" | "feePct" | "settleEvery" | "monPrice" | "gasGwei";
+type Key = "people" | "hours" | "rate" | "days" | "yieldPct" | "feePct" | "onScreenPct" | "onScreenEvery" | "offScreenEvery" | "monPrice" | "gasGwei";
 type Field = {
   key: Key;
   label: string;
@@ -36,12 +37,33 @@ const FIELDS: Field[] = [
   },
   { key: "feePct", label: "Segundo fee, on what clients spend", hint: "1% today. Unspent budget and its fee come back.", min: 0, max: 5, step: 0.1, suffix: "%", group: "work" },
   {
-    key: "settleEvery",
-    label: "Relayer pays a running tab every",
-    hint: "Seconds between payouts. A tab on screen asks every few seconds; the relayer can cap it.",
-    min: 2,
+    key: "onScreenEvery",
+    label: "Payout while the tab is on screen, every",
+    hint: `Mainnet policy: ${POLICY.onScreenS} s. The relayer slows it if gas would pass ${POLICY.gasCap * 100}% of the tab's fee.`,
+    min: 1,
     max: 3600,
     step: 1,
+    suffix: "s",
+    group: "network",
+  },
+  {
+    key: "onScreenPct",
+    label: "Share of hours someone has the tab open",
+    hint: "Our assumption. The rest of the time nobody is watching the note.",
+    min: 0,
+    max: 100,
+    step: 5,
+    suffix: "%",
+    assumption: true,
+    group: "network",
+  },
+  {
+    key: "offScreenEvery",
+    label: "Keeper payout otherwise, every",
+    hint: `${POLICY.offScreenS / 60} minutes, in one settleMany, as the testnet keeper runs today.`,
+    min: 10,
+    max: 86_400,
+    step: 10,
     suffix: "s",
     group: "network",
   },
@@ -74,30 +96,18 @@ const PRESETS: { name: string; v: Partial<Record<Key, number>> }[] = [
   { name: "One corridor", v: { people: 10_000, hours: 25, rate: 15 } },
 ];
 
-const START: Record<Key, number> = { people: 150, hours: 35, rate: 20, days: 10, yieldPct: 1, feePct: 1, settleEvery: 60, monPrice: 0.05, gasGwei: 102 };
-const WEEKS_A_MONTH = 52 / 12;
-/** Hours per clock-in, our assumption: each shift costs one clock-in and one clock-out. */
-const SHIFT_HOURS = 4;
-
-/**
- * Gas per action, averaged over Segundo's relayer receipts on Monad testnet (relayer 0xe77f…ABF40), read on
- * October 13, 2026. Monad charges the gas limit, and on these receipts gas used equals the limit.
- */
-export const GAS = {
-  /** settle(id) on one tab: 277 transactions. */
-  settle: 97_673,
-  /** openWithPermit through the forwarder: 5 transactions. */
-  open: 512_162,
-  /** topUpWithPermit through the forwarder: 48 transactions. */
-  topUp: 261_664,
-  /** The 1% fee, an AUSD transferWithAuthorization: 6 transactions. Fee refunds are the same call. */
-  fee: 113_517,
-  /** clockIn through the forwarder: 21 transactions. */
-  clockIn: 123_712,
-  /** clockOut through the forwarder: 17 transactions. */
-  clockOut: 124_872,
-  /** close through the forwarder: 1 transaction. */
-  close: 180_670,
+const START: Record<Key, number> = {
+  people: DEFAULTS.people,
+  hours: DEFAULTS.hours,
+  rate: DEFAULTS.rate,
+  days: DEFAULTS.days,
+  yieldPct: DEFAULTS.yieldPct,
+  feePct: DEFAULTS.feePct,
+  onScreenPct: DEFAULTS.onScreen * 100,
+  onScreenEvery: DEFAULTS.onScreenEvery,
+  offScreenEvery: DEFAULTS.offScreenEvery,
+  monPrice: DEFAULTS.monPrice,
+  gasGwei: DEFAULTS.gasGwei,
 };
 
 const usd = (n: number) =>
@@ -123,40 +133,25 @@ export function Calculator({ marketFee, marketLabel, wireCost }: { marketFee: nu
     return Number.isFinite(n) ? Math.min(f.max, Math.max(f.min, n)) : f.min;
   };
 
-  const people = num("people");
-  const hoursMonth = num("hours") * WEEKS_A_MONTH;
-  const volume = people * hoursMonth * num("rate");
-  const feeRate = num("feePct") / 100;
-  const fee = volume * feeRate;
-  // The average balance waiting in escrow is a day's volume times the days it waits; yield accrues on that balance.
-  const float = ((volume * 12) / 365) * num("days") * (num("yieldPct") / 100 / 12);
-
-  // Relayer gas for one freelancer-month: payouts while on the clock, a clock-in and out per shift, and a weekly
-  // budget (one open, then a top-up each week, each with its fee transfer), closed once with its fee refund.
-  const payouts = (hoursMonth * 3600) / num("settleEvery");
-  const fixedGas =
-    (hoursMonth / SHIFT_HOURS) * (GAS.clockIn + GAS.clockOut) +
-    GAS.open +
-    (WEEKS_A_MONTH - 1) * GAS.topUp +
-    WEEKS_A_MONTH * GAS.fee +
-    GAS.close +
-    GAS.fee;
-  const gasMonth = payouts * GAS.settle + fixedGas;
-  const monPerGas = num("gasGwei") * 1e-9;
-  const monMonth = gasMonth * monPerGas;
-  const gasUsdMonth = monMonth * num("monPrice");
-  const gasTabHour = gasUsdMonth / hoursMonth;
-  const monTabHour = monMonth / hoursMonth;
-  const gasAll = gasUsdMonth * people;
-
-  const revenue = fee + float;
-  const net = revenue - gasAll;
-  const feePerFreelancer = fee / people;
-  const netPerFreelancer = net / people;
-  // Break-even: the MON price at which gas eats the whole fee, and the fastest payout pace the fee pays for today.
-  const breakEvenMon = monMonth > 0 ? feePerFreelancer / monMonth : Infinity;
-  const affordablePayouts = (feePerFreelancer / (monPerGas * num("monPrice")) - fixedGas) / GAS.settle;
-  const fastestEvery = affordablePayouts > 0 ? (hoursMonth * 3600) / affordablePayouts : null;
+  const [batched, setBatched] = useState(DEFAULTS.batched);
+  const e = unitEconomics({
+    people: num("people"),
+    hours: num("hours"),
+    rate: num("rate"),
+    days: num("days"),
+    yieldPct: num("yieldPct"),
+    feePct: num("feePct"),
+    onScreen: num("onScreenPct") / 100,
+    onScreenEvery: num("onScreenEvery"),
+    offScreenEvery: num("offScreenEvery"),
+    batched,
+    monPrice: num("monPrice"),
+    gasGwei: num("gasGwei"),
+  });
+  const { volume, fee, float, gasAll, net, gasTabHour, monTabHour, breakEvenMon } = e;
+  const netPerFreelancer = e.netFreelancer;
+  const secs = (x: number) => (x < 10 ? x.toFixed(1) : Math.round(x).toLocaleString("en-US"));
+  const pct = (x: number) => `${(x * 100).toLocaleString("en-US", { maximumFractionDigits: x < 0.1 ? 1 : 0 })}%`;
 
   const lostMarket = volume * marketFee;
   const lostWire = volume * wireCost;
@@ -177,7 +172,22 @@ export function Calculator({ marketFee, marketLabel, wireCost }: { marketFee: nu
         {FIELDS.map((f, i) => (
           <Fragment key={f.key}>
             {f.group === "network" && FIELDS[i - 1]?.group !== "network" && (
-              <p className={styles.calcGroup}>What the relayer pays so neither side ever needs gas</p>
+              <>
+                <p className={styles.calcGroup}>What the relayer pays so neither side ever needs gas</p>
+                <div className={styles.calcToggle} role="group" aria-label="How payouts are sent">
+                  <button type="button" className="btn small" aria-pressed={batched} onClick={() => setBatched(true)}>
+                    Batched payouts
+                  </button>
+                  <button type="button" className="btn small" aria-pressed={!batched} onClick={() => setBatched(false)}>
+                    One payout per transaction
+                  </button>
+                  <span className={styles.hint}>
+                    {batched
+                      ? `Every tab due at the same moment is paid in one settleMany: about ${BATCH_EXTRA.toLocaleString("en-US")} gas for each tab after the first.`
+                      : `Each payout is its own settle, ${GAS.settle.toLocaleString("en-US")} gas, the way the testnet app pays a tab on screen today.`}
+                  </span>
+                </div>
+              </>
             )}
             <div className={styles.calcField}>
               <label htmlFor={`${id}-${f.key}`}>{f.label}</label>
@@ -238,14 +248,22 @@ export function Calculator({ marketFee, marketLabel, wireCost }: { marketFee: nu
         <p className={styles.stubHead}>Per freelancer</p>
         <dl className={styles.stub}>
           <div className={styles.stubSub}>
+            <dt>Client fee per freelancer-month</dt>
+            <dd className="denom">{usd(e.feeFreelancer)}</dd>
+          </div>
+          <div className={styles.stubSub}>
+            <dt>Fee per tab-hour</dt>
+            <dd className="denom">{cents(e.feeTabHour)}</dd>
+          </div>
+          <div className={styles.stubSub}>
             <dt>Relayer gas per tab-hour</dt>
             <dd className="denom">
               {cents(gasTabHour)} <small className={styles.monNote}>{mon(monTabHour)}</small>
             </dd>
           </div>
           <div className={styles.stubSub}>
-            <dt>Fee per tab-hour</dt>
-            <dd className="denom">{cents(feeRate * num("rate"))}</dd>
+            <dt>Gas as a share of the fee</dt>
+            <dd className={`denom ${e.gasShare > 1 ? styles.cost : ""}`}>{Number.isFinite(e.gasShare) ? pct(e.gasShare) : "—"}</dd>
           </div>
           <div className={styles.stubSub}>
             <dt>Net revenue per freelancer-month</dt>
@@ -253,22 +271,28 @@ export function Calculator({ marketFee, marketLabel, wireCost }: { marketFee: nu
           </div>
         </dl>
         <p className={styles.breakEven}>
+          <b>Earned every second; paid out on a schedule.</b> The contract counts pay from timestamps, so nothing is written while the clock runs.
+          Here a tab on screen is paid every <b className="denom">{secs(e.onEvery)} s</b>
+          {e.capped ? ` (slowed from ${secs(num("onScreenEvery"))} s so gas stays under ${POLICY.gasCap * 100}% of its fee)` : ""} and every other
+          running tab every <b className="denom">{secs(num("offScreenEvery"))} s</b>: about {Math.round(e.payoutsHour).toLocaleString("en-US")} payouts
+          a tab-hour.
+        </p>
+        <p className={styles.breakEven}>
           <b>Break-even.</b>{" "}
-          {Number.isFinite(breakEvenMon) && breakEvenMon > 0 ? (
+          {Number.isFinite(e.breakEvenSingle) ? (
             <>
-              At this pace the fee alone covers gas until MON reaches <b className="denom">{cents(breakEvenMon)}</b>
+              At {cents(num("rate"))} an hour and ${num("monPrice").toLocaleString("en-US")} a MON, the fee pays for a payout every{" "}
+              <b className="denom">{secs(e.breakEvenSingle)} s</b> sent one at a time, or every <b className="denom">{secs(e.breakEvenBatched)} s</b>{" "}
+              batched.{" "}
+            </>
+          ) : (
+            "With no fee, every payout is a cost. "
+          )}
+          {Number.isFinite(breakEvenMon) && breakEvenMon > 0 && (
+            <>
+              At this schedule the fee alone covers gas until MON reaches <b className="denom">{cents(breakEvenMon)}</b>
               {breakEvenMon > num("monPrice") ? `, ${(breakEvenMon / num("monPrice")).toLocaleString("en-US", { maximumFractionDigits: 1 })}× the price above` : ""}.
             </>
-          ) : (
-            "With no fee, every payout is a cost."
-          )}{" "}
-          {fastestEvery ? (
-            <>
-              At ${num("monPrice").toLocaleString("en-US")} a MON, the fee pays for a payout as often as every{" "}
-              <b className="denom">{fastestEvery < 10 ? fastestEvery.toFixed(1) : Math.round(fastestEvery).toLocaleString("en-US")} s</b>.
-            </>
-          ) : (
-            "At this MON price the fee doesn't cover the opens, closes and clock-ins, before any payout."
           )}
         </p>
 
@@ -279,7 +303,7 @@ export function Calculator({ marketFee, marketLabel, wireCost }: { marketFee: nu
             <dd className={`denom ${styles.loss}`}>{usd(lostMarket)}</dd>
           </div>
           <div>
-            <dt>Sent by wire at the {(wireCost * 100).toLocaleString("en-US")}% world average</dt>
+            <dt>At {(wireCost * 100).toLocaleString("en-US")}%, the World Bank&apos;s average to send $200 abroad</dt>
             <dd className={`denom ${styles.loss}`}>{usd(lostWire)}</dd>
           </div>
           <div className={styles.stubTotal}>
@@ -292,8 +316,10 @@ export function Calculator({ marketFee, marketLabel, wireCost }: { marketFee: nu
           {GAS.settle.toLocaleString("en-US")} gas, an open {GAS.open.toLocaleString("en-US")}, a top-up {GAS.topUp.toLocaleString("en-US")}, a fee or fee
           refund {GAS.fee.toLocaleString("en-US")}, a clock-in or out about {GAS.clockIn.toLocaleString("en-US")}, a close {GAS.close.toLocaleString("en-US")}.
           Each freelancer-month counts a weekly budget (an open, then a top-up each week, each with its fee), one close with its fee refund, and a
-          clock-in and out every {SHIFT_HOURS} hours. Paying several tabs in one transaction costs about 40,000 gas per extra tab, so batching lowers
-          this. The yield and MON price are assumptions; set the yield to 0 to see the fee alone.
+          clock-in and out every {SHIFT_HOURS} hours. A settleMany over two running tabs was estimated at 117,849 gas against 84,609 for one, so
+          about {BATCH_EXTRA.toLocaleString("en-US")} per extra tab with the relayer&apos;s 15% margin; batches hold the tabs due at the same moment, with
+          hours spread evenly over the week, which is conservative. The yield, the MON price and the share of time on screen are assumptions; set the
+          yield to 0 to see the fee alone. Business services such as Wise and Payoneer cost less than the World Bank average (see the table above).
         </p>
       </div>
     </div>

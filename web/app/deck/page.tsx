@@ -7,7 +7,9 @@ import { Mark } from "@/components/Mark";
 import { GrandRosette } from "@/components/home/Art";
 import { useBench, type Bench } from "@/components/home/UnderLoad";
 import { catchingUp, count, isFull, money, usdOf, useStats, type Stats } from "@/components/business/stats";
+import { AT_DEFAULTS, EXAMPLE, POLICY, feePerMonth, headroom } from "@/components/business/economics";
 import { NetworkProvider } from "@/lib/network";
+import benchRun from "@/public/bench.json";
 import styles from "./deck.module.css";
 
 /** Present mode: one 16:9 slide filling the screen. Below this, the deck reads as a scroll. */
@@ -29,12 +31,17 @@ const blockTime = (s: Stats | null | undefined) =>
   `${((s?.chain?.blockMs ?? 305) / 1000).toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} s`;
 
 const CITIES = [
-  { city: "Manila", code: "PHP", ink: "#2557B0", night: "#93B4F2" },
-  { city: "Lagos", code: "NGN", ink: "#1F7A4D", night: "#7BD3A4" },
-  { city: "Pune", code: "INR", ink: "#7B3FA0", night: "#C9A2E8" },
-  { city: "Nairobi", code: "KES", ink: "#9A5A12", night: "#E7B477" },
-  { city: "São Paulo", code: "BRL", ink: "#11777A", night: "#79CFD1" },
+  { city: "Manila", code: "PHP", ink: "#2557B0", night: "#93B4F2", line: "Designers and assistants for studios abroad. Wants pesos in GCash, over InstaPay." },
+  { city: "Lagos", code: "NGN", ink: "#1F7A4D", night: "#7BD3A4", line: "Developers billed in dollars. The naira moves fast, so the rate on the day matters." },
+  { city: "Pune", code: "INR", ink: "#7B3FA0", night: "#C9A2E8", line: "Engineering contractors on monthly hours. UPI at home, 1% tax deducted on crypto cash-out." },
+  { city: "Nairobi", code: "KES", ink: "#9A5A12", night: "#E7B477", line: "Remote work where everyday money is M-Pesa, not a bank account." },
+  { city: "São Paulo", code: "BRL", ink: "#11777A", night: "#79CFD1", line: "Developers on US hours. Pix at home is instant and free; the wire isn't." },
 ];
+
+/** Gas room in the load test's busiest block, from the recorded run. */
+const ROOM = headroom(benchRun.perBlock, benchRun.blockTime.avgMs);
+const MONTH_PAY = EXAMPLE.hours * (52 / 12) * EXAMPLE.rate;
+const usd0 = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 
 const SLIDES: Slide[] = [
   {
@@ -48,10 +55,10 @@ const SLIDES: Slide[] = [
           <p className={styles.kicker}>Segundo</p>
           <h1 className={styles.display}>Get paid every second you work.</h1>
           <p className={styles.lead}>
-            Hourly work across borders still pays late and costs too much: <b>10 days</b> before Upwork releases hourly pay, and <b>6.36%</b> on
-            average to send money abroad.
+            Upwork releases hourly pay <b>10 days</b> after the week ends, and takes up to <b>15%</b> from the freelancer plus up to 7.99% from the
+            client. Off the platform, the freelancer chases an invoice.
           </p>
-          <p className={styles.source}>Upwork Help Center, hourly payments · World Bank Remittance Prices Worldwide, Q3 2025</p>
+          <p className={styles.source}>Upwork Help Center: hourly payments, freelancer service fees, client marketplace fee</p>
         </div>
         <div className={styles.coverArt} aria-hidden>
           <GrandRosette />
@@ -73,14 +80,17 @@ const SLIDES: Slide[] = [
             <span className="denom">154–435M</span>
           </p>
           <p className={styles.lead}>online gig workers worldwide, the World Bank&apos;s range: 4.4% to 12.5% of the global labour force.</p>
-          <p className={styles.source}>World Bank, Working Without Borders, 2023</p>
+          <p className={styles.source}>
+            World Bank, Working Without Borders, 2023. Sending $200 abroad costs 6.36% on average (World Bank, Q3 2025); Wise and Payoneer cost
+            less, but pay only once the invoice is paid.
+          </p>
         </div>
         <ul className={styles.cities}>
           {CITIES.map((c) => (
             <li key={c.city} style={{ ["--c" as string]: c.ink, ["--cn" as string]: c.night }}>
               <span className={styles.cityName}>{c.city}</span>
               <span className={`denom ${styles.cityCode}`}>{c.code}</span>
-              <span className={styles.cityLine}>Waits for a wire or a platform release, then pays to convert.</span>
+              <span className={styles.cityLine}>{c.line}</span>
             </li>
           ))}
         </ul>
@@ -91,17 +101,17 @@ const SLIDES: Slide[] = [
     id: "solution",
     title: "The solution",
     notes:
-      "Segundo pays them while they work. The client funds a tab, and every second the freelancer is clocked in, they're paid. This note is a real tab on Monad, live.",
+      "Segundo pays them while they work. The client opens a tab in Agora's digital dollar and sends a link; the freelancer signs up with a passkey and clocks in, with no wallet app and no gas. Every second they're clocked in, they earn. This note is a real tab on Monad, live.",
     body: () => (
       <div className={styles.split}>
         <div>
           <p className={styles.kicker}>The solution</p>
           <h2 className={styles.h}>A tab that pays while you work.</h2>
           <ul className={styles.ticks}>
-            <li>The client funds a budget before work starts.</li>
-            <li>Pay builds up every second the freelancer is clocked in.</li>
-            <li>It lands in their wallet as they work, in digital dollars.</li>
-            <li>Unspent budget, and the 1% fee on it, goes back to the client.</li>
+            <li>The client opens a tab: an hourly rate and a budget in AUSD, Agora&apos;s digital dollar, locked in a public contract on Monad.</li>
+            <li>The freelancer joins from a link with a passkey or email and clocks in. No wallet app, no seed phrase, no gas.</li>
+            <li>Pay is earned every second on the clock and paid out to their wallet as they work.</li>
+            <li>Either side can stop the clock. Closing returns the unspent budget, and the 1% fee on it.</li>
           </ul>
         </div>
         <div className={styles.noteBox}>
@@ -111,64 +121,32 @@ const SLIDES: Slide[] = [
     ),
   },
   {
-    id: "how",
-    title: "How it works",
-    notes:
-      "Three steps. The client opens a tab in Agora's digital dollar and sends a link. The freelancer signs up with a passkey and clocks in. No wallet app, no gas.",
-    body: () => (
-      <div>
-        <p className={styles.kicker}>How it works</p>
-        <h2 className={styles.h}>Three steps, one signature each, no gas.</h2>
-        <ol className={styles.steps}>
-          <li>
-            <span className="denom">1</span>
-            <h3>The client opens a tab</h3>
-            <p>An hourly rate and a budget in AUSD, Agora&apos;s digital dollar. The budget waits in a public contract on Monad.</p>
-          </li>
-          <li>
-            <span className="denom">2</span>
-            <h3>The freelancer clocks in</h3>
-            <p>From an invite link, with a passkey or email. No wallet app, no seed phrase, no MON for gas.</p>
-          </li>
-          <li>
-            <span className="denom">3</span>
-            <h3>Paid as they go</h3>
-            <p>Earnings land in their wallet as they work. Either side can stop the clock; closing refunds every unspent cent.</p>
-          </li>
-        </ol>
-      </div>
-    ),
-  },
-  {
     id: "monad",
     title: "Why Monad",
     notes:
-      "This needs Monad. We measured a block every three hundred and five milliseconds, and our payouts land in under three seconds from the moment they're sent. When we pushed hundreds of payouts at once, Monad put up to ninety-six of them in one block.",
-    body: (s, b) => (
+      "Any chain can count seconds, and Segundo counts them for free with timestamps. Monad is where paying them out makes sense. Every payout is a real transaction in AUSD, and in our load test ninety-six payouts used eight percent of one Monad block: room for about eleven hundred. Next, a vault per tab lets payouts to different freelancers run in parallel.",
+    body: (s) => (
       <div className={styles.split}>
         <div>
           <p className={styles.kicker}>Why Monad</p>
-          <h2 className={styles.h}>Pay you can watch arrive.</h2>
+          <h2 className={styles.h}>Any chain can count seconds. Monad is where paying them out fits.</h2>
           <ul className={styles.ticks}>
-            <li>A block every {blockTime(s)} on average, measured over the last 10,000 blocks.</li>
-            <li>Every step of a whole tab landed 0.6 to 2.6 s after it was sent, from a laptop in India.</li>
+            <li>Counting is timestamp math, free on any chain. Every payout is a real EVM transaction in AUSD.</li>
             <li>
-              Under load:{" "}
-              {b?.txs != null && b.durationS != null && b.perBlockMax != null
-                ? `${b.txs.toLocaleString("en-US")} payouts in ${b.durationS.toLocaleString("en-US")} s, up to ${b.perBlockMax} in one block.`
-                : "hundreds of payouts at once, recorded block by block."}{" "}
+              {ROOM.payouts} payouts used {ROOM.pct}% of one block: room for about {ROOM.perBlock.toLocaleString("en-US")}.{" "}
               <Link href="/network">segundo.world/network</Link>
             </li>
-            <li>Every action is a signature; Segundo&apos;s relayer pays the gas.</li>
+            <li>Next: a vault per tab, so payouts run in parallel. Today they share one balance slot.</li>
           </ul>
         </div>
         <div className={styles.stat}>
+          <span className={styles.statLabel}>Payouts one block has room for</span>
+          <span className={`denom ${styles.bigNum}`}>~{ROOM.perBlock.toLocaleString("en-US")}</span>
           <span className={styles.statLabel}>Average Monad block</span>
           <span className={`denom ${styles.bigNum}`}>{blockTime(s)}</span>
-          <span className={styles.statLabel}>From sent to on chain</span>
-          <span className={`denom ${styles.bigNum}`}>0.6–2.6 s</span>
           <span className={styles.source}>
-            Block time from block timestamps over the last 10,000 blocks; landing times from our 17-step proof tab (VERIFY.md), Monad testnet.
+            {ROOM.payouts} settles filled {ROOM.pct}% of block {ROOM.block.toLocaleString("en-US")}{" "}
+            on Monad testnet; gas room, not a measured rate. Monad charges the gas limit, so the relayer sends the estimate plus 15%, from a pool of keys.
           </span>
         </div>
       </div>
@@ -178,12 +156,12 @@ const SLIDES: Slide[] = [
     id: "model",
     title: "Business model",
     notes:
-      "Here's how we make money. Clients pay one percent of what they spend; unspent budget and its fee come back at close. Freelancers pay nothing. The contract itself is a public good with no fee switch; our one percent pays for the gasless, passkey and cash-out service around it. It's live on testnet: that's our treasury. Next come yield on escrowed budgets, cash-out, and advances.",
+      "Here's how we make money. Clients pay one percent of what they spend; unspent budget and its fee come back at close. Freelancers pay nothing to be paid. At twenty dollars an hour that's twenty cents a tab-hour, and with payouts batched the relayer's gas is about two cents of it. Next come yield on escrowed budgets, a share of the cash-out spread, and advances.",
     body: (s) => (
       <div className={styles.split}>
         <div>
           <p className={styles.kicker}>Business model</p>
-          <h2 className={styles.h}>Clients pay 1% of what they spend. Freelancers pay nothing.</h2>
+          <h2 className={styles.h}>Clients pay 1% of what they spend. Freelancers pay nothing to be paid.</h2>
           <ol className={styles.lines}>
             <li>
               <b>1% client fee; unspent budget and its fee come back</b> <span className={styles.on}>Live on testnet</span>
@@ -192,7 +170,7 @@ const SLIDES: Slide[] = [
               <b>Share of AUSD reserve yield on budgets in escrow</b> <span>Next</span>
             </li>
             <li>
-              <b>Cash-out spread with local payout partners</b> <span>Next</span>
+              <b>Share of the cash-out spread, never on top</b> <span>Next</span>
             </li>
             <li>
               <b>Advances against verified on-chain income</b> <span>Later</span>
@@ -200,14 +178,70 @@ const SLIDES: Slide[] = [
           </ol>
         </div>
         <div className={styles.stat}>
-          <span className={styles.statLabel}>Fees kept in the Segundo treasury</span>
-          <span className={`denom ${styles.bigNum} ${styles.serialNum}`}>{live(s, (x) => (whole(x) ? feesNet(x) : "—"))}</span>
-          <span className={styles.source}>{live(s, (x) => (whole(x) ? feesGross(x) : catchingUp(x) ?? ""))}</span>
+          <span className={styles.statLabel}>One tab-hour at ${EXAMPLE.rate}</span>
+          <dl className={styles.unit}>
+            <div>
+              <dt>Client fee, 1%</dt>
+              <dd className="denom">${AT_DEFAULTS.feeTabHour.toFixed(2)}</dd>
+            </div>
+            <div>
+              <dt>Relayer gas, batched</dt>
+              <dd className="denom">${AT_DEFAULTS.gasTabHour.toFixed(3)}</dd>
+            </div>
+            <div className={styles.unitTotal}>
+              <dt>Left after gas</dt>
+              <dd className="denom">{Math.round((1 - AT_DEFAULTS.gasShare) * 100)}%</dd>
+            </div>
+          </dl>
           <span className={styles.source}>
-            {s && whole(s) && catchingUp(s) ? `${catchingUp(s)} ` : ""}Every fee is a public transfer on Monad. Testnet, including our demo studios. Test AUSD has no value. The tab contract has no fee switch and anyone can call it directly; the fee
-            pays for the service around it.
+            Payouts every {POLICY.onScreenS} s on screen and every {POLICY.offScreenS / 60} minutes otherwise, batched; gas from relayer receipts at
+            102 gwei and MON at $0.05. Covers gas until MON reaches ${AT_DEFAULTS.breakEvenMon.toFixed(2)}. The calculator is on /business.
+          </span>
+          <span className={styles.source}>
+            {live(s, (x) => (whole(x) ? `Fees kept on testnet so far: ${feesNet(x)}, ${feesGross(x)}.` : catchingUp(x) ?? ""))} Test AUSD has no
+            value; the tab contract has no fee switch.
           </span>
         </div>
+      </div>
+    ),
+  },
+  {
+    id: "units",
+    title: "Against the incumbents",
+    notes:
+      "Per freelancer, at thirty-five hours a week and twenty dollars an hour, one percent is about thirty dollars a month, paid by the client and only when work happens. Deel charges forty-nine dollars a seat, Remote from twenty-nine, and Upwork takes up to fifteen percent from the freelancer plus up to eight from the client.",
+    body: () => (
+      <div>
+        <p className={styles.kicker}>Unit economics</p>
+        <h2 className={styles.h}>About ${Math.round(feePerMonth())} a freelancer-month, charged only when work happens.</h2>
+        <div className={styles.matrix} role="table" aria-label="A month of one freelancer's work, priced four ways">
+          <div role="row" className={styles.mHead}>
+            <span role="columnheader" />
+            <span role="columnheader">
+              A month at {EXAMPLE.hours} h a week and ${EXAMPLE.rate} ({usd0(MONTH_PAY)} of work)
+            </span>
+            <span role="columnheader">Who pays</span>
+            <span role="columnheader">In a month with no work</span>
+          </div>
+          {[
+            ["Segundo", `${usd0(feePerMonth())}, 1% of what is spent`, "The client", "$0"],
+            ["Deel", "$49 per contractor", "The company", "$49"],
+            ["Remote", "From $29 per contractor", "The company", "From $29"],
+            ["Upwork", `Up to ${usd0(MONTH_PAY * 0.15)} (15%) plus up to ${usd0(MONTH_PAY * 0.0799)} (7.99%)`, "Freelancer and client", "$0"],
+          ].map((r) => (
+            <div role="row" key={r[0]} className={r[0] === "Segundo" ? styles.mUs : undefined}>
+              <span role="rowheader">{r[0]}</span>
+              <span role="cell">{r[1]}</span>
+              <span role="cell">{r[2]}</span>
+              <span role="cell">{r[3]}</span>
+            </div>
+          ))}
+        </div>
+        <p className={styles.source}>
+          Deel and Remote pricing pages; Upwork Help Center, freelancer service fees and client marketplace fee. A month is 52 ÷ 12 weeks. On price
+          against Wise or Payoneer, Segundo is about even once a cash-out spread is added; the difference there is timing and a budget locked before
+          work starts.
+        </p>
       </div>
     ),
   },
@@ -215,7 +249,7 @@ const SLIDES: Slide[] = [
     id: "market",
     title: "Market",
     notes:
-      "Hundreds of millions of people work online. From the bottom up: Payoneer alone pays five hundred and thirty-six thousand people more than five hundred dollars a month across borders. Their pay is three to ten billion dollars a year, and one percent of it is thirty-two to a hundred and five million. That's an estimate, and every input is on the business page.",
+      "Hundreds of millions of people work online. From the bottom up: Payoneer alone pays five hundred and thirty-six thousand people more than five hundred dollars a month across borders. Their pay, three to ten billion dollars a year, is our serviceable market; at one percent, that's thirty-two to a hundred and five million in revenue. That's an estimate, and every input is on the business page.",
     body: () => (
       <div>
         <p className={styles.kicker}>Market</p>
@@ -232,8 +266,8 @@ const SLIDES: Slide[] = [
             <p className={styles.source}>World Bank estimate, December 2024</p>
           </div>
           <div>
-            <span className={`denom ${styles.bigNum}`}>$32–105M</span>
-            <p>a year at 1%: our bottom-up estimate of the serviceable market</p>
+            <span className={`denom ${styles.bigNum}`}>$3.2–10.5B</span>
+            <p>of cross-border pay a year, the serviceable market, bottom up. At 1%: $32–105M a year in revenue</p>
             <p className={styles.source}>
               536,000 Payoneer customers moving over $500 a month (Payoneer FY 2025, Form 8-K) × $6,000 to $19,500 a year (the upper end is our assumption:
               25 h a week at $15)
@@ -247,7 +281,7 @@ const SLIDES: Slide[] = [
     id: "competition",
     title: "Competition",
     notes:
-      "Marketplaces pay days late and take up to twenty percent. Payroll and transfer apps still wait for an invoice. Crypto streams need a wallet. Segundo pays by the second, for time worked.",
+      "Marketplaces pay late: Upwork releases hourly pay ten days after the week and takes up to fifteen percent, and Fiverr keeps twenty percent of each order. Payroll waits for the payroll run, and transfer apps wait for an invoice. Crypto streams run by calendar time and need a wallet. Segundo pays by the second, for time worked.",
     body: () => (
       <div>
         <p className={styles.kicker}>Competition</p>
@@ -261,10 +295,10 @@ const SLIDES: Slide[] = [
           </div>
           {[
             ["Marketplaces", "10 days after the week (Upwork)", "0–15% on Upwork, 20% on Fiverr", "Open a dispute"],
-            ["Contractor payroll", "On the payroll date", "None; the company pays $29–49 a month", "Chase an invoice"],
+            ["Contractor payroll", "On the payroll date", "None; the company pays $29–49 a month", "Waits for the payroll run"],
             ["Receive and convert", "When the client pays", "Receiving and conversion fees", "Chase an invoice"],
-            ["Crypto streaming", "By calendar time, not time worked", "Gas, a wallet, a seed phrase", "Paid until the stream stops"],
-            ["Segundo", "Every second you're clocked in", "Nothing. Client pays 1% of what they spend", "Every second worked is paid or locked to you"],
+            ["Crypto streaming", "Calendar-time streams the payer manages; no clock-in, no cap per hour", "Gas, a wallet, a seed phrase", "Paid until the stream stops"],
+            ["Segundo", "Earned every second you're clocked in, paid out as you work", "Nothing to be paid. Client pays 1% of what they spend", "Every second worked is paid or locked to you"],
           ].map((r) => (
             <div role="row" key={r[0]} className={r[0] === "Segundo" ? styles.mUs : undefined}>
               <span role="rowheader">{r[0]}</span>
@@ -315,42 +349,45 @@ const SLIDES: Slide[] = [
     id: "next",
     title: "Next",
     notes:
-      "Next: mainnet on the same contract, local cash-out partners, and time-tracker plug-ins. If you hire abroad, pay out locally, or invest in payments, let's talk. Thank you.",
+      "In the next ninety days: an audit and mainnet on AUSD, ten design-partner studios, a cash-out partner in the Philippines and one in Nigeria, and an on-ramp partner for euros and dollars. I'm Rohan, building this solo from India; the first hire is a payments and compliance lead. If you hire abroad, pay out locally, or invest in payments, let's talk. Thank you.",
     body: () => (
       <div className={styles.split}>
         <div>
-          <p className={styles.kicker}>What&apos;s next</p>
+          <p className={styles.kicker}>The next 90 days</p>
           <h2 className={styles.h}>From testnet to the first real paycheck.</h2>
           <ol className={styles.lines}>
             <li>
               <div className={styles.lineText}>
-                <b>Mainnet on AUSD:</b> the same contract, audited first
+                <b>Audit, then mainnet on AUSD:</b> the same contract, with batched payouts
               </div>
             </li>
             <li>
               <div className={styles.lineText}>
-                <b>Cash-out partners:</b> pesos, naira, rupees, shillings and reais to banks and mobile money
+                <b>10 design-partner studios</b> paying freelancers in our five cities
               </div>
             </li>
             <li>
               <div className={styles.lineText}>
-                <b>Time-tracker plug-ins:</b> the tools freelancers already use clock them in
+                <b>Cash-out partners:</b> one in the Philippines, one in Nigeria
               </div>
             </li>
             <li>
               <div className={styles.lineText}>
-                <b>Advances:</b> credit against verified on-chain income
+                <b>An on-ramp partner</b> so studios fund tabs from euros or dollars in a bank
               </div>
             </li>
           </ol>
         </div>
         <div className={styles.ask}>
           <p className={styles.kicker}>The ask</p>
-          <p className={styles.askText}>Studios that hire abroad, payout partners in our five corridors, and investors in payments: let&apos;s talk.</p>
+          <p className={styles.askText}>
+            Studios that hire abroad: be one of the ten. Payout partners in Manila and Lagos: sign the first corridor. Investors in payments: back the
+            audit and the first corridors.
+          </p>
           <p className={styles.askLink}>
             <span className="serial">segundo.world</span>
           </p>
-          <p className={styles.source}>Rohan Borade, founder</p>
+          <p className={styles.source}>Rohan Borade, founder, building solo from India. First hire: a payments and compliance lead.</p>
         </div>
       </div>
     ),
@@ -436,7 +473,29 @@ export default function DeckPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [present, n]);
 
+  // Touch tablets: a horizontal swipe moves a slide; a mostly vertical drag is left alone.
+  const swipe = useRef<{ x: number; y: number; id: number } | null>(null);
+  const swiped = useRef(false);
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (!present || e.pointerType === "mouse") return;
+    swipe.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
+  };
+  const onPointerUp = (e: React.PointerEvent) => {
+    const start = swipe.current;
+    swipe.current = null;
+    if (!present || !start || start.id !== e.pointerId) return;
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    swiped.current = true;
+    go(dx < 0 ? at + 1 : at - 1);
+  };
+
   const onStageClick = (e: React.MouseEvent) => {
+    if (swiped.current) {
+      swiped.current = false;
+      return;
+    }
     if (!present) return;
     if ((e.target as HTMLElement).closest("a, button, input, summary, [role='button']")) return;
     const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -454,7 +513,13 @@ export default function DeckPage() {
             {notes ? "Hide speaker notes" : "Speaker notes"} <kbd className={styles.kbd}>n</kbd>
           </button>
         </div>
-        <div className={styles.stage} onClick={onStageClick}>
+        <div
+          className={styles.stage}
+          onClick={onStageClick}
+          onPointerDown={onPointerDown}
+          onPointerUp={onPointerUp}
+          onPointerCancel={() => (swipe.current = null)}
+        >
           {SLIDES.map((s, i) => (
             <section
               key={s.id}

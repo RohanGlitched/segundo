@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef } from "react";
-import { useLive } from "@/lib/live";
+import { LiveActive, useOnScreen, useRates } from "@/lib/live";
 import { settleNow } from "@/lib/relay";
 import { stateOf } from "@/lib/tabs";
 import { currency, formatUsd, toUsd } from "@/lib/money";
@@ -14,7 +14,10 @@ import styles from "./LiveHero.module.css";
 /** The hero: a real tab running on Monad right now, or a clearly marked specimen if none is. */
 export function LiveHero() {
   const net = useNetwork();
-  const { rates } = useLive();
+  const { rates } = useRates();
+  // The hero note stops ticking while it is scrolled away or the tab is hidden.
+  const heroRef = useRef<HTMLDivElement>(null);
+  const on = useOnScreen(heroRef);
   const featured = net?.featured ?? null;
 
   // One real payout while the visitor watches: the featured tab is paid once, a few seconds after the
@@ -28,15 +31,20 @@ export function LiveHero() {
   }, [featured]);
 
   return (
-    <div className={styles.hero}>
+    <LiveActive active={on}>
+    <div ref={heroRef} className={styles.hero}>
       {net === undefined ? (
-        <div className={`skeleton ${styles.placeholder}`} aria-label="Loading a live tab" />
+        <>
+          <div className={`skeleton ${styles.placeholder}`} aria-label="Loading a live tab" />
+          <p className={styles.caption} aria-hidden>
+            &nbsp;
+          </p>
+        </>
       ) : featured ? (
         <>
           <TabNote view={featured} profiles={net?.profiles ?? {}} engrave />
           <p className={styles.caption}>
-            A real tab on Monad testnet. Pay is earned every second and paid out every few seconds while a tab is open on screen, every few minutes
-            by the keeper otherwise. <Link href={`/tab/${featured.id}`}>Watch it pay out</Link>
+            A real tab on Monad testnet, paying out while you watch. <Link href={`/tab/${featured.id}`}>Open this tab</Link>
           </p>
         </>
       ) : (
@@ -63,6 +71,7 @@ export function LiveHero() {
         </>
       )}
     </div>
+    </LiveActive>
   );
 }
 

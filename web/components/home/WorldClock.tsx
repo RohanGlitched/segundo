@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { DEMO_FREELANCERS } from "@/lib/demo";
-import { useChainNow, useLive } from "@/lib/live";
+import { LiveActive, useChainNow, useOnScreen, useRates } from "@/lib/live";
 import { currency, formatMoney, toUsd } from "@/lib/money";
 import { useNetwork } from "@/lib/network";
 import { earnedAt, stateOf } from "@/lib/tabs";
@@ -57,8 +57,19 @@ function Dial({ h, m, ink, working }: { h: number; m: number; ink: string; worki
 }
 
 export function WorldClock() {
+  // Off screen (or in a background tab) the clocks stop ticking; they catch up on return.
+  const ref = useRef<HTMLUListElement>(null);
+  const on = useOnScreen(ref);
+  return (
+    <LiveActive active={on}>
+      <Clocks listRef={ref} />
+    </LiveActive>
+  );
+}
+
+function Clocks({ listRef }: { listRef: RefObject<HTMLUListElement | null> }) {
   const net = useNetwork();
-  const { rates } = useLive();
+  const { rates } = useRates();
   const chainNow = useChainNow();
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
@@ -68,7 +79,7 @@ export function WorldClock() {
   }, []);
 
   return (
-    <ul className={styles.world}>
+    <ul ref={listRef} className={styles.world}>
       {DEMO_FREELANCERS.map((f) => {
         const cur = currency(f.currency);
         const t = now ? localTime(ZONES[f.place]!, now) : { h: 12, m: 0, label: "--:--" };

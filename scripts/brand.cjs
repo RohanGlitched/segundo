@@ -88,7 +88,7 @@ function card(W, H) {
   <div class="copy">
     <div class="lock">${markSvg(1, 52)}<span class="word">Segundo</span></div>
     <h1>Get paid every second you work.</h1>
-    <p>Pay that lands every second, on Monad.</p>
+    <p>Pay that builds up every second, on Monad.</p>
     <div class="serial">№ segundo.world</div>
   </div>
   </body></html>`;

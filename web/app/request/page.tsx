@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Footer } from "@/components/Footer";
 import { Note } from "@/components/Note";
-import { SignInPanel } from "@/components/ui";
+import { SignInGate } from "@/components/SignInGate";
+import gate from "@/components/SignInGate.module.css";
 import { useProfile } from "@/lib/hooks";
 import { useLive } from "@/lib/live";
 import { currency, formatDuration, formatMoney, formatUsd } from "@/lib/money";
@@ -55,9 +56,36 @@ export default function RequestTab() {
         </header>
 
         {!me ? (
-          <SignInPanel title="Sign in to request a tab">
+          <SignInGate
+            title="Sign in to request a tab"
+            level={2}
+            preview={
+              <div className={gate.sample}>
+                <p className={gate.previewLabel}>The link you&apos;ll send looks like this</p>
+                <code className="serial">{origin.replace(/^https?:\/\//, "")}/open?to=0x…&amp;rate=25&amp;budget=200&amp;from=You</code>
+                <p className="soft">
+                  Your client sees your name, {formatUsd(25)} an hour and a {formatUsd(200)} suggested budget (8 h of work) before they sign up, then checks
+                  your address and funds the tab.
+                </p>
+              </div>
+            }
+            steps={[
+              {
+                title: "Sign in.",
+                body:
+                  wallet.accounts === "full"
+                    ? "A passkey account takes a few seconds, or try it with a practice wallet. The link will carry that account's address."
+                    : "With your passkey: no password, no seed phrase. The link will carry your account's address.",
+              },
+              { title: "Set your rate and a budget to suggest.", body: "Add a line about the work if you like, and make the link. Send it by email or chat." },
+              {
+                title: "Your client funds it; you're paid by the second.",
+                body: "They check the address with you and fund the tab. Clock in when you start; pay lands while you work, and you never pay a fee or gas.",
+              },
+            ]}
+          >
             <p>The link carries your Segundo account&apos;s address, so your client&apos;s money can only go to you.</p>
-          </SignInPanel>
+          </SignInGate>
         ) : (
           <div className={styles.layout}>
             <form

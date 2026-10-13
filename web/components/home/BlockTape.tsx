@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { explorerTx } from "@/lib/chain";
-import { useChainNow, useLive } from "@/lib/live";
+import { LiveActive, useChainNow, useLive, useOnScreen } from "@/lib/live";
 import { ago, currency, formatMoney, formatUsd, toUsd } from "@/lib/money";
 import { useNetwork } from "@/lib/network";
 import styles from "./home.module.css";
@@ -11,9 +11,20 @@ type Seen = { number: number; at: number };
 
 /**
  * Monad's blocks as they arrive, one tick each, with the blocks that carried a Segundo payout marked
- * in serial red. Underneath, a receipt tape of the latest real payouts.
+ * in serial red, and a receipt tape of the latest real payouts. `show` draws one of the two on its own.
  */
-export function BlockTape() {
+export function BlockTape({ show = "both" }: { show?: "both" | "tape" | "receipt" }) {
+  // Off screen (or in a background tab) the tape stops following blocks and the clock; it catches up on return.
+  const ref = useRef<HTMLDivElement>(null);
+  const on = useOnScreen(ref);
+  return (
+    <LiveActive active={on}>
+      <Tape show={show} wrapRef={ref} />
+    </LiveActive>
+  );
+}
+
+function Tape({ show, wrapRef }: { show: "both" | "tape" | "receipt"; wrapRef: RefObject<HTMLDivElement | null> }) {
   const { head, rates } = useLive();
   const net = useNetwork();
   const now = useChainNow();
@@ -21,10 +32,12 @@ export function BlockTape() {
   const last = useRef(0);
   const first = useRef<Seen | null>(null);
   const [rate, setRate] = useState<number | null>(null);
+  // On its own the tape runs the full width of the page, so it keeps more blocks.
+  const keep = show === "tape" ? 130 : 48;
 
   useEffect(() => {
     if (!head || head.number <= last.current) return;
-    const from = last.current ? Math.max(last.current + 1, head.number - 40) : head.number - 40;
+    const from = last.current ? Math.max(last.current + 1, head.number - keep) : head.number - keep;
     last.current = head.number;
     if (!first.current) first.current = { number: head.number, at: Date.now() };
     else {
@@ -34,14 +47,16 @@ export function BlockTape() {
     setSeen((old) => {
       const add: Seen[] = [];
       for (let n = from; n <= head.number; n++) add.push({ number: n, at: Date.now() });
-      return [...old, ...add].slice(-48);
+      return [...old, ...add].slice(-keep);
     });
-  }, [head]);
+  }, [head, keep]);
 
   const paidBlocks = new Set(net?.recent.map((r) => r.block) ?? []);
 
   return (
-    <div className={styles.tapeWrap}>
+    <div ref={wrapRef} className={`${styles.tapeWrap} ${show !== "both" ? styles.tapeOne : ""}`}>
+      {show !== "receipt" && (
+      <>
       <div className={styles.blocks} aria-label={head ? `Latest Monad block ${head.number.toLocaleString("en-US")}` : "Waiting for Monad blocks"}>
         {seen.map((b) => (
           <span key={b.number} className={`${styles.block} ${paidBlocks.has(b.number) ? styles.blockPaid : ""}`} title={`Block ${b.number}`} />
@@ -57,8 +72,11 @@ export function BlockTape() {
           "Listening for Monad blocks…"
         )}
       </p>
+      </>
+      )}
 
-      <div className={styles.receipt} role="log" aria-label="Latest payouts">
+      {show !== "tape" && (
+      <div className={styles.receipt} role="group" aria-label="Latest payouts">
         <p className={styles.receiptHead}>Latest payouts on Segundo</p>
         {net === undefined ? (
           <p className={styles.receiptLine}>Reading the chain…</p>
@@ -83,6 +101,7 @@ export function BlockTape() {
           })
         )}
       </div>
+      )}
     </div>
   );
 }

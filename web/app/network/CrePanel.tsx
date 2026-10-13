@@ -83,10 +83,13 @@ export function CrePanel() {
               <dt>Reports accepted</dt>
               <dd>{cre.reports != null ? cre.reports.toLocaleString("en-US") : "—"}</dd>
             </div>
-            <div>
-              <dt>Tabs settled by them</dt>
-              <dd>{cre.tabsSettledTotal != null ? cre.tabsSettledTotal.toLocaleString("en-US") : "—"}</dd>
-            </div>
+            {/* Only HyperRPC can count every report's tabs; the public RPC fallback can't, so the row waits for it. */}
+            {cre.tabsSettledTotal != null && (
+              <div>
+                <dt>Tabs settled by them</dt>
+                <dd>{cre.tabsSettledTotal.toLocaleString("en-US")}</dd>
+              </div>
+            )}
             <div>
               <dt>Last report</dt>
               <dd>
@@ -101,7 +104,7 @@ export function CrePanel() {
           </dl>
           {rates.length > 0 && (
             <>
-              <p className={styles.creRatesHead}>Rates the network agreed on, for one US dollar</p>
+              <p className={styles.creRatesHead}>Rates from Segundo&apos;s CRE workflow, the median of three sources, for one US dollar</p>
               <ul className={styles.creRates}>
                 {rates.map((r) => (
                   <li key={r.cur}>
@@ -125,8 +128,8 @@ export function CrePanel() {
         </p>
       )}
       <p className={styles.certFoot}>
-        Testnet. The workflow runs through Chainlink&apos;s CRE simulator with broadcast, so every report is a real transaction on Monad; Segundo&apos;s own
-        keeper settles too.
+        Testnet. The workflow runs every two hours in Chainlink&apos;s CRE simulator with broadcast, through the mock forwarder rather than a live
+        oracle network, so every report is a real transaction on Monad sent by Segundo&apos;s own key; Segundo&apos;s own keeper settles too.
       </p>
     </aside>
   );

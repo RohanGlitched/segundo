@@ -249,6 +249,28 @@
   border-bottom: 1px dashed var(--rule);
   vertical-align: top;
 }
+/* "What asks for your passkey": a small stamp per rule, inked like a rubber stamp on a ledger. */
+.ask {
+  display: inline-block;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  padding: 2px 8px;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+}
+.askFree {
+  color: var(--ok);
+}
+.askOnce {
+  color: var(--ink-soft);
+  border-style: dashed;
+}
+.askAgain {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+}
 .swatch {
   display: inline-block;
   width: 10px;

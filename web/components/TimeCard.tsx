@@ -23,7 +23,25 @@ const hhmm = (t: number) => new Date(t * 1000).toLocaleTimeString([], { hour: "2
  * money that reached the freelancer as a rising line with a tick for each payout. Built from the
  * pay stub, so every mark is a transaction on Monad.
  */
-export function TimeCard({ lines, now, earnedUsd, running, partial }: { lines: StubLine[]; now: number; earnedUsd: number; running: boolean; partial?: boolean }) {
+export function TimeCard({
+  lines,
+  now,
+  earnedUsd,
+  running,
+  partial,
+  loading,
+  since,
+}: {
+  lines: StubLine[];
+  now: number;
+  earnedUsd: number;
+  running: boolean;
+  partial?: boolean;
+  /** The history is still being read: draw what's in, but don't total it yet. */
+  loading?: boolean;
+  /** When the current session started (the tab's own `since`, unix seconds), for a shift that began before the lines read. */
+  since?: number;
+}) {
   // The card measures itself before paint and draws at that width: the chart fits inside it at any size, and text
   // stays at its CSS size instead of shrinking with a fixed-width drawing.
   const box = useRef<HTMLElement>(null);
@@ -54,11 +72,19 @@ export function TimeCard({ lines, now, earnedUsd, running, partial }: { lines: S
   const holds: [number, number][] = [];
   let inAt: number | null = null;
   let heldAt: number | null = null;
+  // Whether any clock change has been read yet: the first one can end a session that began before these lines.
+  let clockSeen = false;
   for (const e of events) {
-    if (e.kind === "in") inAt = e.time;
-    if ((e.kind === "out" || e.kind === "held" || e.kind === "closed") && inAt != null) {
-      work.push([inAt, e.time]);
+    if (e.kind === "in") {
+      inAt = e.time;
+      clockSeen = true;
+    }
+    if (e.kind === "out" || e.kind === "held" || e.kind === "closed") {
+      if (inAt != null) work.push([inAt, e.time]);
+      // Every stop (clock out, pause, close) emits ClockedOut, so only that line can end a shift begun before these lines.
+      else if (!clockSeen && e.kind === "out") work.push([t0, e.time]);
       inAt = null;
+      if (e.kind === "out") clockSeen = true;
     }
     if (e.kind === "held") heldAt = e.time;
     if ((e.kind === "resumed" || e.kind === "closed") && heldAt != null) {
@@ -69,8 +95,10 @@ export function TimeCard({ lines, now, earnedUsd, running, partial }: { lines: S
   // A session with no end in the lines read so far: running, it reaches now; stopped, it lasted at least until the
   // newest line (a payout or the close that ended it), never zero seconds.
   if (inAt != null) work.push([inAt, running ? t1 : Math.max(inAt, events.at(-1)!.time)]);
-  // A long shift can start before the stretch of history on screen: the clock is running, so it fills the card.
-  else if (running) work.push([t0, t1]);
+  // A long shift can start before the stretch of history on screen: the clock is running, so it fills the card from
+  // the start of the shift (the tab's own clock-in time) or from the first line read, whichever is later.
+  else if (running) work.push([since && since > t0 && since < t1 ? since : t0, t1]);
+  const shiftBefore = running && inAt == null && since != null && since > 0 && since < t0 ? since : null;
   if (heldAt != null) holds.push([heldAt, t1]);
 
   let cum = 0;
@@ -92,7 +120,12 @@ export function TimeCard({ lines, now, earnedUsd, running, partial }: { lines: S
 
   return (
     <figure className={styles.card} ref={box}>
-      <svg viewBox={`0 0 ${W} ${H}`} className={styles.svg} role="img" aria-label={`Time card: ${workedText} on the clock across ${sessions}; ${formatUsd(cum, 4)} paid out.`}>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className={styles.svg}
+        role="img"
+        aria-label={loading ? "Time card: reading the history from Monad." : `Time card: ${workedText} on the clock across ${sessions}; ${formatUsd(cum, 4)} paid out.`}
+      >
         <defs>
           <pattern id="tc-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
             <line x1="0" y1="0" x2="0" y2="6" stroke="var(--ink-soft)" strokeWidth="1.2" opacity="0.5" />
@@ -124,13 +157,22 @@ export function TimeCard({ lines, now, earnedUsd, running, partial }: { lines: S
         <text x={W - R} y={H - 4} textAnchor="end" className={styles.lab}>
           {running ? "now" : hhmm(t1)}
         </text>
-        <text x={W - R} y={y(cum) - 8} textAnchor="end" className={styles.val}>
-          {formatUsd(cum, cum < 1 ? 4 : 2)} paid out
-        </text>
+        {!loading && (
+          <text x={W - R} y={y(cum) - 8} textAnchor="end" className={styles.val}>
+            {formatUsd(cum, cum < 1 ? 4 : 2)} paid out
+          </text>
+        )}
       </svg>
-      <figcaption className={styles.cap}>
-        {work.length === 0 && partial ? "No clock changes in this stretch of the history" : `${partial ? "In this stretch: " : ""}${workedText} on the clock across ${sessions}`}
-        {holds.length ? `, paused ${holds.length} ${holds.length === 1 ? "time" : "times"}` : ""}. Each tick is a payout transaction.
+      <figcaption className={styles.cap} aria-live="polite">
+        {loading ? (
+          "Reading history…"
+        ) : (
+          <>
+            {work.length === 0 && partial ? "No clock changes in this stretch of the history" : `${partial ? "In this stretch: " : ""}${workedText} on the clock across ${sessions}`}
+            {holds.length ? `, paused ${holds.length} ${holds.length === 1 ? "time" : "times"}` : ""}
+            {shiftBefore != null ? `; the current shift began at ${hhmm(shiftBefore)}` : ""}. Each tick is a payout transaction.
+          </>
+        )}
       </figcaption>
     </figure>
   );

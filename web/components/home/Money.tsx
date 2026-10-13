@@ -9,7 +9,7 @@ export function Money() {
         <p className={`denom ${styles.moneyDenom}`}>
           1<span>%</span>
         </p>
-        <p className={styles.moneyLine}>of what the client spends. Unspent budget and its fee come back. Freelancers pay nothing.</p>
+        <p className={styles.moneyLine}>of what the client spends. Unspent budget and its fee come back. Freelancers pay nothing to be paid.</p>
       </div>
       <div className={styles.moneyText}>
         <dl className={styles.moneyStub} aria-label="A $500 tab, $400 of it used">
@@ -26,15 +26,17 @@ export function Money() {
             <dd className="denom">$101.00</dd>
           </div>
           <div>
-            <dt>The freelancer pays</dt>
+            <dt>The freelancer pays to be paid</dt>
             <dd className="denom">$0.00</dd>
           </div>
         </dl>
         <p className={styles.moneyNote}>
-          A $500 tab with $400 used. The fee is live on testnet: it is signed in the same step as the tab and lands in a public treasury on Monad. The tab
-          contract itself has no fee switch, and anyone can use it directly; the 1% pays for the gasless, passkey and cash-out service around it. After it
-          come a share of the yield on budgets waiting in tabs, a margin on local cash-out, and later, advances against income the chain has already
-          verified.
+          A $500 tab with $400 used. The fee is live on testnet: it is signed in the same step as the tab and lands in a public treasury on Monad. The
+          tab contract itself has no fee switch; the 1% pays for the gasless, passkey and cash-out service around it.
+        </p>
+        <p className={styles.moneyNext}>
+          <span>Next:</span> a share of the yield on budgets waiting in tabs, a margin on cash-out to local money (shown before you confirm), and
+          advances against income the chain has already verified.
         </p>
         <p className={styles.moneyLinks}>
           <Link href="/business" className="btn primary">

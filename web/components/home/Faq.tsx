@@ -19,7 +19,7 @@ const QA: { q: string; a: ReactNode }[] = [
   },
   {
     q: "What does it cost?",
-    a: "Freelancers pay nothing: every second of pay reaches you in full. Clients pay 1% of what they spend. The fee is signed with each budget or top-up, in the same step and with no gas, and when you close the tab the unspent budget and its fee come back. Fund $100, use $60, and you pay $60.60 in all.",
+    a: "Freelancers pay nothing to be paid: every second of pay reaches you in full. Clients pay 1% of what they spend. The fee is signed with each budget or top-up, in the same step and with no gas, and when you close the tab the unspent budget and its fee come back. Fund $100, use $60, and you pay $60.60 in all.",
   },
   {
     q: "How does Segundo make money?",
@@ -70,15 +70,38 @@ const QA: { q: string; a: ReactNode }[] = [
   },
 ];
 
+/** The objections people raise first; the rest wait behind "More questions". */
+const FIRST = [
+  "Is this real money?",
+  "What does it cost?",
+  "What if the client disappears halfway through?",
+  "What stops a freelancer clocking in and doing nothing?",
+  "Do I need a crypto wallet or any MON?",
+];
+
+function Item({ x }: { x: (typeof QA)[number] }) {
+  return (
+    <details className={styles.qa}>
+      <summary>{x.q}</summary>
+      <p>{x.a}</p>
+    </details>
+  );
+}
+
 export function Faq() {
+  const first = FIRST.map((q) => QA.find((x) => x.q === q)!).filter(Boolean);
+  const rest = QA.filter((x) => !FIRST.includes(x.q));
   return (
     <div className={styles.faq}>
-      {QA.map((x) => (
-        <details key={x.q} className={styles.qa}>
-          <summary>{x.q}</summary>
-          <p>{x.a}</p>
-        </details>
+      {first.map((x) => (
+        <Item key={x.q} x={x} />
       ))}
+      <details className={styles.more}>
+        <summary>More questions ({rest.length})</summary>
+        {rest.map((x) => (
+          <Item key={x.q} x={x} />
+        ))}
+      </details>
     </div>
   );
 }

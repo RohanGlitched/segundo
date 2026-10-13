@@ -37,12 +37,18 @@ addresses are lower case.
 | `Fee` | AUSD transfer into the treasury | linked (paired with an open or top-up) or not, tab, refunded in full |
 | `FeeRefund` | AUSD transfer out of the treasury to a fee payer | kind (`close`, `failed`, `other`), tab, fee |
 | `RefundDue` | closed tab still owed a fee refund | expected amount; removed when the refund lands |
-| `RateSnapshot` | CRE report's `RatesPosted` | currencies, rates (units per 1 USD times 1e6), DON time |
-| `CurrencyRate` | currency | latest on-chain rate |
+| `RateSnapshot` | CRE report's `RatesPosted` | currencies, rates (units per 1 USD times 1e6), report time, tx. Every report, whoever sent it (see below) |
+| `CurrencyRate` | currency | latest on-chain rate, from any sender |
 | `KeeperRun` | CRE report's `Kept` | tabs settled, AUSD paid, tabs skipped |
 | `SkippedSettle` | `SettleSkipped` | tab the keeper couldn't pay in that run |
 | `DailyStat` | UTC day | payouts, paid, fees, refunds, tabs opened/closed, funded, shifts, seconds worked, active and new people |
 | `Totals` | one row, id `totals` | running totals of all of the above, plus `netFees` |
+
+**CRE rates are unfiltered here.** On testnet, reports reach SegundoKeeper through Chainlink's MockKeystoneForwarder, which
+anyone can call. This indexer records every `RatesPosted` and doesn't store the transaction sender, so `RateSnapshot` and
+`CurrencyRate` can include rates someone else posted. Check a snapshot's `tx` sender against the CRE loop key
+`0x022875424E1556FEC66Fdc5A7D52820dea4dBb8D` before trusting it. The web app does this itself in `web/lib/cre.ts` and
+doesn't read rates from this indexer. Filtering here would mean adding `from` to `field_selection` and redeploying.
 
 ### How fees are counted
 

@@ -3,6 +3,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { Footer } from "@/components/Footer";
 import { TILL, explorerAddress, monadTestnet } from "@/lib/chain";
 import { DEMO_FREELANCERS } from "@/lib/demo";
+import { PROMPT_FREE_LABEL } from "@/lib/mera-policy";
 import { bandPaths, bandsFor, ringPath, ringsFor, seedOf } from "@/lib/guilloche";
 import styles from "./keys.module.css";
 
@@ -42,7 +43,7 @@ const FAMILIES: Family[] = [
         wallet understands; nothing else should share that exposure, so nothing else is made from it.
       </>
     ),
-    prompt: "When you sign in, and after 15 minutes idle",
+    prompt: `When you sign in, after 15 minutes idle, and again for any send, open or top-up over ${PROMPT_FREE_LABEL}`,
     kept: "Page memory, while you're signed in",
   },
   {
@@ -64,8 +65,8 @@ const FAMILIES: Family[] = [
         never needs the key that moves money.
       </>
     ),
-    prompt: "Its own prompt, when you open your details",
-    kept: "Page memory, until the session locks",
+    prompt: "Its own prompt, every time you open your details, even mid-session",
+    kept: "Page memory for editing, until the session locks",
   },
   {
     id: "invite",
@@ -108,8 +109,72 @@ const FAMILIES: Family[] = [
         that guards your stored details.
       </>
     ),
-    prompt: "Shares the sealing prompt: one fingerprint for both",
+    prompt: "Every time you share: one fingerprint for it and the sealing key",
     kept: "Page memory, until the session locks",
+  },
+];
+
+type Rule = { action: ReactNode; asks: "free" | "again" | "always" | "once" | "none"; why: ReactNode };
+
+const ASKS: Record<Rule["asks"], string> = {
+  free: "No prompt",
+  once: "Once a session",
+  again: "Asks again",
+  always: "Every time",
+  none: "Nothing to export",
+};
+
+/** What asks for the passkey inside an unlocked signing session. Mirrors lib/wallet.tsx (PROMPT_FREE_UNITS) and lib/seal.ts. */
+const RULES: Rule[] = [
+  {
+    action: "Clock in, clock out, pause pay, change the rate",
+    asks: "free",
+    why: "The contract decides where the money goes. These only start, stop or price the clock on a tab you are already part of.",
+  },
+  {
+    action: "Pay out what's earned, or close a tab",
+    asks: "free",
+    why: "Pays the freelancer only what the clock earned and sends the rest back to the client. Nothing can go to anyone else.",
+  },
+  {
+    action: "Your name, place and currency",
+    asks: "free",
+    why: "Public on Monad anyway, and you can change it back at any time.",
+  },
+  {
+    action: `Send, open a tab or top one up, up to ${PROMPT_FREE_LABEL}`,
+    asks: "free",
+    why: "Everyday amounts. The signing session covers them so paying feels like tapping a card.",
+  },
+  {
+    action: `Send over ${PROMPT_FREE_LABEL}: to an address, an email, a link or a cash-out`,
+    asks: "again",
+    why: "The money leaves your account for someone the contract can't check. One fresh fingerprint per send.",
+  },
+  {
+    action: `Open a tab or top one up over ${PROMPT_FREE_LABEL}`,
+    asks: "again",
+    why: "A large budget is committed to one person. The permit that moves it needs a fresh fingerprint.",
+  },
+  {
+    action: "Open your sealed details, on your account or an income statement",
+    asks: "always",
+    why: "Your tax ID and bank account shouldn't be one tap away for whoever picks up an unlocked phone.",
+  },
+  {
+    action: "Share details with a landlord or bank",
+    asks: "always",
+    why: "One fingerprint makes the disclosure key and opens your details together (two PRF salts, one prompt).",
+  },
+  {
+    action: "Make an invite link, or rebuild one",
+    asks: "once",
+    why: "The invite root stays in page memory until the session locks; each tab's key is made from it.",
+  },
+  {
+    action: "Export a key",
+    asks: "none",
+    why: "A passkey account has nothing stored to export: every key is computed again from the passkey. Email accounts export through Privy's own window.",
   },
 ];
 
@@ -255,6 +320,50 @@ export default function Keys() {
               ))}
             </tbody>
           </table>
+        </section>
+
+        {/* ------------------------------------------------------------ prompts */}
+        <section className={`wrap ${styles.section}`} id="prompts" aria-labelledby="prompts-h">
+          <div className={styles.sectionHead}>
+            <p className={styles.kicker}>Signing sessions</p>
+            <h2 id="prompts-h" className={styles.h2}>
+              What asks for your passkey
+            </h2>
+            <p className={styles.sub}>
+              One fingerprint opens a signing session: the wallet key stays in page memory and routine actions sign with no prompt. The session ends after
+              15 minutes idle, 5 minutes in the background, or when you reload or close the page. Some actions ask again even inside it.
+            </p>
+          </div>
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th scope="col">Action</th>
+                <th scope="col">Inside an unlocked session</th>
+                <th scope="col">Why</th>
+              </tr>
+            </thead>
+            <tbody>
+              {RULES.map((r, i) => (
+                <tr key={i}>
+                  <td data-label="Action">
+                    <b>{r.action}</b>
+                  </td>
+                  <td data-label="Inside an unlocked session">
+                    <span className={`${styles.ask} ${r.asks === "free" ? styles.askFree : r.asks === "once" || r.asks === "none" ? styles.askOnce : styles.askAgain}`}>
+                      {ASKS[r.asks]}
+                    </span>
+                  </td>
+                  <td data-label="Why">{r.why}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className={styles.small}>
+            The amount rule lives in the signer, not on the buttons: before Mera signs an AUSD transfer or permit, Segundo reads its amount, and over{" "}
+            {PROMPT_FREE_LABEL} it asks the passkey for a fresh assertion that must re-derive the same account. Segundo&apos;s 1% fee rides with the open
+            or top-up it belongs to. A prompt you finished in the last minute (signing in, unlocking, making an invite key) counts once, so nothing asks
+            twice in a row. Email and practice wallets have no passkey and work as before.
+          </p>
         </section>
 
         {/* ------------------------------------------------------------ invites */}
@@ -411,10 +520,12 @@ export default function Keys() {
               </p>
             </li>
             <li>
-              <h3>Nothing to back up</h3>
+              <h3>One key to keep, and your details on any device</h3>
               <p>
-                No key is stored: each is computed when needed and dropped when the session locks. Your passkey, synced by your phone&apos;s password manager,
-                is the only thing to keep.
+                No key is stored: each is computed when needed and dropped when the session locks, and your passkey, synced by your phone&apos;s password
+                manager, brings every one of them back on a new device. Sealed details are the one thing that isn&apos;t a key: the ciphertext is kept in your
+                browser and on Segundo&apos;s server, which can&apos;t read it, so any device you sign in on with the same passkey opens it. The backup file,
+                the same ciphertext, still restores it without the server.
               </p>
             </li>
           </ul>
@@ -433,7 +544,7 @@ export default function Keys() {
               <ul>
                 <li>Your passkey&apos;s secret, or any PRF output</li>
                 <li>Any of the four keys</li>
-                <li>Your sealed details, sealed or open</li>
+                <li>Your details open, or the key that seals them</li>
                 <li>An invite link&apos;s key, or a verifier&apos;s reply</li>
               </ul>
             </div>
@@ -441,7 +552,7 @@ export default function Keys() {
               <h3>Your browser keeps</h3>
               <ul>
                 <li>Which passkey is yours and your public address</li>
-                <li>Your details as ciphertext</li>
+                <li>Your details as ciphertext, also kept on Segundo&apos;s server so a new device finds them (the backup file restores them too)</li>
                 <li>Invite links you made, so you don&apos;t need to rebuild them</li>
                 <li>The public signature that ties your disclosure key to your account</li>
               </ul>

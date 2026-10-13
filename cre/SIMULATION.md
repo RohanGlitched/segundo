@@ -53,7 +53,7 @@ The transaction emitted these events, in order:
 
 | Contract | Event | Decoded |
 | --- | --- | --- |
-| SegundoKeeper | `RatesPosted` | at 1791896491 (DON time, 13:01:31 UTC), the six rates below |
+| SegundoKeeper | `RatesPosted` | at 1791896491 (report time from the simulator's clock, 13:01:31 UTC), the six rates below |
 | Till | `Activity`, `Settled` + AUSD `Transfer` | tab **4** → `0x8340…4d97`: 1.708333 AUSD |
 | Till | `Activity`, `Settled` + AUSD `Transfer` | tab **5** → `0x0117…09a9`: 1.480555 AUSD |
 | Till | `Activity`, `Settled` + AUSD `Transfer` | tab **2** → `0x9298…4be0`: 1.050000 AUSD |

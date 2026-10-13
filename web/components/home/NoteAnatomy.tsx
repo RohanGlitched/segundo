@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useLive } from "@/lib/live";
+import { useEffect, useRef, useState } from "react";
+import { peekHead, useOnScreen, useRates } from "@/lib/live";
 import { currency } from "@/lib/money";
 import { Note } from "../Note";
 import styles from "./home.module.css";
@@ -18,18 +18,28 @@ const PARTS = [
 ];
 
 export function NoteAnatomy() {
-  const { rates, head } = useLive();
+  const { rates } = useRates();
   const [active, setActive] = useState<string | null>(null);
   const [minutes, setMinutes] = useState(17.4);
+  const [block, setBlock] = useState<number | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+  const on = useOnScreen(ref);
   // A slow, honest specimen: the amount moves at the stated rate so the parts can be seen working.
+  // One tick a second also picks up the latest block; nothing ticks while the note is off screen or the tab hidden.
   useEffect(() => {
-    const t = setInterval(() => setMinutes((m) => (m > 180 ? 17.4 : m + 1 / 60)), 1000);
+    if (!on) return;
+    const tick = () => {
+      setMinutes((m) => (m > 180 ? 17.4 : m + 1 / 60));
+      setBlock(peekHead()?.number ?? null);
+    };
+    setBlock(peekHead()?.number ?? null);
+    const t = setInterval(tick, 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [on]);
   const rate = 36;
 
   return (
-    <div className={styles.anatomy}>
+    <div ref={ref} className={styles.anatomy}>
       <div className={styles.anatomyNote}>
         <Note
           id={128}
@@ -42,7 +52,7 @@ export function NoteAnatomy() {
           hours={minutes / 60}
           live
           status={`Specimen: on the clock for ${Math.floor(minutes)} min`}
-          serialLine={`block ${head ? head.number.toLocaleString("en-US") : "…"}, a specimen note`}
+          serialLine={`block ${block ? block.toLocaleString("en-US") : "…"}, a specimen note`}
         />
         {PARTS.map((p) => (
           <span
