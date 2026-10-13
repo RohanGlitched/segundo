@@ -31,6 +31,8 @@ SegundoKeeper accepts reports only from them, so nobody else can post rates.
 `cre workflow simulate --broadcast` ran this workflow against Monad testnet on 13 October 2026. Full output: [SIMULATION.md](SIMULATION.md).
 
 - **Transaction:** [`0x17d86a59…975d03`](https://testnet.monadscan.com/tx/0x17d86a590a0ed22bc60d941db6d0b0e462a449a6f7fe48a43704d97ebe975d03), block 70688328, success.
+- **Second run, from the workflow's own key:** [`0x02b79463…ef1418`](https://testnet.monadscan.com/tx/0x02b79463789b20c0d609387ceb8789a1c7e446daa5c32871bf634e42d5ef1418), block 70700945: three tabs settled (11.98 AUSD) and six rates posted.
+- **Since then** `scripts/cre-loop.sh` broadcasts a report every 30 minutes; `GET https://segundo.world/api/cre` shows the count, the last block and the rates, and /send, /cashout and the income statements quote those on-chain rates.
 - **Route:** keeper wallet → CRE MockKeystoneForwarder → `SegundoKeeper.onReport`. The forwarder's `ReportProcessed` result is `true`.
 - **Rates:** `RatesPosted` with six rates the DON agreed on: PHP 62.770608, NGN 1331.514171, INR 95.78, BRL 4.989911, KES 129.717362 and EUR 0.89437 per USD.
 - **Payments:** `Till.settleMany` paid three running tabs (2, 4 and 5) a total of 4.238888 AUSD. That shows as three `Settled` events and three AUSD transfers to the freelancers.
@@ -114,7 +116,7 @@ cd contracts && forge build && forge test
 forge test --mt test_fork --fork-url https://testnet-rpc.monad.xyz   # against the live Till
 ```
 
-`simulate.sh` reads `KEEPER_KEY` from `web/.env.local` and passes it to the CLI as `CRE_ETH_PRIVATE_KEY`, only
+`simulate.sh` signs with the workflow's own key (`keys/cre.json`, falling back to `KEEPER_KEY` from `web/.env.local`) and passes it to the CLI as `CRE_ETH_PRIVATE_KEY`, only
 for that process. With `--broadcast` the keeper's test MON pays for gas, and the transaction goes to the mock
 forwarder, which calls `SegundoKeeper.onReport`. The results are in [SIMULATION.md](SIMULATION.md).
 

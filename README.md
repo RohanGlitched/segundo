@@ -200,7 +200,7 @@ Monad's public RPC caps `eth_getLogs` at 100 blocks. HyperRPC answers a log quer
 - **Income statements** at `/proof/<address>`, the record the disclosure flow above binds to.
 - **Fee refunds at close** (`web/lib/refund.ts`) fall back to the ledger for long tabs whose history is too long to walk block by block.
 
-If HyperRPC is unreachable the routes fall back to a short public-RPC window and say `source: "rpc"`. [`indexer/`](indexer) holds an Envio HyperIndex project over HyperSync for the same ledger (tabs, payouts, shifts, fees, fee refunds and the CRE workflow's rates; 5 tests); the live site reads HyperRPC.
+If HyperRPC is unreachable the routes fall back to a short public-RPC window and say `source: "rpc"`. [`indexer/`](indexer) is an Envio HyperIndex project for the same ledger (tabs, people, payouts, shifts, fees, fee refunds, daily stats and the CRE workflow's rates; 5 tests), **deployed on Envio's hosted service and synced over HyperSync** (2,800+ events): GraphQL at https://indexer.dev.hyperindex.xyz/bd7a257/v1/graphql — example queries in [`indexer/QUERIES.md`](indexer/QUERIES.md). The live site reads HyperRPC.
 
 ### Chainlink CRE: a decentralised keeper and an FX oracle
 
