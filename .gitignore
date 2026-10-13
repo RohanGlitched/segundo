@@ -6,3 +6,4 @@ contracts/cache/
 contracts/broadcast/
 
 .vercel
+!indexer/.env.example

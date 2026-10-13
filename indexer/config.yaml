@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=./node_modules/envio/evm.schema.json
+name: segundo-indexer
+description: >-
+  Segundo's on-chain ledger on Monad testnet: every tab, payout, shift, client fee and fee refund, plus the
+  exchange rates Segundo's Chainlink CRE workflow posts on chain. Read through Envio HyperSync.
+# Addresses are stored and matched in lower case, so the web app can query by `address.toLowerCase()`.
+address_format: lowercase
+# Every handler records the transaction hash (block number and time come with every event).
+field_selection:
+  transaction_fields: [hash]
+
+contracts:
+  # The tab contract, deployed under Segundo's working name, Till.
+  - name: Till
+    events:
+      - event: "Opened(uint256 indexed id, address indexed payer, address indexed payee, uint64 rate, uint128 budget, address invite, string memo)"
+      - event: "Claimed(uint256 indexed id, address indexed payee)"
+      - event: "ClockedIn(uint256 indexed id, uint64 at)"
+      - event: "ClockedOut(uint256 indexed id, address indexed by, uint128 banked)"
+      - event: "ToppedUp(uint256 indexed id, uint128 amount, uint128 budget)"
+      - event: "Settled(uint256 indexed id, address indexed payee, uint128 amount, uint128 paid)"
+      - event: "Closed(uint256 indexed id, uint128 paid, uint128 refunded)"
+      - event: "Held(uint256 indexed id, bool held)"
+      - event: "RateChanged(uint256 indexed id, uint64 rate)"
+      - event: "ProfileSet(address indexed who, string name, string place, bytes3 currency)"
+  # Agora AUSD. Only transfers into or out of Segundo's treasury are read (see the `where` filter in
+  # src/handlers/AUSD.ts): the 1% client fee comes in, fee refunds go out.
+  - name: AUSD
+    events:
+      - event: "Transfer(address indexed from, address indexed to, uint256 value)"
+  # Receiver of Segundo's Chainlink CRE workflow: posts exchange rates and settles tabs that are owed.
+  - name: SegundoKeeper
+    events:
+      - event: "RatesPosted(uint64 indexed at, bytes3[] currencies, uint64[] ratesE6)"
+      - event: "Kept(uint64 indexed at, uint256 tabs, uint256 paid)"
+      - event: "SettleSkipped(uint256 indexed id)"
+
+chains:
+  - id: 10143 # Monad testnet (HyperSync: https://monad-testnet.hypersync.xyz)
+    # Till's deployment block. Nothing older can hold a Segundo event.
+    start_block: 68119428
+    contracts:
+      - name: Till
+        address: "0xeb6c2c519c9bcc4495364c34ac116c20098113d1"
+      - name: AUSD
+        address: "0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC"
+      - name: SegundoKeeper
+        address: "0xFEf8d6A7aF00ACd33FDdd2Ef8800cab78164d80D"
+        # SegundoKeeper's deployment block (tx 0xcce52a96…).
+        start_block: 70682832

@@ -1,0 +1,339 @@
+# Segundo's ledger. Money is AUSD base units (6 decimals) as BigInt. Times are unix seconds (block time).
+# Days are UTC, "YYYY-MM-DD". Addresses are lower case.
+
+"""
+A tab: a client's budget for one freelancer, paid out by the second while the freelancer is clocked in.
+"""
+type Tab {
+  "Tab number in the Till contract, as a string."
+  id: ID!
+  number: BigInt!
+  payer: Person!
+  "Unset until an invited freelancer claims the tab."
+  payee: Person
+  "Invite key for a tab opened by link; cleared once claimed."
+  invite: String
+  memo: String!
+  "Hourly rate, AUSD units per hour."
+  rate: BigInt!
+  "Everything the client put in: the opening budget plus top-ups."
+  budget: BigInt!
+  toppedUp: BigInt!
+  topUps: Int!
+  "Paid out to the freelancer so far."
+  paid: BigInt!
+  "Unspent budget returned to the client when the tab closed."
+  refunded: BigInt!
+  "Earned and banked at the last clock-out."
+  banked: BigInt!
+  open: Boolean!
+  closed: Boolean!
+  held: Boolean!
+  clockedIn: Boolean!
+  shiftCount: Int!
+  secondsWorked: BigInt!
+  payoutCount: Int!
+  rateChanges: Int!
+  "Segundo's 1% client fees collected on this tab's open and top-ups."
+  feePaid: BigInt!
+  "Fees sent back to the client (1% of the unspent budget at close)."
+  feeRefunded: BigInt!
+  openedAt: Int!
+  openedBlock: Int!
+  openedTx: String!
+  claimedAt: Int
+  closedAt: Int
+  closedBlock: Int
+  lastActivityAt: Int!
+  "Open shift, while clocked in."
+  currentShift: Shift
+  payouts: [Payout!]! @derivedFrom(field: "tab")
+  shifts: [Shift!]! @derivedFrom(field: "tab")
+  fees: [Fee!]! @derivedFrom(field: "tab")
+  feeRefunds: [FeeRefund!]! @derivedFrom(field: "tab")
+  fundings: [Funding!]! @derivedFrom(field: "tab")
+}
+
+"""
+Anyone who has opened, claimed or been paid on a tab, or set a profile.
+"""
+type Person {
+  "Address, lower case."
+  id: ID!
+  name: String
+  place: String
+  "ISO currency code from the profile, e.g. PHP."
+  currency: String
+  "Paid to this person as a freelancer."
+  earned: BigInt!
+  payoutsReceived: Int!
+  "Paid by this person, as a client, to their freelancers."
+  paidOut: BigInt!
+  "Budgets and top-ups this person put into tabs."
+  funded: BigInt!
+  "Unspent budget returned to this person when their tabs closed."
+  refunded: BigInt!
+  feesPaid: BigInt!
+  feesRefunded: BigInt!
+  tabsAsClient: Int!
+  tabsAsFreelancer: Int!
+  "Distinct clients who have opened a tab for this person."
+  clients: Int!
+  "Distinct freelancers this person has opened a tab for."
+  freelancers: Int!
+  shifts: Int!
+  secondsWorked: BigInt!
+  firstSeen: Int!
+  firstSeenBlock: Int!
+  lastActive: Int!
+  tabsPaying: [Tab!]! @derivedFrom(field: "payer")
+  tabsEarning: [Tab!]! @derivedFrom(field: "payee")
+  payouts: [Payout!]! @derivedFrom(field: "payee")
+  feePayments: [Fee!]! @derivedFrom(field: "payer")
+}
+
+"""
+One client and one freelancer, across every tab between them.
+"""
+type Engagement {
+  "payer-payee"
+  id: ID!
+  payer: Person!
+  payee: Person!
+  tabs: Int!
+  paid: BigInt!
+  firstAt: Int!
+}
+
+"""
+Money reaching a freelancer: one Settled event (a keeper run, a clock-out, a close or anyone settling).
+"""
+type Payout {
+  "txHash-logIndex"
+  id: ID!
+  tab: Tab!
+  payee: Person!
+  payer: Person!
+  amount: BigInt!
+  "Paid on the tab so far, including this payout."
+  paidToDate: BigInt!
+  timestamp: Int! @index
+  block: Int!
+  day: String!
+  tx: String!
+}
+
+"""
+Time on the clock, from ClockedIn to ClockedOut.
+"""
+type Shift {
+  "tab-n"
+  id: ID!
+  tab: Tab!
+  payee: Person!
+  start: Int!
+  startBlock: Int!
+  end: Int
+  endBlock: Int
+  seconds: BigInt
+  "Banked on the tab at clock-in; earned = banked at clock-out minus this."
+  bankedAtStart: BigInt!
+  earned: BigInt
+  "Hourly rate when the shift started (rates only change while clocked out)."
+  rate: BigInt!
+  "Who stopped the clock: the freelancer, or the client (directly, by a hold, or by closing)."
+  endedBy: String
+}
+
+"""
+An open or top-up: money a client put into a tab. Kept so each 1% fee can be paired with what it paid for.
+"""
+type Funding {
+  "txHash-logIndex"
+  id: ID!
+  tab: Tab!
+  payer: String! @index
+  kind: String!
+  amount: BigInt!
+  "ceil(amount / 100)"
+  expectedFee: BigInt!
+  fee: Fee
+  block: Int!
+  timestamp: Int!
+}
+
+"""
+AUSD into Segundo's treasury. `linked` is true when it pairs with an open or top-up by the same client
+(within 600 blocks, amount = ceil(funding / 100)); only linked transfers count as fee revenue.
+"""
+type Fee {
+  "txHash-logIndex"
+  id: ID!
+  "The client, once the fee is linked to their open or top-up."
+  payer: Person
+  from: String! @index
+  amount: BigInt!
+  linked: Boolean!
+  tab: Tab
+  funding: Funding
+  "The whole fee went back because the open or top-up it paid for failed."
+  refundedInFull: Boolean!
+  timestamp: Int! @index
+  block: Int!
+  day: String!
+  tx: String!
+}
+
+"""
+AUSD out of Segundo's treasury to a client who paid a fee.
+kind: "close" (1% of a closed tab's unspent budget), "failed" (a whole fee whose funding failed), "other".
+"""
+type FeeRefund {
+  "txHash-logIndex"
+  id: ID!
+  to: Person!
+  toAddress: String! @index
+  amount: BigInt!
+  kind: String!
+  tab: Tab
+  fee: Fee
+  timestamp: Int! @index
+  block: Int!
+  day: String!
+  tx: String!
+}
+
+"""
+A closed tab whose client paid fees and got unspent budget back, so a fee refund is expected:
+min(refunded / 100, fees paid on the tab). Removed once the refund is seen.
+"""
+type RefundDue {
+  "Tab number"
+  id: ID!
+  payer: String! @index
+  tab: Tab!
+  expected: BigInt!
+  closedBlock: Int!
+}
+
+"""
+Exchange rates posted on chain by Segundo's Chainlink CRE workflow (SegundoKeeper.RatesPosted).
+"""
+type RateSnapshot {
+  "txHash-logIndex"
+  id: ID!
+  "DON time the workflow produced the rates."
+  at: Int! @index
+  currencies: [String!]!
+  "Units of each currency per 1 USD, times 1e6, in the same order as currencies."
+  ratesE6: [BigInt!]!
+  block: Int!
+  timestamp: Int!
+  tx: String!
+}
+
+"""
+Latest on-chain rate for one currency.
+"""
+type CurrencyRate {
+  "ISO code, e.g. PHP"
+  id: ID!
+  rateE6: BigInt!
+  at: Int!
+  snapshot: RateSnapshot!
+  updates: Int!
+}
+
+"""
+One CRE report that settled tabs (SegundoKeeper.Kept).
+"""
+type KeeperRun {
+  "txHash-logIndex"
+  id: ID!
+  at: Int!
+  tabs: Int!
+  paid: BigInt!
+  skipped: Int!
+  block: Int!
+  timestamp: Int! @index
+  tx: String!
+}
+
+"""
+A tab the keeper could not settle in a run (SegundoKeeper.SettleSkipped); the run carries on without it.
+"""
+type SkippedSettle {
+  "txHash-logIndex"
+  id: ID!
+  tab: String!
+  tx: String! @index
+  block: Int!
+  timestamp: Int!
+}
+
+"""
+One UTC day of Segundo.
+"""
+type DailyStat {
+  "YYYY-MM-DD"
+  id: ID!
+  "Unix seconds at 00:00 UTC."
+  date: Int! @index
+  payouts: Int!
+  paid: BigInt!
+  fees: BigInt!
+  feeCount: Int!
+  refunds: BigInt!
+  refundCount: Int!
+  tabsOpened: Int!
+  tabsClosed: Int!
+  funded: BigInt!
+  shifts: Int!
+  secondsWorked: BigInt!
+  "Distinct addresses that opened, claimed, clocked, were paid, paid a fee or set a profile that day."
+  activePeople: Int!
+  newPeople: Int!
+}
+
+"Marks an address as already counted in a day's activePeople."
+type PersonDay {
+  "day-address"
+  id: ID!
+}
+
+"""
+Running totals since Till's deployment. One row, id "totals".
+"""
+type Totals {
+  id: ID!
+  tabsOpened: Int!
+  tabsClosed: Int!
+  tabsOpen: Int!
+  people: Int!
+  freelancers: Int!
+  clients: Int!
+  "Budgets and top-ups put into tabs."
+  funded: BigInt!
+  paid: BigInt!
+  payouts: Int!
+  "Unspent budget returned to clients at close."
+  refunded: BigInt!
+  fees: BigInt!
+  feeCount: Int!
+  feeRefunds: BigInt!
+  feeRefundCount: Int!
+  "fees - feeRefunds"
+  netFees: BigInt!
+  "AUSD into the treasury that pairs with no open or top-up (not fee revenue)."
+  unlinkedInflow: BigInt!
+  "AUSD out of the treasury to addresses that never paid a fee (not a fee refund)."
+  otherOutflow: BigInt!
+  shifts: Int!
+  secondsWorked: BigInt!
+  rateReports: Int!
+  keeperRuns: Int!
+  keeperPaid: BigInt!
+  keeperSkipped: Int!
+  lastBlock: Int!
+  lastTimestamp: Int!
+}
