@@ -8,7 +8,7 @@ import { explorerAddress, explorerTx } from "@/lib/chain";
 import { gasPaused, useHealth } from "@/lib/health";
 import { useDollarBalance, useProfile } from "@/lib/hooks";
 import { useLive } from "@/lib/live";
-import { currency, formatMoney, formatUsd, toUnits, toUsd } from "@/lib/money";
+import { KEEPER_ADDRESS, currency, fetchFx, formatMoney, formatUsd, rateSourceLine, toUnits, toUsd, type FxReply } from "@/lib/money";
 import { sendDollars } from "@/lib/relay";
 import { useWallet } from "@/lib/wallet";
 import { CORRIDORS, DEMO_PARTNER, SEGUNDO_SHARE, SOURCES, SPREAD_DEFAULT, SPREAD_MAX, SPREAD_MIN, type Corridor, type SourceKey } from "./corridors";
@@ -30,10 +30,16 @@ export default function CashOut() {
   const wallet = useWallet();
   const me = wallet.address;
   const profile = useProfile(me);
-  const { rates, ratesUpdated } = useLive();
+  const { rates } = useLive();
+  // Where today's rate came from: the on-chain Chainlink CRE rate, or the daily reference rate (lib/money.ts).
+  const [fx, setFx] = useState<FxReply | null>(null);
+  useEffect(() => {
+    fetchFx().then(setFx);
+  }, []);
   const { balance, refresh } = useDollarBalance(me);
   const health = useHealth();
-  const paused = gasPaused(health, "open");
+  // A cash-out returns money to its owner, so it keeps the clock-in reserve (lib/server.ts RESERVE), like /api/send does for it.
+  const paused = gasPaused(health, "clockIn");
   const [code, setCode] = useState<Corridor["code"]>("PHP");
   const [picked, setPicked] = useState(false);
   const [railId, setRailId] = useState("gcash");
@@ -62,7 +68,6 @@ export default function CashOut() {
   const kept = gross != null ? (gross * spread) / 100 : null;
   const net = gross != null && kept != null ? gross - kept : null;
   const local = (v: number | null) => (v == null ? "—" : formatMoney(v, cur, rates));
-  const updated = ratesUpdated ? new Date(ratesUpdated).toLocaleDateString("en-GB", { day: "numeric", month: "long" }) : null;
 
   const problem = !(usd > 0)
     ? "Enter an amount to cash out."
@@ -235,14 +240,31 @@ export default function CashOut() {
                 <dd>None on top. On mainnet Segundo would earn a share of the partner&apos;s spread, shown here before you confirm.</dd>
               </dl>
               <p className={styles.small}>
-                Reference rate from ExchangeRate-API{updated ? `, updated ${updated}` : ""}
-                <Ref k="er" />. {corridor.note} {corridor.src.map((k) => <Ref key={k} k={k} />)}
+                {rateSourceLine(corridor.code, fx)}
+                {fx?.sources[corridor.code]?.source === "chainlink-cre" ? (
+                  <>
+                    {" "}(
+                    <a href={explorerAddress(KEEPER_ADDRESS)} target="_blank" rel="noreferrer">
+                      SegundoKeeper
+                    </a>
+                    ).
+                  </>
+                ) : (
+                  <>
+                    <Ref k="er" />.
+                  </>
+                )}{" "}
+                {corridor.note} {corridor.src.map((k) => <Ref key={k} k={k} />)}
               </p>
             </div>
 
             {!me ? (
               <SignInPanel title="Sign in to try a cash-out">
-                <p>Any Segundo account works: a passkey, email or a practice wallet. On testnet nothing real moves.</p>
+                <p>
+                  {wallet.accounts === "mera"
+                    ? "Sign in with your passkey; nothing else is needed. On testnet nothing real moves."
+                    : "Any Segundo account works: a passkey, email or a practice wallet. On testnet nothing real moves."}
+                </p>
               </SignInPanel>
             ) : done ? (
               <div className={styles.receipt} role="status">
@@ -354,8 +376,9 @@ export default function CashOut() {
             ))}
           </ol>
           <p className="soft">
-            The partner&apos;s spread and Segundo&apos;s share of it are assumptions, labelled as such wherever they appear. The exchange rate is a daily
-            reference rate, shown to people and never used to move money.
+            The partner&apos;s spread and Segundo&apos;s share of it are assumptions, labelled as such wherever they appear. The exchange rate is the one
+            Segundo&apos;s Chainlink CRE workflow last posted on Monad (a daily reference rate when that is over 6 hours old), shown to people and never
+            used to move money.
           </p>
         </section>
       </main>

@@ -14,7 +14,7 @@ import { TILL, explorerAddress, explorerTx } from "@/lib/chain";
 import { mulberry32, seedOf, wavePath } from "@/lib/guilloche";
 import { useProfile } from "@/lib/hooks";
 import { useLive } from "@/lib/live";
-import { currency, formatDuration, formatFee, formatMoney, formatUsd, toUsd, type Currency, type Rates } from "@/lib/money";
+import { KEEPER_ADDRESS, currency, fetchFx, formatDuration, formatFee, formatMoney, formatUsd, rateSourceLine, toUsd, type Currency, type FxReply, type Rates } from "@/lib/money";
 import { canSeal, hasSealedDetails, unsealDetails, type SealedDetails } from "@/lib/seal";
 import { shortAddress } from "@/lib/tabs";
 import { useWallet } from "@/lib/wallet";
@@ -49,7 +49,12 @@ export default function Statement() {
 function StatementFor({ address }: { address: Address }) {
   const { data, error } = useHistoryFeed(address);
   const profile = useProfile(address);
-  const { rates, ratesUpdated } = useLive();
+  const { rates } = useLive();
+  // Where today's rate came from: the on-chain Chainlink CRE rate, or the daily reference rate (lib/money.ts).
+  const [fx, setFx] = useState<FxReply | null>(null);
+  useEffect(() => {
+    fetchFx().then(setFx);
+  }, []);
   // A minute clock is enough for a statement (and spares hundreds of rows a re-render every tick).
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   useEffect(() => {
@@ -416,9 +421,19 @@ function StatementFor({ address }: { address: Address }) {
                   </li>
                   {cur.code !== "USD" && (
                     <li>
-                      <b>{cur.code} amounts are a guide.</b> They use today&apos;s reference rate
-                      {ratesUpdated ? ` (open.er-api.com, ${ratesUpdated.replace(/ \d\d:\d\d:\d\d \+0000$/, "")})` : ""}, not the rate on the day each payout
-                      landed. The AUSD column is exact.
+                      <b>{cur.code} amounts are a guide.</b> They use today&apos;s rate, not the rate on the day each payout landed. The AUSD
+                      column is exact. {rateSourceLine(cur.code, fx)}
+                      {fx?.sources[cur.code]?.source === "chainlink-cre" ? (
+                        <>
+                          {" "}(
+                          <a href={explorerAddress(KEEPER_ADDRESS)} target="_blank" rel="noreferrer">
+                            SegundoKeeper
+                          </a>
+                          ).
+                        </>
+                      ) : (
+                        "."
+                      )}
                     </li>
                   )}
                   <li>

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { AddMoney } from "@/components/AddMoney";
 import { InstallApp } from "@/components/InstallApp";
 import { PayHistory } from "@/components/PayHistory";
 import { ProfileForm } from "@/components/ProfileForm";
@@ -30,13 +31,16 @@ export default function YourTabs() {
   const faucet = useAction();
   const drip = useAutoDrip(me, balance, refreshBalance);
   const [sendOpen, setSendOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
 
-  // The home-screen shortcut "Send AUSD" lands on /app?send=1. Links to #sealed or #install arrive before the
+  // The home-screen shortcut "Send AUSD" and /send's "Send now" land on /app?send=1; /app?add=1 opens "Add money". Links to #sealed or #install arrive before the
   // signed-in page has rendered, so scroll once it has.
   const signedIn = wallet.ready && !!me;
   useEffect(() => {
     if (!signedIn) return;
-    if (new URLSearchParams(location.search).get("send") === "1") setSendOpen(true);
+    const q = new URLSearchParams(location.search);
+    if (q.get("send") === "1") setSendOpen(true);
+    else if (q.get("add") === "1") setAddOpen(true);
     const target = location.hash ? document.getElementById(location.hash.slice(1)) : null;
     if (target) requestAnimationFrame(() => target.scrollIntoView({ block: "start" }));
   }, [signedIn]);
@@ -129,6 +133,12 @@ export default function YourTabs() {
               </svg>
               Send AUSD
             </button>
+            <button className="btn" onClick={() => setAddOpen(true)} aria-haspopup="dialog" aria-expanded={addOpen}>
+              <svg className={styles.sendIcon} viewBox="0 0 24 24" aria-hidden>
+                <path d="M12 4v15M6 13l6 6 6-6" />
+              </svg>
+              Add money
+            </button>
             {lowBalance && hasStarted && (
               <button className="btn quiet" disabled={faucetBusy} onClick={getDollars}>
                 {faucet.busy ? "Sending test AUSD…" : "Get 25 test AUSD"}
@@ -136,6 +146,8 @@ export default function YourTabs() {
             )}
           </div>
           <p className={styles.more}>
+            <Link href="/send">Send dollars abroad</Link>
+            <span aria-hidden> · </span>
             <Link href="/request">Ask a client for a tab</Link>
             <span aria-hidden> · </span>
             <Link href="/cashout">Cash out to local money</Link>
@@ -165,6 +177,15 @@ export default function YourTabs() {
         onMoved={refreshBalance}
         onFaucet={getDollars}
         faucetBusy={faucetBusy}
+      />
+      <AddMoney
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        address={me}
+        balance={balance}
+        onFaucet={getDollars}
+        faucetBusy={faucetBusy}
+        faucetError={faucet.error}
       />
       <SentLinks me={me} onMoved={refreshBalance} />
 

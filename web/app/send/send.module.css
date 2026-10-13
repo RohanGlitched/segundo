@@ -1,0 +1,612 @@
+/* Send dollars abroad: a country picker on paper, the receiver's amount printed as a note stub in their currency's ink. */
+.page {
+  padding-top: 40px;
+  padding-bottom: 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 56px;
+}
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 46em;
+}
+.eyebrow {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--serial);
+}
+.h1 {
+  font-variation-settings: "wdth" 112;
+  font-size: clamp(36px, 6vw, 64px);
+  letter-spacing: -0.03em;
+  line-height: 0.98;
+}
+.lead {
+  font-size: 17.5px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+/* Currency ink, night-aware (the same pattern as the send sheet's quote). */
+.place,
+.stub,
+.rateTable tr,
+.phone {
+  --ink-c: var(--c, var(--ink));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .place,
+  :root:not([data-theme="light"]) .stub,
+  :root:not([data-theme="light"]) .rateTable tr,
+  :root:not([data-theme="light"]) .phone {
+    --ink-c: var(--c-night, var(--ink));
+  }
+}
+:root[data-theme="dark"] .place,
+:root[data-theme="dark"] .stub,
+:root[data-theme="dark"] .rateTable tr,
+:root[data-theme="dark"] .phone {
+  --ink-c: var(--c-night, var(--ink));
+}
+
+.calc {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 48px;
+  align-items: start;
+  margin-top: -16px;
+}
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  min-width: 0;
+}
+.places,
+.ways {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.legend {
+  font-weight: 650;
+  font-size: 15px;
+  margin-bottom: 10px;
+  padding: 0;
+}
+.placeGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+.place {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 64px;
+  padding: 9px 12px;
+  text-align: left;
+  background: transparent;
+  border: 1.5px solid var(--rule);
+  border-left: 4px solid var(--ink-c);
+  border-radius: var(--radius);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+.place b {
+  font-size: 15px;
+  font-weight: 650;
+}
+.place span {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+.place:hover {
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+.place[aria-pressed="true"] {
+  border-color: var(--ink);
+  border-left-color: var(--ink-c);
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+.money {
+  position: relative;
+  max-width: 320px;
+}
+.money span {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ink-soft);
+  font-weight: 600;
+  font-size: 22px;
+}
+.money input {
+  min-height: 60px;
+  padding-left: 34px;
+  font-variation-settings: "wdth" 120;
+  font-weight: 600;
+  font-size: 26px;
+  font-feature-settings: "tnum" 1;
+}
+
+.wayGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1.5px solid var(--ink);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.way {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.way + .way {
+  border-left: 1.5px solid var(--ink);
+}
+.way b {
+  font-size: 15.5px;
+  font-weight: 650;
+}
+.way span {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ink-soft);
+}
+.way[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--paper);
+}
+.way[aria-pressed="true"] span {
+  color: color-mix(in srgb, var(--paper) 78%, transparent);
+}
+.way:focus-visible {
+  outline-offset: -4px;
+}
+
+.side {
+  position: sticky;
+  top: 86px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.stub {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 22px 18px;
+  background: var(--note-paper);
+  border: 1px solid var(--rule);
+  border-top: 5px solid var(--ink-c);
+  border-radius: 8px;
+}
+.stubTitle {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.receive {
+  font-size: clamp(40px, 6vw, 60px);
+  line-height: 1;
+  font-weight: 560;
+  color: var(--ink-c);
+  overflow-wrap: anywhere;
+}
+.facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px 16px;
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--rule);
+  font-size: 14.5px;
+}
+.facts dt {
+  color: var(--ink-soft);
+}
+.facts dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+}
+.source,
+.compare {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+.source a,
+.compare a {
+  color: var(--intaglio);
+}
+.compare {
+  padding-top: 10px;
+  border-top: 1px dashed var(--rule);
+}
+.ref {
+  display: inline-grid;
+  place-items: center;
+  min-width: 17px;
+  height: 17px;
+  margin-left: 3px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-decoration: none;
+  vertical-align: 2px;
+}
+.go {
+  min-height: 60px;
+  font-size: 18px;
+  width: 100%;
+}
+.go svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.goNote {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+.inline {
+  color: var(--intaglio);
+  font-weight: 600;
+  text-underline-offset: 3px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-top: 28px;
+  border-top: 1.5px solid var(--ink);
+}
+.h2 {
+  font-variation-settings: "wdth" 112;
+  font-size: clamp(26px, 3.4vw, 36px);
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+.prose {
+  max-width: 46em;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+.threeGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--rule);
+}
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px 22px 18px 0;
+  font-size: 15px;
+  line-height: 1.55;
+}
+.card + .card {
+  padding-left: 22px;
+  border-left: 1px solid var(--rule);
+}
+.card h3 {
+  font-size: 20px;
+  font-variation-settings: "wdth" 112;
+}
+.cardLead {
+  font-weight: 600;
+}
+.card p:last-child {
+  color: var(--ink-soft);
+}
+
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 40px;
+}
+.steps li {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 14px;
+  padding: 18px 0;
+  border-top: 1px solid var(--rule);
+}
+.n {
+  font-size: 44px;
+  line-height: 0.9;
+  font-weight: 300;
+  color: var(--serial);
+}
+.steps h3 {
+  font-size: 18px;
+  margin-bottom: 6px;
+}
+.steps p {
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.claim {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 40px;
+  align-items: start;
+}
+.claimText {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.claimSteps {
+  margin: 0;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 15.5px;
+  line-height: 1.55;
+}
+.claimSteps li::marker {
+  color: var(--serial);
+  font-weight: 700;
+}
+.claimSteps b {
+  font-weight: 650;
+}
+.phone {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.phoneScreen {
+  width: min(280px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 28px 22px 22px;
+  background: var(--note-paper);
+  border: 1.5px solid var(--ink);
+  border-top: 6px solid var(--ink-c);
+  border-radius: 26px;
+  box-shadow: var(--shadow);
+}
+.phoneFrom {
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+.phoneAmount {
+  font-size: 36px;
+  line-height: 1.05;
+  font-weight: 560;
+  color: var(--ink-c);
+  overflow-wrap: anywhere;
+}
+.phoneUsd {
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.phoneBtn {
+  display: grid;
+  place-items: center;
+  min-height: 44px;
+  margin-top: 8px;
+  border-radius: var(--radius);
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 600;
+  font-size: 14.5px;
+}
+.phoneFine {
+  font-size: 12px;
+  text-align: center;
+  color: var(--ink-soft);
+}
+.phone figcaption {
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.rateSheet {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+}
+.rateTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+.rateTable th,
+.rateTable td {
+  padding: 10px 8px 10px 0;
+  border-bottom: 1px solid var(--rule);
+  text-align: left;
+}
+.rateTable thead th {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  border-bottom: 1.5px solid var(--ink);
+}
+.rateTable tbody th {
+  font-weight: 600;
+}
+.rateTable td.denom,
+.rateTable td:last-child {
+  text-align: right;
+}
+.rateTable td.denom {
+  color: var(--ink-c);
+  font-weight: 600;
+}
+.rateTable td:last-child,
+.rateTable thead th:last-child {
+  color: var(--ink-soft);
+  text-align: right;
+  white-space: nowrap;
+}
+.rateTable thead th:nth-child(2) {
+  text-align: right;
+}
+.chip {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 2px;
+  background: var(--ink-c);
+}
+.loadingRow {
+  color: var(--ink-soft);
+}
+.keeper {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px 18px;
+  margin: 0;
+  padding: 18px 20px;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--intaglio);
+  border-radius: 8px;
+  font-size: 14.5px;
+}
+.keeper dt {
+  color: var(--ink-soft);
+}
+.keeper dd {
+  margin: 0;
+  font-weight: 600;
+}
+.keeper a {
+  text-underline-offset: 3px;
+}
+.keeper a:not(.serial) {
+  color: var(--intaglio);
+}
+
+.money2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) auto;
+  gap: 18px 40px;
+  align-items: end;
+}
+.money2 > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.inActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.testnet {
+  border-left: 3px solid var(--warn);
+  padding: 8px 0 8px 14px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+@media (max-width: 900px) {
+  .calc,
+  .claim,
+  .rateSheet,
+  .money2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .side {
+    position: static;
+  }
+  .steps {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 720px) {
+  .page {
+    padding-top: 28px;
+    gap: 44px;
+  }
+  .calc {
+    gap: 28px;
+  }
+  .placeGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .money {
+    max-width: none;
+  }
+  .wayGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .way + .way {
+    border-left: 0;
+    border-top: 1.5px solid var(--ink);
+  }
+  .threeGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .card,
+  .card + .card {
+    padding: 16px 0;
+    border-left: 0;
+  }
+  .card + .card {
+    border-top: 1px solid var(--rule);
+  }
+  .steps li {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+  .n {
+    font-size: 34px;
+  }
+  .inActions > * {
+    flex: 1 1 auto;
+  }
+  .keeper {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+  .keeper dd + dt {
+    margin-top: 10px;
+  }
+}

@@ -83,6 +83,39 @@ export function parseAmount(typed: string): ParsedAmount {
 
 export type Rates = Record<string, number>;
 
+/**
+ * Where a rate came from (GET /api/fx): the rate Segundo's Chainlink CRE workflow posted on Monad (with the block),
+ * or the daily reference rate from open.er-api.com.
+ */
+/** SegundoKeeper on Monad testnet: receives the CRE workflow's reports and holds the posted rates (cre/README.md). */
+export const KEEPER_ADDRESS = "0xFEf8d6A7aF00ACd33FDdd2Ef8800cab78164d80D";
+export type RateSource ={ source: "chainlink-cre"; block: number | null; at: number; tx: string | null } | { source: "reference" };
+export type RateSources = Record<string, RateSource>;
+export type FxReply = { rates: Rates | null; updated: string | null; sources: RateSources };
+
+let fxOnce: Promise<FxReply | null> | null = null;
+/** /api/fx once per page load (the CDN caches it for minutes), for pages that print where a rate came from. */
+export const fetchFx = (): Promise<FxReply | null> =>
+  (fxOnce ??= fetch("/api/fx")
+    .then((r) => r.json() as Promise<FxReply>)
+    .then((d) => ({ rates: d.rates, updated: d.updated, sources: d.sources ?? {} }))
+    .catch(() => {
+      fxOnce = null;
+      return null;
+    }));
+
+/** "Rate: Chainlink DON consensus posted on Monad, block 70,700,945", or the reference-rate line. */
+export function rateSourceLine(code: string, fx: FxReply | null): string {
+  const s = fx?.sources[code];
+  if (s?.source === "chainlink-cre")
+    return s.block != null
+      ? `Rate: Chainlink DON consensus posted on Monad, block ${s.block.toLocaleString("en-US")}`
+      : `Rate: Chainlink DON consensus posted on Monad, ${new Date(s.at * 1000).toUTCString().slice(5, 22)} UTC`;
+  if (!fx) return "Rate: loading where it comes from…";
+  const day = fx.updated ? new Date(fx.updated).toLocaleDateString("en-GB", { day: "numeric", month: "long" }) : null;
+  return `Rate: daily reference rate from open.er-api.com${day ? `, updated ${day}` : ""}`;
+}
+
 /** Splits an amount into the pieces the note prints: symbol, whole part with grouping, and decimals. */
 export function noteParts(usd: number, cur: Currency, rates: Rates | null) {
   const rate = cur.code === "USD" ? 1 : rates?.[cur.code];

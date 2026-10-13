@@ -1,0 +1,170 @@
+/* Add money: the address printed like the back of a note (QR, serial), then the honest ways in. Shell from SendSheet.module.css. */
+.receive {
+  display: grid;
+  grid-template-columns: 156px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+  padding: 16px;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--intaglio);
+  border-radius: 10px;
+}
+.qr {
+  width: 156px;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  background: #f4f7f2;
+  overflow: hidden;
+}
+.qr:empty {
+  background: color-mix(in srgb, var(--rule) 50%, transparent);
+}
+.qr svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.label {
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: var(--ink-soft);
+}
+.how {
+  font-size: 15.5px;
+  line-height: 1.45;
+}
+.addr {
+  padding: 10px 12px;
+  border: 1.5px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper);
+  font-variation-settings: var(--semi);
+  font-feature-settings: "tnum" 1;
+  letter-spacing: 0.04em;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--serial);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.careful {
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+.careful b {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.watch {
+  padding: 10px 14px;
+  border: 1px dashed var(--rule);
+  border-radius: var(--radius);
+  font-size: 14.5px;
+}
+.watch[data-arrived] {
+  border-style: solid;
+  border-color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 8%, transparent);
+}
+.watch[data-arrived] b {
+  color: var(--ok);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.testnet {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 12px 0 12px 14px;
+  border-left: 3px solid var(--warn);
+  font-size: 14.5px;
+}
+.testnet > div {
+  flex: 1 1 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.error {
+  flex-basis: 100%;
+  color: var(--serial);
+  font-size: 13.5px;
+}
+
+.mainnet {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1.5px solid var(--ink);
+}
+.routes {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+.routes > div {
+  display: grid;
+  grid-template-columns: 11em minmax(0, 1fr);
+  gap: 4px 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.routes > div:last-child {
+  border-bottom: 0;
+}
+.routes dt {
+  font-weight: 650;
+  font-size: 14.5px;
+}
+.routes dd {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+.routes a {
+  color: var(--intaglio);
+  font-weight: 600;
+  text-underline-offset: 3px;
+}
+
+@media (max-width: 720px) {
+  .receive {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+  }
+  .qr {
+    width: 176px;
+  }
+  .side {
+    width: 100%;
+  }
+  .buttons > * {
+    flex: 1 1 calc(50% - 4px);
+  }
+  .routes > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .testnet > button {
+    flex: 1 1 100%;
+  }
+}
