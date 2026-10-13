@@ -1,0 +1,10 @@
+# Segundo CRE project. Both targets run on Monad testnet (chain 10143, chain name monad-testnet).
+staging-settings:
+  rpcs:
+    - chain-name: monad-testnet
+      url: https://testnet-rpc.monad.xyz
+
+production-settings:
+  rpcs:
+    - chain-name: monad-testnet
+      url: https://testnet-rpc.monad.xyz

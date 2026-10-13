@@ -1,0 +1,17 @@
+[profile.default]
+src = "src"
+test = "test"
+out = "out"
+libs = ["../../contracts/lib"]
+allow_paths = ["../../contracts/lib"]
+solc = "0.8.28"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 2000
+remappings = [
+  "@openzeppelin/contracts/=../../contracts/lib/openzeppelin-contracts/contracts/",
+  "forge-std/=../../contracts/lib/forge-std/src/",
+]
+
+[rpc_endpoints]
+monad_testnet = "https://testnet-rpc.monad.xyz"

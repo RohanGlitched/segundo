@@ -1,0 +1,16 @@
+{
+  "schedule": "0 */5 * * * *",
+  "chainSelectorName": "monad-testnet",
+  "tillAddress": "0xeb6c2c519c9bcc4495364c34ac116c20098113d1",
+  "keeperAddress": "0xFEf8d6A7aF00ACd33FDdd2Ef8800cab78164d80D",
+  "gasLimit": "1500000",
+  "minOwed": "10000",
+  "scanWindow": 240,
+  "chunkSize": 40,
+  "maxSettle": 40,
+  "fxSources": [
+    { "name": "open.er-api.com", "url": "https://open.er-api.com/v6/latest/USD", "format": "er-api" },
+    { "name": "fawazahmed0/currency-api", "url": "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.min.json", "format": "currency-api" },
+    { "name": "frankfurter (ECB)", "url": "https://api.frankfurter.dev/v1/latest?base=USD&symbols=PHP,INR,BRL,EUR", "format": "frankfurter" }
+  ]
+}
