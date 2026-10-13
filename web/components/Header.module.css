@@ -85,6 +85,13 @@
   .link:first-child {
     display: none;
   }
+}
+@media (max-width: 440px) {
+  .extra {
+    display: none;
+  }
+}
+@media (max-width: 560px) {
   .who {
     max-width: 140px;
   }
@@ -151,4 +158,60 @@
   font-size: 12.5px;
   color: var(--ink-soft);
   padding: 4px 10px 6px;
+}
+.itemNote {
+  display: block;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+.signMenu {
+  width: min(380px, calc(100vw - 32px));
+  padding: 16px;
+}
+.signHead {
+  font-weight: 650;
+  font-size: 17px;
+  font-variation-settings: "wdth" 112;
+  margin-bottom: 12px;
+}
+.handoff section {
+  border: 0;
+  background: none;
+  padding: 4px 4px 12px;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: start;
+}
+.handoff section h2 {
+  font-size: 18px;
+}
+/* From the home screen: no website links, room for the status bar. */
+@media (display-mode: standalone) {
+  .bar {
+    padding-top: env(safe-area-inset-top);
+  }
+  .extra {
+    display: none;
+  }
+}
+@media (max-width: 420px) {
+  .brand {
+    gap: 8px;
+  }
+  .word {
+    font-size: 19px;
+  }
+  .link {
+    padding: 10px 6px;
+  }
+  .who {
+    max-width: 120px;
+  }
+}
+.phoneItem {
+  margin-top: 12px;
+  border-top: 1px solid var(--rule);
+  border-radius: 0 0 6px 6px;
+  font-size: 14px;
+  color: var(--ink-soft);
 }

@@ -1,5 +1,6 @@
-import { encodeFunctionData, hexToSignature, isAddress, type Address, type Hex } from "viem";
-import { DOLLAR, FORWARDER, TILL, publicClient, dollarAbi } from "@/lib/chain";
+import { isAddress, type Hex } from "viem";
+import { authorizationCall, authorizationKey, type SignedAuthorization } from "@/lib/authorization";
+import { DOLLAR, FORWARDER, TILL, publicClient } from "@/lib/chain";
 import { clientIp, json, limited, lowOnGas, revertReason, sendAndWait, signer } from "@/lib/server";
 
 export const runtime = "nodejs";
@@ -13,9 +14,7 @@ const inFlight = new Set<string>();
 
 /** Relays an AUSD transferWithAuthorization (EIP-3009) so people can move their pay without gas. */
 export async function POST(req: Request) {
-  const b = (await req.json().catch(() => null)) as
-    | { from: Address; to: Address; value: string; validBefore: string; nonce: Hex; signature: Hex }
-    | null;
+  const b = (await req.json().catch(() => null)) as SignedAuthorization | null;
   if (!b || !isAddress(b.from) || !isAddress(b.to)) return json({ error: "Enter a valid wallet address." }, 400);
   if (b.from.toLowerCase() === b.to.toLowerCase()) return json({ error: "That's your own wallet." }, 400);
   if (NO_INBOX.has(b.to.toLowerCase())) return json({ error: "That address is a contract that can't send AUSD back. Enter a person's wallet." }, 400);
@@ -23,11 +22,9 @@ export async function POST(req: Request) {
   if (code && code !== "0x" && !code.startsWith("0xef0100")) return json({ error: "That address is a contract, not a person's wallet. Enter the receiver's wallet address." }, 400);
   let data: Hex;
   try {
-    const value = BigInt(b.value);
-    if (value < MIN_SEND) return json({ error: "The smallest amount the relayer sends is $0.01." }, 400);
-    const { r, s, v } = hexToSignature(b.signature);
-    const args = [b.from, b.to, value, 0n, BigInt(b.validBefore), b.nonce, Number(v ?? 27n), r, s] as const;
-    data = encodeFunctionData({ abi: dollarAbi, functionName: "transferWithAuthorization", args });
+    const call = authorizationCall(b);
+    if (call.value < MIN_SEND) return json({ error: "The smallest amount the relayer sends is $0.01." }, 400);
+    data = call.data;
   } catch {
     return json({ error: "That transfer isn't signed properly. Reload the page and try again." }, 400);
   }
@@ -41,7 +38,7 @@ export async function POST(req: Request) {
     const why = revertReason(e);
     return json({ error: /balance/i.test(why) ? "Not enough AUSD in your wallet." : why }, 400);
   }
-  const key = `${b.from.toLowerCase()}:${String(b.nonce).toLowerCase()}`;
+  const key = authorizationKey(b);
   if (inFlight.has(key)) return json({ error: "That transfer is already on its way." }, 409);
   inFlight.add(key);
   try {

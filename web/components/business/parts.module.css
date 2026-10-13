@@ -1,0 +1,380 @@
+/* ---------------------------------------------------------------- live ledger */
+.ledger {
+  background: var(--sheet);
+  border-top: 1.5px solid var(--ink);
+  box-shadow: var(--shadow);
+  padding: 22px 26px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  min-width: 0;
+}
+.ledgerTop {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 18px;
+  font-size: 14px;
+}
+.soft {
+  color: var(--ink-soft);
+}
+.liveTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 650;
+  color: var(--serial);
+}
+.liveTag i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--serial);
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+.ledgerMain {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: 28px 40px;
+  align-items: start;
+}
+.treasury {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.label {
+  font-weight: 650;
+  font-size: 15px;
+}
+.big {
+  font-size: clamp(44px, 6vw, 76px);
+  font-weight: 450;
+  line-height: 1;
+  color: var(--serial);
+  overflow-wrap: anywhere;
+}
+.treasuryAddr {
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+.treasuryAddr a,
+.unavailable a {
+  font-size: 14px;
+}
+.unavailable {
+  color: var(--ink-soft);
+}
+.figures {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--rule);
+}
+.figures > div {
+  padding: 12px 12px 12px 0;
+  border-bottom: 1px solid var(--rule);
+  min-width: 0;
+}
+.figures dt {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+.figures dd {
+  margin: 2px 0 0;
+  font-size: clamp(19px, 2vw, 26px);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.charts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px;
+}
+.honest {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  max-width: 80ch;
+  border-left: 3px solid var(--warn);
+  padding-left: 12px;
+}
+.skelBig {
+  display: block;
+  height: 64px;
+  width: 60%;
+}
+.skelLine {
+  display: block;
+  height: 14px;
+  width: 80%;
+}
+.skelGrid {
+  height: 150px;
+}
+
+/* ---------------------------------------------------------------- daily bars */
+.daily {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.dailyHead {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 14px;
+  font-weight: 650;
+}
+.dailyRead {
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+.dailyRead b {
+  color: var(--ink);
+  font-weight: 600;
+}
+.dailyPlot {
+  position: relative;
+}
+.dailyPlot svg {
+  display: block;
+  width: 100%;
+  height: 120px;
+}
+.dailyMax {
+  position: absolute;
+  top: -4px;
+  left: 4px;
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  background: var(--sheet);
+  padding-right: 4px;
+}
+.barSerial {
+  fill: var(--serial);
+  transition: opacity 0.15s;
+}
+.barInk {
+  fill: var(--ink);
+  transition: opacity 0.15s;
+}
+.dailyAxis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+.dailyEmpty {
+  font-size: 14px;
+  color: var(--ink-soft);
+  padding: 30px 0;
+  border-bottom: 1.5px solid var(--ink);
+}
+
+/* ---------------------------------------------------------------- calculator */
+.calc {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 40px;
+  align-items: start;
+}
+.calcIn {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px 20px;
+}
+.presets {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.calcField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.calcField label {
+  font-weight: 650;
+  font-size: 14.5px;
+  line-height: 1.3;
+}
+.calcInput {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+.calcInput span {
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+.calcInput input {
+  font-variation-settings: var(--wide);
+  font-feature-settings: "tnum" 1;
+}
+.calcInput input:focus-visible {
+  outline: 2px solid var(--intaglio);
+  outline-offset: 2px;
+}
+.hint {
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.assume {
+  font-size: 13px;
+  color: var(--warn);
+  font-weight: 600;
+}
+.calcOut {
+  background: var(--note-paper);
+  box-shadow: var(--shadow);
+  padding: 22px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  position: relative;
+}
+.stubHead {
+  font-weight: 650;
+  font-size: 14.5px;
+  padding-bottom: 6px;
+  border-bottom: 1.5px dashed var(--rule);
+}
+.stub {
+  margin: 0 0 12px;
+}
+.stub > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--rule);
+}
+.stub dt {
+  font-size: 14.5px;
+  color: var(--ink-soft);
+  min-width: 0;
+}
+.stub dd {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 500;
+  text-align: right;
+  white-space: nowrap;
+}
+.stub > .stubTotal {
+  border-bottom: 1.5px solid var(--ink);
+}
+.stubTotal dt {
+  color: var(--ink);
+  font-weight: 650;
+}
+.stubTotal dd {
+  font-size: clamp(24px, 3vw, 34px);
+  color: var(--serial);
+}
+.stubSub dd {
+  font-size: 16px;
+}
+.loss {
+  color: var(--ink-soft);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--serial) 60%, transparent);
+}
+
+@media (max-width: 900px) {
+  .ledgerMain,
+  .calc {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 640px) {
+  .ledger {
+    padding: 18px 16px 20px;
+  }
+  .figures {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .charts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .calcIn {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .calcOut {
+    padding: 18px 16px 20px;
+  }
+  .stub dd {
+    font-size: 17px;
+  }
+}
+
+/* ---------------------------------------------------------------- loop */
+.loop {
+  display: grid;
+  grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+  gap: 40px;
+  align-items: center;
+}
+.loopArt {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.loopNo {
+  font-family: var(--font-archivo), sans-serif;
+  font-variation-settings: "wdth" 125;
+  font-weight: 600;
+  font-size: 17px;
+  fill: var(--serial);
+}
+.loopSteps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1.5px solid var(--ink);
+}
+.loopSteps li {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.loopSteps p {
+  color: var(--ink-soft);
+}
+.loopSteps b {
+  color: var(--ink);
+  font-weight: 650;
+}
+.loopIdx {
+  font-size: 28px;
+  font-weight: 300;
+  line-height: 1;
+  color: var(--serial);
+}
+@media (max-width: 760px) {
+  .loop {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+  }
+  .loopArt {
+    max-width: 240px;
+    justify-self: center;
+  }
+}

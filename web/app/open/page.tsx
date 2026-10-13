@@ -7,14 +7,14 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { Note } from "@/components/Note";
 import { ErrorLine, LandedLine, SignInPanel, busyLabel, useAction } from "@/components/ui";
 import { tillAbi } from "@/lib/abi";
-import { publicClient } from "@/lib/chain";
+import { explorerTx, publicClient } from "@/lib/chain";
 import { DEMO_FREELANCERS } from "@/lib/demo";
 import { useAutoDrip, useProfile, useDollarBalance } from "@/lib/hooks";
 import { inviteLink, saveInvite } from "@/lib/invite";
 import { InviteBox } from "@/components/InviteBox";
 import { useLive } from "@/lib/live";
-import { currency, formatDuration, formatMoney, formatUsd, toUnits, toUsd } from "@/lib/money";
-import { relay, requestTestDollars, signPermit } from "@/lib/relay";
+import { currency, feeFor, formatDuration, formatFee, formatMoney, formatUsd, toUnits, toUsd } from "@/lib/money";
+import { relay, requestTestDollars, signFee, signPermit, type Landed } from "@/lib/relay";
 import { gasPaused, useHealth } from "@/lib/health";
 import { useWallet } from "@/lib/wallet";
 import styles from "./open.module.css";
@@ -55,6 +55,9 @@ export default function OpenTab() {
   const rateN = Number(rate);
   const budgetN = Number(budget);
   const budgetUnits = budgetN > 0 ? toUnits(budgetN) : 0n;
+  // The client pays Segundo's 1% on top of the budget; the freelancer's side is the whole budget.
+  const feeUnits = feeFor(budgetUnits);
+  const totalUnits = budgetUnits + feeUnits;
   const pick = DEMO_FREELANCERS[demo]!;
   const payee: Address | null =
     who === "demo" ? pick.address : who === "address" ? (isAddress(addr) ? (addr as Address) : null) : zeroAddress;
@@ -72,8 +75,8 @@ export default function OpenTab() {
               ? "Set a budget above zero."
               : budgetN < 0.5
                 ? "The smallest tab is $0.50."
-              : shownBalance != null && budgetUnits > shownBalance
-                ? `The budget is more than the ${formatUsd(toUsd(shownBalance))} in your wallet.`
+              : shownBalance != null && totalUnits > shownBalance
+                ? `The budget plus the 1% fee comes to ${formatFee(totalUnits)}, more than the ${formatUsd(toUsd(shownBalance))} in your wallet.`
                 : memo.length > 48
                   ? "Keep the description under 48 characters."
                   : null;
@@ -91,6 +94,7 @@ export default function OpenTab() {
         invite = privateKeyToAccount(inviteKey).address;
       }
       const permit = await signPermit(wallet, budgetUnits);
+      const fee = await signFee(wallet, budgetUnits);
       const p = relay(wallet, "openWithPermit", [
         payee ?? zeroAddress,
         invite,
@@ -101,7 +105,7 @@ export default function OpenTab() {
         permit.v,
         permit.r,
         permit.s,
-      ]);
+      ], fee);
       sent();
       const landed = await p;
       const receipt = await publicClient.getTransactionReceipt({ hash: landed.hash });
@@ -124,13 +128,14 @@ export default function OpenTab() {
         <div className={styles.done}>
           <h1 className={styles.h1}>Tab № {opened.id.toString().padStart(4, "0")} is open.</h1>
           <LandedLine landed={act.landed} />
+          <FeeLine fee={act.landed?.fee} />
           {opened.link ? (
             <InviteBox link={opened.link} />
           ) : (
             <p>
               {who === "demo"
                 ? `${pick.name} will clock in by themselves in a few seconds. Watch the note print.`
-                : "The freelancer can clock in from their Till account now."}
+                : "The freelancer can clock in from their Segundo account now."}
             </p>
           )}
           <div className={styles.row}>
@@ -196,7 +201,7 @@ export default function OpenTab() {
               <input type="radio" name="who" checked={who === "address"} onChange={() => setWho("address")} />
               <span>
                 <b>A wallet address</b>
-                <span className="soft">If they already use Till or another Monad wallet.</span>
+                <span className="soft">If they already use Segundo or another Monad wallet.</span>
               </span>
             </label>
             {who === "address" && (
@@ -234,13 +239,29 @@ export default function OpenTab() {
             <input id="memo" className="input" maxLength={48} value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="Logo for the autumn launch" />
           </div>
 
+          {budgetUnits > 0n && (
+            <div className={styles.bill}>
+              <dl className={styles.fees} aria-label="What you pay">
+                <dt>Budget</dt>
+                <dd>{formatUsd(toUsd(budgetUnits))}</dd>
+                <dt>Segundo fee (1%)</dt>
+                <dd>{formatFee(feeUnits)}</dd>
+                <dt className={styles.total}>You pay</dt>
+                <dd className={styles.total}>{formatFee(totalUnits)}</dd>
+              </dl>
+              <p className="soft">
+                {who === "demo" ? pick.name.split(" ")[0] : "The freelancer"} pays nothing: the whole budget is theirs to earn. The fee isn&apos;t returned with unspent budget.
+              </p>
+            </div>
+          )}
+
           <div className={styles.submit}>
             <button className="btn primary" disabled={!!problem || act.busy || paused}>
-              {busyLabel(act.phase, `Open tab with ${budgetN > 0 ? formatUsd(budgetN) : "$0"}`)}
+              {busyLabel(act.phase, budgetUnits > 0n ? `Open tab and pay ${formatFee(totalUnits)}` : "Open tab")}
             </button>
             <span className="soft">
               {drip.sending ? "Sending you 25 test AUSD…" : `Wallet: ${balance == null ? "…" : formatUsd(toUsd(balance))}.`}{" "}
-              {shownBalance != null && shownBalance < budgetUnits && (
+              {shownBalance != null && shownBalance < totalUnits && (
                 <button
                   type="button"
                   className={styles.inlineBtn}
@@ -262,9 +283,7 @@ export default function OpenTab() {
           {problem && <p className={styles.why}>{problem}</p>}
           {paused && !problem && <p className={styles.why}>The relayer is short of test MON right now, so opening a tab is paused. Try again in a little while; your wallet and balance are unchanged.</p>}
           <p className="soft">
-            {wallet.kind === "practice"
-              ? "Your practice wallet signs for you: once to let Till take the budget, once to open the tab. No gas."
-              : "You sign twice: once to let Till take the budget from your wallet, once to open the tab. No gas."}
+            Your account signs three things in one step: permission to take the budget, the 1% fee, and the tab itself. No pop-ups, no gas.
           </p>
           <ErrorLine error={act.error ?? faucet.error} />
           <LandedLine landed={faucet.landed ?? drip.landed} />
@@ -287,13 +306,13 @@ export default function OpenTab() {
           <ol className={styles.next}>
             <li>
               <span>
-              <b>The budget moves into the Till contract.</b> Not to us: the contract can only pay {who === "demo" ? pick.name.split(" ")[0] : "the freelancer"} for time on the clock or send it back to you.
+              <b>The budget moves into the Segundo contract.</b> Not to us: the contract can only pay {who === "demo" ? pick.name.split(" ")[0] : "the freelancer"} for time on the clock or send it back to you. Segundo&apos;s 1% fee is a separate transfer you can see on Monad.
             </span>
             </li>
             <li>
               <span>
               <b>{who === "demo" ? `${pick.name.split(" ")[0]} clocks in.` : "They join and clock in."}</b>{" "}
-              {who === "demo" ? "Demo freelancers start by themselves within a few seconds." : who === "invite" ? "You'll get a link to send them; it works once." : "They clock in from their Till account."}
+              {who === "demo" ? "Demo freelancers start by themselves within a few seconds." : who === "invite" ? "You'll get a link to send them; it works once." : "They clock in from their Segundo account."}
             </span>
             </li>
             <li>
@@ -305,5 +324,20 @@ export default function OpenTab() {
         </aside>
       </div>
     </main>
+  );
+}
+
+/** Segundo's fee went in its own transaction, so the receipt links it next to the open's. */
+function FeeLine({ fee }: { fee?: Landed["fee"] }) {
+  if (!fee) return null;
+  if (!fee.hash) return <p className={styles.feeLine}>{fee.error ?? "The tab is funded, but Segundo's fee didn't go through."}</p>;
+  return (
+    <p className={styles.feeLine} role="status">
+      Segundo&apos;s 1% fee, {formatFee(fee.value)}, went to the treasury in its own transaction,{" "}
+      <a className="serial" href={explorerTx(fee.hash)} target="_blank" rel="noreferrer">
+        block {fee.block?.toLocaleString("en-US")}
+      </a>
+      .
+    </p>
   );
 }

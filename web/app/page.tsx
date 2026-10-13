@@ -6,6 +6,7 @@ import { Divider, GrandRosette } from "@/components/home/Art";
 import { BlockTape } from "@/components/home/BlockTape";
 import { Faq } from "@/components/home/Faq";
 import { InkSheet } from "@/components/home/InkSheet";
+import { Money } from "@/components/home/Money";
 import { NoteAnatomy } from "@/components/home/NoteAnatomy";
 import { WorldClock } from "@/components/home/WorldClock";
 import home from "@/components/home/home.module.css";
@@ -15,7 +16,7 @@ import styles from "./page.module.css";
 const STEPS = [
   {
     title: "The client opens a tab",
-    body: "They set an hourly rate and a budget in AUSD, Agora's digital dollar, and send you an invite link. The budget waits in the Till contract on Monad, where it can only go to you or back to them.",
+    body: "They set an hourly rate and a budget in AUSD, Agora's digital dollar, and send you an invite link. The budget waits in Segundo's contract on Monad, where it can only go to you or back to them.",
   },
   {
     title: "You clock in",
@@ -36,9 +37,9 @@ const COMPARE = [
   },
   {
     what: "What it costs to receive",
-    wire: "6.49% on average to send money across borders (World Bank, Q1 2025)",
+    wire: "6.36% on average to send money across borders (World Bank, Q3 2025)",
     market: "A platform fee on every payment, then a withdrawal fee",
-    till: "No Till fee in the beta. Gas is paid for you.",
+    till: "1% paid by the client. Free for freelancers. Gas is paid for you.",
   },
   {
     what: "Who holds the money meanwhile",
@@ -137,17 +138,17 @@ export default function Home() {
             <h2 id="arrive" className={styles.h2}>
               When the money arrives
             </h2>
-            <p className={styles.sub}>The same week of work, paid three ways. Till pays while the work happens; the others pay once, days later.</p>
+            <p className={styles.sub}>The same week of work, paid three ways. Segundo pays while the work happens; the others pay once, days later.</p>
           </div>
           <ArrivalChart />
           <h3 className={styles.h3}>Side by side</h3>
-          <div className={styles.table} role="table" aria-label="Bank wire, marketplace and Till compared">
+          <div className={styles.table} role="table" aria-label="Bank wire, marketplace and Segundo compared">
             <div className={`${styles.row} ${styles.head}`} role="row">
               <span role="columnheader" />
               <span role="columnheader">Bank wire</span>
               <span role="columnheader">Freelance marketplace</span>
               <span role="columnheader" className={styles.tillCol}>
-                Till
+                Segundo
               </span>
             </div>
             {COMPARE.map((c) => (
@@ -161,7 +162,7 @@ export default function Home() {
                 <span role="cell" data-label="Marketplace">
                   {c.market}
                 </span>
-                <span role="cell" data-label="Till" className={styles.tillCol}>
+                <span role="cell" data-label="Segundo" className={styles.tillCol}>
                   {c.till}
                 </span>
               </div>
@@ -169,8 +170,8 @@ export default function Home() {
           </div>
           <p className={styles.sources}>
             Sources:{" "}
-            <a href="https://remittanceprices.worldbank.org/" target="_blank" rel="noreferrer">
-              World Bank Remittance Prices Worldwide
+            <a href="https://remittanceprices.worldbank.org/sites/default/files/2026-04/RPW_main_report_and_annex_Q325.pdf" target="_blank" rel="noreferrer">
+              World Bank Remittance Prices Worldwide, Q3 2025
             </a>
             ,{" "}
             <a href="https://www.upwork.com/resources/understanding-freelancer-payment-protection" target="_blank" rel="noreferrer">
@@ -203,8 +204,8 @@ export default function Home() {
             <div>
               <h3>Pay you can watch arrive</h3>
               <p>
-                Monad makes a block about every 0.4 seconds and finalises it moments later, so a payout lands while you&apos;re still looking at
-                the screen. On a tab page Till pays out every few seconds as you watch.
+                Monad makes a block about every 0.3 seconds and finalises it in about 0.6, so a payout lands while you&apos;re still looking at
+                the screen. On a tab page Segundo pays out every few seconds as you watch.
               </p>
             </div>
             <div>
@@ -217,7 +218,7 @@ export default function Home() {
             <div>
               <h3>One signature, no gas</h3>
               <p>
-                You sign; Till&apos;s relayer submits. Deposits use an AUSD permit and transfers an AUSD transfer authorisation, so neither side
+                You sign; Segundo&apos;s relayer submits. Deposits use an AUSD permit and transfers an AUSD transfer authorisation, so neither side
                 ever holds MON.
               </p>
             </div>
@@ -264,6 +265,16 @@ export default function Home() {
               </ul>
             </div>
           </div>
+        </section>
+
+        <section className={`wrap ${styles.section}`} aria-labelledby="money">
+          <div className={styles.sectionHead}>
+            <h2 id="money" className={styles.h2}>
+              How Segundo makes money
+            </h2>
+            <p className={styles.sub}>One fee, paid by the side that is buying the time. The side doing the work keeps every second of it.</p>
+          </div>
+          <Money />
         </section>
 
         <section className={`wrap ${styles.section}`} aria-labelledby="faq">

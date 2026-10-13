@@ -23,6 +23,8 @@ export const DOLLAR_DOMAIN = { name: "Agora Dollar", version: "1" } as const;
 export const AGORA_FAUCET: Address = "0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C";
 export const TILL = (process.env.NEXT_PUBLIC_TILL_ADDRESS || "0x0000000000000000000000000000000000000000") as Address;
 export const FORWARDER = (process.env.NEXT_PUBLIC_FORWARDER_ADDRESS || "0x0000000000000000000000000000000000000000") as Address;
+/** Segundo's treasury: the 1% client fee on every budget and top-up lands here. */
+export const TREASURY: Address = "0xAdF0F9443EafD19916cBd8f7541ea5e19e69F62c";
 
 export const publicClient = createPublicClient({
   chain: monadTestnet,

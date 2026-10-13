@@ -5,7 +5,7 @@ import styles from "@/app/open/open.module.css";
 
 export function InviteBox({ link }: { link: string }) {
   const [copied, setCopied] = useState(false);
-  const text = `I've opened a Till tab for you: you're paid every second you work. Join here: ${link}`;
+  const text = `I've opened a Segundo tab for you: you're paid every second you work. Join here: ${link}`;
   return (
     <div className={styles.invite}>
       <p>
@@ -26,7 +26,7 @@ export function InviteBox({ link }: { link: string }) {
         <a href={`https://wa.me/?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer">
           Send on WhatsApp
         </a>
-        <a href={`mailto:?subject=${encodeURIComponent("Your Till tab")}&body=${encodeURIComponent(text)}`}>Send by email</a>
+        <a href={`mailto:?subject=${encodeURIComponent("Your Segundo tab")}&body=${encodeURIComponent(text)}`}>Send by email</a>
       </p>
     </div>
   );

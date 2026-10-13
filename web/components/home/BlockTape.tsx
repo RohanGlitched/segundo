@@ -10,7 +10,7 @@ import styles from "./home.module.css";
 type Seen = { number: number; at: number };
 
 /**
- * Monad's blocks as they arrive, one tick each, with the blocks that carried a Till payout marked
+ * Monad's blocks as they arrive, one tick each, with the blocks that carried a Segundo payout marked
  * in serial red. Underneath, a receipt tape of the latest real payouts.
  */
 export function BlockTape() {
@@ -59,7 +59,7 @@ export function BlockTape() {
       </p>
 
       <div className={styles.receipt} role="log" aria-label="Latest payouts">
-        <p className={styles.receiptHead}>Latest payouts on Till</p>
+        <p className={styles.receiptHead}>Latest payouts on Segundo</p>
         {net === undefined ? (
           <p className={styles.receiptLine}>Reading the chain…</p>
         ) : !net || net.recent.length === 0 ? (

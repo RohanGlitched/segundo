@@ -3,7 +3,8 @@
  * Monad testnet, so the site always shows live pay. Freelancers clock in and out around their own
  * local working hours, and any freelancer hired by someone else (a judge) clocks in within seconds.
  * Every action is signed by the bot and submitted gaslessly through the forwarder by the keeper,
- * which also settles running tabs every few minutes.
+ * which also settles running tabs every few minutes. Like any client, the studios pay Segundo's 1% fee
+ * on every budget and top-up: a signed AUSD transfer to the treasury, sent right after the tab is funded.
  *
  *   RPC_URL=... TILL=0x... FORWARDER=0x... KEYS=keys/wallets.json node bots/till-bots.mjs
  */
@@ -16,6 +17,7 @@ const TILL = process.env.TILL;
 const FORWARDER = process.env.FORWARDER;
 const DOLLAR = "0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC"; // Agora AUSD on Monad testnet
 const AGORA_FAUCET = "0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C";
+const TREASURY = process.env.TREASURY || "0xAdF0F9443EafD19916cBd8f7541ea5e19e69F62c"; // Segundo's treasury: the 1% client fee
 const keys = JSON.parse(fs.readFileSync(process.env.KEYS || "keys/wallets.json", "utf8"));
 const TICK_MS = Number(process.env.TICK_MS || 4000);
 const SETTLE_EVERY_MS = Number(process.env.SETTLE_EVERY_MS || 1_200_000);
@@ -24,6 +26,8 @@ const RUN_FOR_MS = Number(process.env.RUN_FOR_MS || 0);
 // MON is the scarce resource on testnet, so the seeded tabs run lean on transactions: large budgets,
 // two work blocks a day, and a settle every twenty minutes.
 const usd = (n) => BigInt(Math.round(n * 1e6));
+/** Segundo's fee: 1% of a budget or top-up, rounded up to the next AUSD unit (same rule as web/lib/money.ts). */
+const feeFor = (amount) => (amount <= 0n ? 0n : (amount + 99n) / 100n);
 // AUSD comes from Agora's on-chain faucet, so studios fund themselves and budgets can be realistic.
 const BUDGET = usd(Number(process.env.BUDGET || 40));
 const TOPUP = usd(Number(process.env.TOPUP || 40));
@@ -136,12 +140,11 @@ async function permit(k, value) {
   return { deadline, v: Number(v), r, s };
 }
 
-/** A freelancer passes their pay back to their client now and then, so the demo money keeps circulating. */
-async function recycle(fromKey, toKey, value) {
+/** Moves AUSD out of a bot's wallet with a signed transferWithAuthorization (EIP-3009) the keeper submits. */
+async function authorize(fromKey, to, value) {
   const from = acct(fromKey);
   const nonce = `0x${Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("hex")}`;
   const validBefore = BigInt(Math.floor(Date.now() / 1000) + 1800);
-  const to = acct(toKey).address;
   const sig = await from.signTypedData({
     domain: { name: "Agora Dollar", version: "1", chainId: chain.id, verifyingContract: DOLLAR },
     types: { TransferWithAuthorization: [{ name: "from", type: "address" }, { name: "to", type: "address" }, { name: "value", type: "uint256" }, { name: "validAfter", type: "uint256" }, { name: "validBefore", type: "uint256" }, { name: "nonce", type: "bytes32" }] },
@@ -151,6 +154,20 @@ async function recycle(fromKey, toKey, value) {
   const { v, r, s } = hexToSignature(sig);
   const data = encodeFunctionData({ abi: dollarAbi, functionName: "transferWithAuthorization", args: [from.address, to, value, 0n, validBefore, nonce, Number(v), r, s] });
   return sendFromKeeper(DOLLAR, data);
+}
+
+/** A freelancer passes their pay back to their client now and then, so the demo money keeps circulating. */
+const recycle = (fromKey, toKey, value) => authorize(fromKey, acct(toKey).address, value);
+
+/** The studio pays Segundo's 1% on money it just put into a tab. A failure is logged loudly; the tab stands either way. */
+async function payFee(c, amount, what) {
+  const fee = feeFor(amount);
+  try {
+    const hash = await authorize(c.key, TREASURY, fee);
+    log(`${c.name} paid the ${(Number(fee) / 1e6).toFixed(2)} AUSD Segundo fee on ${what} (${hash})`);
+  } catch (e) {
+    log(`!!! FEE NOT COLLECTED: ${c.name} on ${what}:`, e.shortMessage || e.message);
+  }
 }
 
 const dollarOf = (a) => pub.readContract({ address: DOLLAR, abi: dollarAbi, functionName: "balanceOf", args: [a] });
@@ -178,7 +195,7 @@ async function ensureProfiles() {
 async function ensureClientFunds() {
   for (const c of CLIENTS) {
     const bal = await dollarOf(acct(c.key).address);
-    if (bal >= BUDGET * 2n) continue;
+    if (bal >= (BUDGET + feeFor(BUDGET)) * 2n) continue;
     const data = encodeFunctionData({ abi: parseAbi(["function requestFunds(address recipient)"]), functionName: "requestFunds", args: [acct(c.key).address] });
     const est = await pub.estimateGas({ account: faucet.account.address, to: AGORA_FAUCET, data });
     const hash = await faucet.sendTransaction({ to: AGORA_FAUCET, data, gas: (est * 115n) / 100n });
@@ -281,20 +298,23 @@ async function person(f, now, due) {
     }
     if (!ownTab) {
       const budget = BUDGET;
-      if ((await dollarOf(acct(client.key).address)) < budget) return;
+      // The budget and the 1% fee both leave the studio's wallet, so both must be there first.
+      if ((await dollarOf(acct(client.key).address)) < budget + feeFor(budget)) return;
       const p = await permit(client.key, budget);
       await forward(client.key, "openWithPermit", [me, "0x0000000000000000000000000000000000000000", BigInt(f.rate * 1e6), budget, f.memo, p.deadline, p.v, p.r, p.s]);
       log(`${client.name} opened a tab for ${f.name}`);
+      await payFee(client, budget, `a new tab for ${f.name}`);
       return;
     }
     const t = ownTab.tab;
     const left = t.budget - ownTab.earned;
     if (left < 1_000_000n && onShift(f)) {
       const amount = TOPUP;
-      if ((await dollarOf(acct(client.key).address)) >= amount) {
+      if ((await dollarOf(acct(client.key).address)) >= amount + feeFor(amount)) {
         const p = await permit(client.key, amount);
         await forward(client.key, "topUpWithPermit", [ownTab.id, amount, p.deadline, p.v, p.r, p.s]);
         log(`${client.name} topped up ${f.name}'s tab ${ownTab.id}`);
+        await payFee(client, amount, `the top-up of tab ${ownTab.id}`);
       }
     }
     const want = onShift(f);

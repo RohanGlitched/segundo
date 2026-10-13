@@ -1,0 +1,532 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-top: 28px;
+  padding-bottom: 24px;
+}
+.tools {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 14.5px;
+}
+.back {
+  font-weight: 600;
+}
+.toolButtons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* The statement is a sheet of security paper with an engraved band across its head. */
+.sheet {
+  --c: var(--cur);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 0 clamp(16px, 4vw, 48px) clamp(24px, 4vw, 44px);
+  overflow: hidden;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .sheet {
+    --c: var(--cur-night);
+  }
+}
+:root[data-theme="dark"] .sheet {
+  --c: var(--cur-night);
+}
+.border {
+  display: block;
+  width: calc(100% + 2 * clamp(16px, 4vw, 48px));
+  margin-inline: calc(-1 * clamp(16px, 4vw, 48px));
+  height: 28px;
+  border-bottom: 1.5px solid var(--c);
+}
+.border path {
+  fill: none;
+  stroke: var(--c);
+  stroke-width: 0.7;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.85;
+}
+
+.top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 24px 48px;
+  align-items: start;
+}
+.titleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.kicker {
+  font-variation-settings: var(--semi);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-size: 12.8px;
+  font-weight: 600;
+  color: var(--c);
+}
+.titleBlock h1 {
+  font-variation-settings: var(--wide);
+  font-weight: 500;
+  font-size: clamp(31px, 5vw, 49px);
+  letter-spacing: -0.01em;
+}
+.period {
+  color: var(--ink-soft);
+}
+.who {
+  margin: 0;
+  border-top: 1.5px solid var(--ink);
+}
+.who > div,
+.sealed > div {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.who dt,
+.sealed dt {
+  font-weight: 600;
+  font-size: 14px;
+}
+.who dd,
+.sealed dd {
+  margin: 0;
+  min-width: 0;
+}
+.name {
+  font-weight: 600;
+  font-size: 18px;
+}
+.addr {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  text-decoration: none;
+}
+.lineSkel {
+  display: inline-block;
+  width: 160px;
+  height: 18px;
+  vertical-align: middle;
+}
+.demoNote {
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+
+.sealed {
+  margin: 0;
+  padding: 4px 16px 12px;
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--c);
+  border-radius: 8px;
+}
+.sealedNote {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.addSealed {
+  display: flex;
+  align-items: center;
+  gap: 8px 14px;
+  flex-wrap: wrap;
+  font-size: 14px;
+}
+.addSealed p {
+  flex: 1 1 280px;
+}
+
+.periods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.periods button {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1.5px solid var(--rule);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font: 600 14px/1 var(--font-archivo), sans-serif;
+  cursor: pointer;
+}
+.periods button:hover {
+  border-color: var(--ink-soft);
+}
+.periods .on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+.bodySkel {
+  height: 320px;
+}
+
+.totals {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 24px 48px;
+  align-items: end;
+  padding-bottom: 24px;
+  border-bottom: 1.5px solid var(--ink);
+}
+.total {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.label {
+  font-weight: 600;
+  font-size: 14.5px;
+}
+.big {
+  font-size: clamp(39px, 7vw, 76px);
+  font-weight: 400;
+  line-height: 1;
+  color: var(--c);
+  overflow-wrap: anywhere;
+}
+.sub {
+  color: var(--ink-soft);
+}
+.sub b {
+  color: var(--ink);
+}
+.facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 24px;
+}
+.facts dt {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+.facts dd {
+  margin: 0;
+  font-size: 25px;
+  font-weight: 500;
+}
+.empty {
+  color: var(--ink-soft);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.section h2,
+.verify h2 {
+  font-variation-settings: "wdth" 112;
+  font-size: 24px;
+}
+
+/* Bars are engraved: horizontal hatching in the currency's ink under a solid cap. */
+.chart {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--n), minmax(0, 1fr));
+  gap: clamp(2px, 0.6vw, 8px);
+  height: 220px;
+  padding-top: 24px;
+  border-bottom: 1.5px solid var(--ink);
+}
+.bars li {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) 0;
+  min-width: 0;
+}
+.col {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  height: 100%;
+}
+.bar {
+  position: relative;
+  display: block;
+  width: 100%;
+  border-top: 2px solid var(--c);
+  background: repeating-linear-gradient(0deg, color-mix(in srgb, var(--c) 70%, transparent) 0 1.5px, transparent 1.5px 4px);
+}
+.peak {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 4px);
+  white-space: nowrap;
+  font-size: 12.8px;
+  font-weight: 600;
+  font-variation-settings: var(--wide);
+}
+.peakEnd {
+  left: auto;
+  right: 0;
+}
+.tick {
+  position: relative;
+  top: 6px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: visible;
+}
+.chart figcaption {
+  margin-top: 18px;
+  font-size: 13.5px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+.table th {
+  text-align: left;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 8px 12px 8px 0;
+  border-bottom: 1.5px solid var(--ink);
+}
+.table td {
+  padding: 10px 12px 10px 0;
+  border-bottom: 1px dashed var(--rule);
+  vertical-align: top;
+}
+.table th:last-child,
+.table td:last-child {
+  padding-right: 0;
+}
+.num {
+  text-align: right !important;
+  white-space: nowrap;
+}
+.table a {
+  text-decoration: none;
+}
+.client {
+  font-weight: 600;
+}
+.demo {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.small {
+  display: block;
+  font-size: 12.8px;
+}
+.tabNo {
+  display: inline-block;
+  margin-right: 8px;
+  font-size: 14px;
+}
+.usd {
+  display: block;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.lines td {
+  font-size: 14.5px;
+}
+.later {
+  display: none;
+}
+.more {
+  align-self: flex-start;
+}
+
+.verify {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 168px;
+  gap: 24px 40px;
+  align-items: start;
+  padding: 20px;
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--serial);
+  border-radius: 8px;
+  background: var(--paper);
+}
+.verify ul {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14.5px;
+  max-width: 72ch;
+}
+.qr {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12.8px;
+  color: var(--ink-soft);
+}
+/* The code is always dark on light, so a phone can read it in either theme and on paper. */
+.qrCode {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+}
+
+.printFoot {
+  display: none;
+}
+.missing {
+  font-variation-settings: "wdth" 112;
+  font-size: 32px;
+}
+
+@media (max-width: 860px) {
+  .top,
+  .totals {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 560px) {
+  .who > div,
+  .sealed > div {
+    grid-template-columns: 104px minmax(0, 1fr);
+  }
+  .bars {
+    height: 150px;
+  }
+  .verify {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .qr {
+    max-width: 180px;
+  }
+  /* Tables become cards: one row a block, each cell labelled. */
+  .table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .table tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px 12px;
+    padding: 10px 0;
+    border-bottom: 1px dashed var(--rule);
+  }
+  .table tr.later {
+    display: none;
+  }
+  .table td {
+    padding: 0;
+    border: 0;
+  }
+  .table td::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+  .table td:first-child {
+    grid-column: 1 / -1;
+  }
+  .num {
+    text-align: left !important;
+  }
+}
+
+@media print {
+  .page {
+    padding: 0;
+    gap: 0;
+    max-width: none;
+  }
+  .tools,
+  .periods,
+  .addSealed,
+  .more,
+  .noPrint {
+    display: none !important;
+  }
+  .sheet {
+    border: 0;
+    box-shadow: none;
+    border-radius: 0;
+    padding: 0 0 12mm;
+    gap: 18px;
+    overflow: visible;
+    --c: var(--cur) !important;
+  }
+  .border {
+    width: 100%;
+    margin-inline: 0;
+  }
+  .table tr.later {
+    display: table-row;
+  }
+  .table tr {
+    break-inside: avoid;
+  }
+  .section h2,
+  .verify h2 {
+    font-size: 18px;
+  }
+  .bars {
+    height: 140px;
+  }
+  .verify {
+    break-inside: avoid;
+    background: none;
+    grid-template-columns: minmax(0, 1fr) 120px;
+  }
+  .printFoot {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding-top: 4px;
+    border-top: 1px solid var(--rule);
+    font-size: 10px;
+    color: var(--ink-soft);
+    background: #fff;
+  }
+  .printFoot > span:first-child {
+    overflow-wrap: anywhere;
+  }
+}

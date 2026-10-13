@@ -30,6 +30,12 @@ export const DOLLAR_UNIT = 1_000_000n;
 export const toUsd = (units: bigint | number) => Number(units) / 1e6;
 export const toUnits = (usd: number) => BigInt(Math.round(usd * 1e6));
 
+/** Segundo's fee: 1% of every budget and top-up, paid by the client on top, rounded up to the next AUSD unit. */
+export const FEE_PERCENT = 1;
+export const feeFor = (amount: bigint): bigint => (amount <= 0n ? 0n : (amount + 99n) / 100n);
+/** "$0.03" for whole cents, "$0.0151" when the fee has fractions of a cent. */
+export const formatFee = (units: bigint) => formatUsd(toUsd(units), units % 10_000n === 0n ? 2 : 4);
+
 export type Rates = Record<string, number>;
 
 /** Splits an amount into the pieces the note prints: symbol, whole part with grouping, and decimals. */

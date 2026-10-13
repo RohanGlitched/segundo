@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { isAddress, type Address } from "viem";
+import { InstallApp } from "@/components/InstallApp";
+import { PayHistory } from "@/components/PayHistory";
 import { ProfileForm } from "@/components/ProfileForm";
+import { SealedDetails } from "@/components/SealedDetails";
 import { TabRow } from "@/components/TabRow";
 import { GettingStarted, Ledger, WalletNote } from "@/components/WalletPanel";
 import { ErrorLine, LandedLine, SignInPanel, busyLabel, useAction } from "@/components/ui";
@@ -28,6 +31,16 @@ export default function YourTabs() {
   const drip = useAutoDrip(me, balance, refreshBalance);
   const [sendOpen, setSendOpen] = useState(false);
 
+  // The home-screen shortcut "Send AUSD" lands on /app?send=1. Links to #sealed or #install arrive before the
+  // signed-in page has rendered, so scroll once it has.
+  const signedIn = wallet.ready && !!me;
+  useEffect(() => {
+    if (!signedIn) return;
+    if (new URLSearchParams(location.search).get("send") === "1") setSendOpen(true);
+    const target = location.hash ? document.getElementById(location.hash.slice(1)) : null;
+    if (target) requestAnimationFrame(() => target.scrollIntoView({ block: "start" }));
+  }, [signedIn]);
+
   const mine = useProfile(me);
   const myCur = currency(mine?.currency || "USD");
   const paying = useMemo(() => views?.filter((v) => v.tab.payer.toLowerCase() === me?.toLowerCase()) ?? [], [views, me]);
@@ -40,6 +53,7 @@ export default function YourTabs() {
         <SignInPanel title="Sign in to see your tabs">
           <p>Your tabs are the ones you pay into as a client and the ones that pay you as a freelancer.</p>
         </SignInPanel>
+        <InstallApp id="install" />
       </main>
     );
 
@@ -94,9 +108,14 @@ export default function YourTabs() {
         <div className={styles.walletSide}>
           <h1 className={styles.h1}>{mine?.name ? `${mine.name.split(" ")[0]}'s tabs` : "Your tabs"}</h1>
           <p className={styles.addr}>
-            {wallet.kind === "privy" ? (wallet.method === "passkey" ? "Signed in with a passkey. " : `Signed in as ${wallet.label}. `) : "Practice wallet in this browser. "}
+            {wallet.kind === "mera"
+              ? "Signed in with your passkey. "
+              : wallet.kind === "privy"
+                ? `Signed in as ${wallet.label}. `
+                : "Practice wallet in this browser. "}
             {usd != null && myCur.code !== "USD" && rates ? `${formatUsd(usd)} is about ${formatMoney(usd, myCur, rates)}.` : ""}
           </p>
+          {wallet.kind === "mera" && !wallet.unlocked && <PasskeyLock />}
           <div className={styles.walletActions}>
             <Link href="/open" className="btn primary">
               Open a tab
@@ -131,6 +150,8 @@ export default function YourTabs() {
       <section className={styles.profile} id="profile">
         <ProfileForm me={me} current={mine} onSaved={refresh} />
       </section>
+
+      <SealedDetails />
 
       <ErrorLine error={act.error} />
       <LandedLine landed={act.landed} />
@@ -170,7 +191,81 @@ export default function YourTabs() {
           </p>
         )}
       </section>
+
+      {me && <PayHistory address={me} />}
+
+      <InstallApp id="install" />
+
+      <AppDock
+        sendOpen={sendOpen}
+        onSend={() => {
+          setSendOpen(true);
+          requestAnimationFrame(() => document.getElementById("send")?.scrollIntoView({ block: "center" }));
+        }}
+      />
     </main>
+  );
+}
+
+/** After 15 idle minutes (or a while in the background) the signing key is dropped; one tap brings it back. */
+function PasskeyLock() {
+  const wallet = useWallet();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div className={styles.lock} role="status">
+      <p>
+        <b>Signing is locked.</b> Your passkey unlocks it until you&rsquo;ve been away for 15 minutes.
+      </p>
+      <button
+        className="btn small"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          setError(null);
+          try {
+            await wallet.unlock?.();
+          } catch (e) {
+            setError(e instanceof Error ? e.message : String(e));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {busy ? "Waiting for your passkey…" : "Unlock"}
+      </button>
+      {error && <p className={styles.lockError}>{error}</p>}
+    </div>
+  );
+}
+
+/**
+ * From the home screen (standalone), the main actions sit in a bar under your thumb, above the home indicator.
+ * In a browser tab it's hidden: the same actions are in the page.
+ */
+function AppDock({ sendOpen, onSend }: { sendOpen: boolean; onSend: () => void }) {
+  return (
+    <nav className={styles.dock} aria-label="Main actions">
+      <button type="button" className={styles.dockItem} onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
+        <svg viewBox="0 0 24 24" aria-hidden>
+          <rect x="3" y="7" width="18" height="11" rx="1.5" />
+          <path d="M6 4h12M12 10.5a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
+        </svg>
+        Your tabs
+      </button>
+      <Link href="/open" className={`${styles.dockItem} ${styles.dockMain}`}>
+        <svg viewBox="0 0 24 24" aria-hidden>
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+        Open a tab
+      </Link>
+      <button type="button" className={styles.dockItem} onClick={onSend} aria-expanded={sendOpen}>
+        <svg viewBox="0 0 24 24" aria-hidden>
+          <path d="M4 12h15M13 6l6 6-6 6" />
+        </svg>
+        Send AUSD
+      </button>
+    </nav>
   );
 }
 
@@ -209,6 +304,7 @@ function SendForm({ max, onDone, onClose }: { max: bigint; onDone: () => void; o
   return (
     <form
       className={styles.send}
+      id="send"
       onSubmit={(e) => {
         e.preventDefault();
         if (problem) return;
@@ -226,7 +322,7 @@ function SendForm({ max, onDone, onClose }: { max: bigint; onDone: () => void; o
       <div className="field">
         <label htmlFor="to">Send to</label>
         <input id="to" className="input" placeholder="0x…" value={to} onChange={(e) => setTo(e.target.value.trim())} autoComplete="off" />
-        <span className="hint">An exchange deposit address or any Monad wallet. You sign; Till pays the gas.</span>
+        <span className="hint">An exchange deposit address or any Monad wallet. You sign; Segundo pays the gas.</span>
       </div>
       <div className="field">
         <label htmlFor="amt">Amount in AUSD</label>

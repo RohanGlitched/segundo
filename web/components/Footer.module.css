@@ -10,9 +10,34 @@
 }
 .brand {
   display: flex;
-  gap: 12px;
+  gap: 14px;
   align-items: flex-start;
   font-size: 14.5px;
+  color: var(--ink-soft);
+}
+.brand > svg {
+  color: var(--ink);
+}
+.brand p {
+  margin: 0 0 8px;
+}
+.brand .word {
+  margin: 0;
+  color: var(--ink);
+  font-variation-settings: var(--wide);
+  font-weight: 750;
+  font-size: 22px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+.brand .tag {
+  color: var(--ink);
+  font-weight: 500;
+  margin-bottom: 10px;
+}
+.note {
+  margin: 12px 0 0;
+  font-size: 13px;
   color: var(--ink-soft);
 }
 .contracts {

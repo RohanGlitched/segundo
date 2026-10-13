@@ -1,0 +1,741 @@
+/* How Segundo makes money: the house look (paper, hairlines, denominations), set as a long investor read. */
+.top {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.85fr);
+  gap: 36px 56px;
+  align-items: center;
+  padding-top: 56px;
+  padding-bottom: 40px;
+}
+.topText {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  min-width: 0;
+}
+.kicker {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--serial);
+}
+.h1 {
+  font-variation-settings: "wdth" 118;
+  font-size: clamp(40px, 6vw, 84px);
+  font-weight: 650;
+  letter-spacing: -0.035em;
+  line-height: 0.95;
+}
+.model {
+  font-size: clamp(21px, 2.2vw, 28px);
+  line-height: 1.3;
+  font-weight: 550;
+  max-width: 26em;
+}
+.model b {
+  color: var(--serial);
+  font-weight: 650;
+}
+.lede {
+  font-size: 18px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  max-width: 36em;
+}
+.ctas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+/* The fee receipt: one week's tab, printed. */
+.receipt {
+  position: relative;
+  background: var(--note-paper);
+  box-shadow: var(--shadow);
+  padding: 22px 24px 28px;
+  min-width: 0;
+}
+.receipt::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -11px;
+  height: 12px;
+  background: linear-gradient(-45deg, transparent 8px, var(--note-paper) 0) 0 0 / 14px 12px repeat-x,
+    linear-gradient(45deg, transparent 8px, var(--note-paper) 0) 0 0 / 14px 12px repeat-x;
+}
+.receiptHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-weight: 650;
+  font-size: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1.5px dashed var(--rule);
+}
+.receiptHead .serial {
+  font-size: 13px;
+  font-weight: 500;
+}
+.receiptList {
+  margin: 0;
+}
+.receiptList > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 14px;
+  padding: 9px 0;
+  border-bottom: 1px dashed var(--rule);
+}
+.receiptList dt {
+  color: var(--ink-soft);
+  font-size: 15px;
+}
+.receiptList dd {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 550;
+  white-space: nowrap;
+}
+.receiptList .fee dd {
+  color: var(--serial);
+}
+.receiptList .total {
+  border-bottom: 1.5px solid var(--ink);
+}
+.receiptList .total dt {
+  color: var(--ink);
+  font-weight: 650;
+}
+.receiptList .total dd {
+  font-size: 24px;
+}
+.receiptFoot {
+  margin-top: 12px;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+
+/* ---------------------------------------------------------------- sections */
+.section {
+  padding-top: 88px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.tight {
+  padding-top: 60px;
+}
+.sectionHead {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.h2 {
+  font-variation-settings: "wdth" 112;
+  font-size: clamp(28px, 3.4vw, 40px);
+  letter-spacing: -0.02em;
+}
+.h3 {
+  font-size: 20px;
+  margin-top: 28px;
+}
+.sub {
+  color: var(--ink-soft);
+  font-size: 17px;
+  max-width: 66ch;
+}
+.body {
+  color: var(--ink-soft);
+  max-width: 70ch;
+}
+.body b {
+  color: var(--ink);
+}
+.gap {
+  padding-top: 88px;
+}
+.source {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+
+/* ---------------------------------------------------------------- how the fee is collected */
+.mech {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 32px;
+}
+.mech li {
+  border-top: 1.5px solid var(--ink);
+  padding-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mech h3 {
+  font-size: 18px;
+}
+.mech p {
+  color: var(--ink-soft);
+  font-size: 15.5px;
+}
+.mechNo {
+  font-size: 44px;
+  font-weight: 300;
+  line-height: 1;
+  color: var(--serial);
+}
+
+/* ---------------------------------------------------------------- what it costs today */
+.costs {
+  border-top: 1.5px solid var(--ink);
+}
+.costRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 0.9fr) minmax(0, 0.9fr);
+  gap: 20px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: 15.5px;
+}
+.costRow > span {
+  min-width: 0;
+}
+.costHead {
+  font-weight: 650;
+  font-size: 14.5px;
+}
+.costWho {
+  font-weight: 650;
+}
+.costWhat {
+  color: var(--ink-soft);
+}
+.costFig {
+  font-variation-settings: var(--wide);
+  font-weight: 550;
+}
+.costSrc {
+  font-size: 13.5px;
+}
+.costUs {
+  border-left: 3px solid var(--serial);
+  margin-left: -17px;
+  padding-left: 14px;
+}
+.costUs .costFig {
+  color: var(--serial);
+}
+
+/* ---------------------------------------------------------------- revenue lines */
+.lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1.5px solid var(--ink);
+}
+.line {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1.1fr) minmax(0, 1.4fr);
+  gap: 8px 32px;
+  padding: 26px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.lineNo {
+  font-size: 56px;
+  font-weight: 300;
+  line-height: 0.9;
+  color: var(--serial);
+}
+.lineHead {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+.lineHead h3 {
+  font-size: 22px;
+  font-variation-settings: "wdth" 110;
+}
+.lineBody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--ink-soft);
+}
+.lineBody b {
+  color: var(--ink);
+}
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 650;
+  border: 1.5px solid var(--rule);
+  border-radius: 999px;
+  padding: 2px 11px;
+  color: var(--ink-soft);
+}
+.status i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.live {
+  border-color: var(--serial);
+  color: var(--serial);
+}
+.next {
+  border-color: var(--intaglio);
+  color: var(--intaglio);
+}
+
+/* ---------------------------------------------------------------- market */
+.market {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  border-top: 1.5px solid var(--ink);
+}
+.market > div {
+  padding: 22px 22px 22px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.market > div + div {
+  padding-left: 22px;
+  border-left: 1px solid var(--rule);
+}
+.marketFig {
+  font-size: clamp(30px, 3.4vw, 46px);
+  font-weight: 450;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+.marketText {
+  font-size: 15.5px;
+}
+.marketNote {
+  color: var(--ink-soft);
+  font-size: 15.5px;
+  max-width: 72ch;
+  margin-top: 8px;
+}
+
+/* ---------------------------------------------------------------- competition */
+.compare {
+  border-top: 1.5px solid var(--ink);
+}
+.cmpRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) repeat(5, minmax(0, 1fr));
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: 14.5px;
+}
+.cmpRow > span {
+  min-width: 0;
+  color: var(--ink-soft);
+}
+.cmpHead > span {
+  color: var(--ink);
+  font-weight: 650;
+  font-size: 14px;
+}
+.cmpName {
+  color: var(--ink) !important;
+  font-weight: 650;
+}
+.cmpName small {
+  display: block;
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.cmpUs > span {
+  color: var(--ink);
+  font-weight: 600;
+}
+.cmpUs {
+  border-left: 3px solid var(--serial);
+  margin-left: -17px;
+  padding-left: 14px;
+  background: color-mix(in srgb, var(--serial) 4%, transparent);
+}
+.diffs {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 24px;
+}
+.diffs li {
+  border-top: 1.5px solid var(--serial);
+  padding-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.diffs b {
+  font-size: 17px;
+  line-height: 1.25;
+}
+.diffs span {
+  color: var(--ink-soft);
+  font-size: 15px;
+}
+
+/* ---------------------------------------------------------------- go to market */
+.corridors {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  border-top: 1.5px solid var(--ink);
+  border-bottom: 1px solid var(--rule);
+}
+.corridor {
+  --c-on: var(--c);
+  padding: 18px 16px 18px;
+  border-left: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.corridor:first-child {
+  border-left: 0;
+  padding-left: 0;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .corridor {
+    --c-on: var(--cn);
+  }
+}
+:root[data-theme="dark"] .corridor {
+  --c-on: var(--cn);
+}
+.corridorTo {
+  font-weight: 650;
+  font-size: 18px;
+}
+.corridorCode {
+  font-variation-settings: var(--wide);
+  font-weight: 700;
+  font-size: 26px;
+  color: var(--c-on);
+  line-height: 1;
+}
+.corridorFrom {
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+.corridorWhy {
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+.points {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 32px;
+}
+.points > div {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.points h3 {
+  font-size: 19px;
+}
+.points p {
+  color: var(--ink-soft);
+}
+
+/* ---------------------------------------------------------------- roadmap */
+.road {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1.5px solid var(--ink);
+}
+.road > li {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 8px 32px;
+  padding: 22px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.roadWhen {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+.roadWhen b {
+  font-variation-settings: "wdth" 112;
+  font-size: 19px;
+}
+.roadItems {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 32px;
+}
+.roadItems li {
+  position: relative;
+  padding-left: 22px;
+  color: var(--ink-soft);
+}
+.roadItems li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.5em;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--rule);
+}
+.done li::before {
+  border-color: var(--serial);
+  background: var(--serial);
+}
+.roadItems b {
+  color: var(--ink);
+}
+
+/* ---------------------------------------------------------------- founder */
+.founder {
+  display: grid;
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
+  gap: 40px;
+  border-top: 1.5px solid var(--ink);
+  padding-top: 24px;
+}
+.founderName {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.founderName b {
+  font-size: 26px;
+  font-variation-settings: "wdth" 112;
+}
+.founderName span {
+  color: var(--ink-soft);
+}
+.founderText {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--ink-soft);
+}
+
+/* ---------------------------------------------------------------- sources */
+.sources {
+  margin: 0;
+  padding-left: 22px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 40px;
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+.sources li {
+  padding-left: 4px;
+}
+.sources li::marker {
+  color: var(--serial);
+  font-variation-settings: var(--wide);
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------------- closing */
+.closing {
+  padding-top: 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  align-items: flex-start;
+}
+.closingH {
+  font-variation-settings: "wdth" 118;
+  font-size: clamp(32px, 4.4vw, 58px);
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  max-width: 16em;
+}
+
+/* ---------------------------------------------------------------- responsive */
+@media (max-width: 1080px) {
+  .diffs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .market {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .market > div:nth-child(3) {
+    padding-left: 0;
+    border-left: 0;
+  }
+  .market > div:nth-child(n + 3) {
+    border-top: 1px solid var(--rule);
+  }
+  .corridors {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .corridor:nth-child(4) {
+    border-left: 0;
+    padding-left: 0;
+  }
+  .corridor:nth-child(n + 4) {
+    border-top: 1px solid var(--rule);
+  }
+}
+@media (max-width: 900px) {
+  .top {
+    grid-template-columns: minmax(0, 1fr);
+    padding-top: 32px;
+    gap: 32px;
+  }
+  .section {
+    padding-top: 64px;
+  }
+  .gap {
+    padding-top: 60px;
+  }
+  .mech,
+  .points {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+  .line {
+    grid-template-columns: 52px minmax(0, 1fr);
+  }
+  .lineBody {
+    grid-column: 2;
+  }
+  .lineNo {
+    font-size: 44px;
+  }
+  .road > li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .founder {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+  /* Tables become one card per row. */
+  .costHead,
+  .cmpHead {
+    display: none;
+  }
+  .costRow,
+  .cmpRow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+    padding: 16px 0;
+  }
+  .costRow > span[data-label]::before,
+  .cmpRow > span[data-label]::before {
+    content: attr(data-label) ": ";
+    font-weight: 650;
+    color: var(--ink);
+  }
+  .cmpUs,
+  .costUs {
+    margin-left: 0;
+    padding-left: 12px;
+  }
+}
+@media (max-width: 640px) {
+  .diffs,
+  .market,
+  .corridors,
+  .roadItems,
+  .sources {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .market > div,
+  .market > div + div {
+    padding: 18px 0;
+    border-left: 0;
+  }
+  .market > div + div {
+    border-top: 1px solid var(--rule);
+  }
+  .corridor,
+  .corridor:first-child,
+  .corridor:nth-child(4) {
+    border-left: 0;
+    padding: 14px 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 12px;
+  }
+  .corridor + .corridor {
+    border-top: 1px solid var(--rule);
+  }
+  .corridorCode {
+    grid-row: 1;
+    grid-column: 2;
+    font-size: 22px;
+  }
+  .corridorFrom,
+  .corridorWhy {
+    grid-column: 1 / -1;
+  }
+  .receipt {
+    padding: 18px 16px 24px;
+  }
+  .receiptList dt {
+    font-size: 14px;
+  }
+  .receiptList dd {
+    font-size: 16px;
+  }
+  .receiptList .total dd {
+    font-size: 20px;
+  }
+  .lede {
+    font-size: 17px;
+  }
+}
+
+/* Footnote marks: a small serial-red number that links to the source itself. */
+.ref {
+  display: inline-block;
+  min-width: 1.5em;
+  margin-left: 2px;
+  padding: 0 3px;
+  font-size: 0.68em;
+  line-height: 1.4;
+  vertical-align: super;
+  text-align: center;
+  font-variation-settings: var(--semi);
+  font-weight: 650;
+  color: var(--serial);
+  text-decoration: none;
+  border-radius: 3px;
+}
+.ref:hover {
+  background: color-mix(in srgb, var(--serial) 12%, transparent);
+}

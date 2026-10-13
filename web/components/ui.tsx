@@ -71,67 +71,93 @@ export function ErrorLine({ error }: { error: string | null }) {
   );
 }
 
-/** Shown wherever an action needs a wallet: a passkey or email through Privy, or a practice wallet at once. */
-export function SignInPanel({ title, children }: { title: string; children?: ReactNode }) {
+/**
+ * The ways in, in order: a passkey account (Mera, the main one), email (Privy), then a practice wallet.
+ * Used by every sign-in panel and by the header's sign-in menu.
+ */
+export function SignInChoices({ compact, onDone }: { compact?: boolean; onDone?: () => void }) {
   const wallet = useWallet();
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const passkey = async (which: "up" | "in") => {
+  const [busy, setBusy] = useState<"up" | "in" | "any" | null>(null);
+  const passkey = async (which: "up" | "in" | "any") => {
     setError(null);
     setBusy(which);
     try {
-      await (which === "up" ? wallet.passkeySignUp?.() : wallet.passkeySignIn?.());
+      if (which === "up") await wallet.passkeySignUp();
+      else await wallet.passkeySignIn({ anyPasskey: which === "any" });
+      onDone?.();
     } catch (e) {
-      const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
-      console.warn("passkey", msg);
-      setError(
-        /(login|signup) with passkey not allowed|not enabled|disabled/i.test(msg)
-          ? "Passkey sign-in isn't switched on for Till yet. Continue with email for now."
-          : /NotAllowedError|cancel|abort|timed out/i.test(msg)
-            ? "The passkey prompt was closed. Try again, or continue with email."
-            : "This device couldn't use a passkey here. Continue with email instead.",
-      );
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(null);
     }
   };
+  const off = !wallet.ready || !!busy;
+  const waiting = "Waiting for your passkey…";
+  return (
+    <div className={`${styles.choices} ${compact ? styles.compact : ""}`}>
+      <button className={`btn primary ${styles.lead}`} onClick={() => passkey("up")} disabled={off}>
+        {busy === "up" ? waiting : "Create your account with a passkey"}
+      </button>
+      <p className={styles.leadNote}>Your fingerprint, face or screen lock. No password, no seed phrase. Some devices ask twice the first time.</p>
+      <button className={`btn ${styles.full}`} onClick={() => passkey("in")} disabled={off}>
+        {busy === "in" ? waiting : "Sign back in with your passkey"}
+      </button>
+      {wallet.hasPasskeyHere && (
+        <button className={styles.textBtn} onClick={() => passkey("any")} disabled={off}>
+          {busy === "any" ? waiting : "Use a passkey saved on another device"}
+        </button>
+      )}
+      {error && (
+        <p className="notice error" role="alert">
+          {error}
+        </p>
+      )}
+      <p className={styles.or}>
+        <span>or</span>
+      </p>
+      <div className={styles.signinActions}>
+        {wallet.privyEnabled && (
+          <button
+            className="btn quiet"
+            onClick={() => {
+              wallet.signIn();
+              onDone?.();
+            }}
+            disabled={off}
+          >
+            Continue with email
+          </button>
+        )}
+        <button
+          className={wallet.privyEnabled ? styles.textBtn : "btn quiet"}
+          onClick={() => {
+            wallet.usePractice();
+            onDone?.();
+          }}
+          disabled={off}
+        >
+          Use a practice wallet instead
+        </button>
+      </div>
+      {!compact && (
+        <p className={styles.fine}>
+          Your passkey makes your Segundo account on this device; the key never leaves it and Segundo never sees it.
+          {wallet.privyEnabled ? " Email sign-in comes with a wallet held for you by Privy." : ""} A practice wallet lives only in this browser and
+          holds test AUSD. You never need MON or gas.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Shown wherever an action needs a wallet. */
+export function SignInPanel({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <div className={styles.signin}>
       <h2>{title}</h2>
       {children}
-      {wallet.privyEnabled ? (
-        <>
-          <div className={styles.signinActions}>
-            <button className="btn primary" onClick={() => passkey("up")} disabled={!wallet.ready || !!busy}>
-              {busy === "up" ? "Waiting for your passkey…" : "Create an account with a passkey"}
-            </button>
-            <button className="btn" onClick={() => passkey("in")} disabled={!wallet.ready || !!busy}>
-              {busy === "in" ? "Waiting for your passkey…" : "Sign in with a passkey"}
-            </button>
-          </div>
-          <div className={styles.signinActions}>
-            <button className="btn quiet" onClick={wallet.signIn} disabled={!wallet.ready || !!busy}>
-              Continue with email
-            </button>
-            <button className="btn quiet" onClick={wallet.usePractice} disabled={!wallet.ready || !!busy}>
-              Use a practice wallet instead
-            </button>
-          </div>
-        </>
-      ) : (
-        <div className={styles.signinActions}>
-          <button className="btn primary" onClick={wallet.usePractice} disabled={!wallet.ready}>
-            Start with a practice wallet
-          </button>
-        </div>
-      )}
-      {error && <p className="notice error">{error}</p>}
-      <p className={styles.fine}>
-        {wallet.privyEnabled
-          ? "A passkey uses your phone or laptop's fingerprint, face or PIN; Till creates a wallet for it. A practice wallet lives only in this browser."
-          : "A practice wallet is created in this browser at once. It holds test AUSD only."}{" "}
-        You never need MON or gas.
-      </p>
+      <SignInChoices />
     </div>
   );
 }

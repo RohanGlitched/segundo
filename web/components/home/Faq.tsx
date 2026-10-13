@@ -1,13 +1,29 @@
+import Link from "next/link";
+import type { ReactNode } from "react";
 import styles from "./home.module.css";
 
-const QA = [
+const QA: { q: string; a: ReactNode }[] = [
   {
     q: "Is this real money?",
-    a: "Not yet. Till runs on Monad testnet with Agora's test AUSD, which has no value. The contract and the flows are the ones that would run on mainnet.",
+    a: "Not yet. Segundo runs on Monad testnet with Agora's test AUSD, which has no value. The contract and the flows are the ones that would run on mainnet.",
   },
   {
     q: "Do I need a crypto wallet or any MON?",
-    a: "No. Sign in with a passkey or your email and Till creates a wallet for you. Every action is a signature; Till's relayer submits it and pays the gas.",
+    a: "No. Sign in with a passkey or your email and Segundo creates a wallet for you. Every action is a signature; Segundo's relayer submits it and pays the gas.",
+  },
+  {
+    q: "What does it cost?",
+    a: "Freelancers pay nothing: every second of pay reaches you in full. Clients pay 1% on top of what they put into a tab, so a $100 budget costs them $101. The fee is signed in the same step as the tab, with no extra prompt and no gas.",
+  },
+  {
+    q: "How does Segundo make money?",
+    a: (
+      <>
+        From that 1% client fee, which is already live on testnet and lands in a public treasury you can check on Monad&apos;s explorer. Later, a share of
+        the yield on budgets waiting in tabs and a small margin on cash-out to local banks and mobile money. The whole model, with live numbers, is on{" "}
+        <Link href="/business">how Segundo makes money</Link>.
+      </>
+    ),
   },
   {
     q: "What if the client disappears halfway through?",
@@ -23,7 +39,7 @@ const QA = [
   },
   {
     q: "Who can move the money in a tab?",
-    a: "Only the contract's rules: earned pay can only go to the freelancer and unspent budget only back to the client. There is no admin key and no upgrade path. The source is verified on Monad's explorer.",
+    a: "Only the contract's rules: earned pay can only go to the freelancer and unspent budget only back to the client. There is no admin key, no upgrade path and no fee switch; the 1% is a separate transfer from the client, never taken from a tab. The source is verified on Monad's explorer.",
   },
 ];
 

@@ -11,8 +11,8 @@ import { explorerTx } from "@/lib/chain";
 import { useHistory, useTabs, useDollarBalance, type StubLine } from "@/lib/hooks";
 import { inviteLink, loadInvite } from "@/lib/invite";
 import { useChainNow, useLive } from "@/lib/live";
-import { ago, currency, formatDuration, formatMoney, formatUsd, toUnits, toUsd } from "@/lib/money";
-import { relay, settleNow, signPermit, type Landed } from "@/lib/relay";
+import { ago, currency, feeFor, formatDuration, formatFee, formatMoney, formatUsd, toUnits, toUsd } from "@/lib/money";
+import { relay, settleNow, signFee, signPermit, type Landed } from "@/lib/relay";
 import { DEMO_FREELANCERS } from "@/lib/demo";
 import { earnedAt, isZero, stateOf } from "@/lib/tabs";
 import { useWallet } from "@/lib/wallet";
@@ -179,12 +179,14 @@ export default function TabPage() {
     );
 
   const topUpUnits = Number(topUp) > 0 ? toUnits(Number(topUp)) : 0n;
+  // Top-ups carry Segundo's 1% on top, like the budget did; the freelancer pays nothing.
+  const topUpFee = feeFor(topUpUnits);
   const topUpProblem = !(Number(topUp) > 0)
     ? "Enter an amount."
     : Number(topUp) < 0.5
       ? "The smallest top-up is $0.50."
-      : balance != null && topUpUnits > balance
-        ? "That's more than your wallet holds."
+      : balance != null && topUpUnits + topUpFee > balance
+        ? `With the 1% fee that's ${formatFee(topUpUnits + topUpFee)}, more than your wallet holds.`
         : null;
 
   return (
@@ -261,7 +263,7 @@ export default function TabPage() {
                   <i aria-hidden />
                   {isDemo
                     ? `${payee.name.split(" ")[0]} clocks in by themselves, usually within a few seconds and a minute at most. The note starts printing the moment they do.`
-                    : `Waiting for ${payee.name} to clock in. They do it from their Till account; the note starts printing the moment they do.`}
+                    : `Waiting for ${payee.name} to clock in. They do it from their Segundo account; the note starts printing the moment they do.`}
                 </p>
               )}
               {state === "idle" && everClockedIn && isDemo && (
@@ -298,7 +300,8 @@ export default function TabPage() {
                     if (topUpProblem) return;
                     act.run(`Topped up ${formatUsd(Number(topUp))}`, async (sent) => {
                       const permit = await signPermit(wallet, topUpUnits);
-                      const p = relay(wallet, "topUpWithPermit", [view!.id, topUpUnits, permit.deadline, permit.v, permit.r, permit.s]);
+                      const fee = await signFee(wallet, topUpUnits);
+                      const p = relay(wallet, "topUpWithPermit", [view!.id, topUpUnits, permit.deadline, permit.v, permit.r, permit.s], fee);
                       sent();
                       const r = await p;
                       setShowTopUp(false);
@@ -311,11 +314,17 @@ export default function TabPage() {
                   <div className="field">
                     <label htmlFor="topup">Add to the budget (AUSD)</label>
                     <input id="topup" className="input" inputMode="decimal" value={topUp} onChange={(e) => setTopUp(e.target.value)} placeholder="5.00" />
-                    <span className="hint">Wallet: {balance == null ? "…" : formatUsd(toUsd(balance))}</span>
+                    <span className="hint">
+                      {topUpUnits > 0n
+                        ? `Top-up ${formatUsd(toUsd(topUpUnits))} · Segundo fee (1%) ${formatFee(topUpFee)} · You pay ${formatFee(topUpUnits + topUpFee)}. `
+                        : ""}
+                      Wallet: {balance == null ? "…" : formatUsd(toUsd(balance))}
+                    </span>
                   </div>
                   <button className="btn primary" disabled={!!topUpProblem || act.busy}>
                     {act.busy && act.which?.startsWith("Topped up") ? busyLabel(act.phase, "Add to budget") : "Add to budget"}
                   </button>
+                  <p className={`soft ${styles.feeNote}`}>{payee.name.split(" ")[0]} pays nothing; the whole top-up is theirs to earn.</p>
                 </form>
               )}
             </>
@@ -338,6 +347,21 @@ export default function TabPage() {
 
           <ErrorLine error={act.error} />
           <LandedLine landed={act.landed} />
+          {act.landed?.fee && (
+            <p className={styles.feeLine} role="status">
+              {act.landed.fee.hash ? (
+                <>
+                  Segundo&apos;s 1% fee, {formatFee(act.landed.fee.value)}, went to the treasury in its own transaction,{" "}
+                  <a className="serial" href={explorerTx(act.landed.fee.hash)} target="_blank" rel="noreferrer">
+                    block {act.landed.fee.block?.toLocaleString("en-US")}
+                  </a>
+                  .
+                </>
+              ) : (
+                act.landed.fee.error ?? "The top-up landed, but Segundo's fee didn't go through."
+              )}
+            </p>
+          )}
 
           {state === "working" && (
             <div className={styles.payouts} aria-live="polite">

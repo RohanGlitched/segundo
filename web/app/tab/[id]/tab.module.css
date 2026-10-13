@@ -46,6 +46,18 @@
   border: 1px solid var(--rule);
   border-radius: 10px;
 }
+.feeNote {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 14px;
+}
+.feeLine {
+  font-size: 14.5px;
+  color: var(--ink-soft);
+}
+.feeLine a {
+  text-decoration: none;
+}
 .confirm {
   display: flex;
   flex-wrap: wrap;

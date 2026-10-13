@@ -1,0 +1,139 @@
+.box {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+}
+.head {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.head h2 {
+  font-size: 22px;
+  font-variation-settings: "wdth" 112;
+  margin-bottom: 6px;
+}
+.mark {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  color: var(--intaglio);
+}
+.promise {
+  font-size: 14.5px;
+  color: var(--ink-soft);
+}
+.lede {
+  font-size: 15px;
+}
+.needs {
+  font-size: 14.5px;
+  color: var(--ink-soft);
+  border-left: 3px solid var(--rule);
+  padding-left: 14px;
+}
+.list {
+  margin: 0;
+  border-top: 1.5px solid var(--ink);
+}
+.list div {
+  display: grid;
+  grid-template-columns: 9.5rem minmax(0, 1fr);
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px dashed var(--rule);
+  font-size: 15px;
+  align-items: center;
+}
+.list dt {
+  color: var(--ink-soft);
+}
+.list dd {
+  margin: 0;
+  font-weight: 600;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+/* Redaction in security-print microlines rather than a solid bar. */
+.hatch {
+  display: block;
+  height: 14px;
+  border-radius: 2px;
+  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--intaglio) 55%, transparent) 0 1px, transparent 1px 4px),
+    color-mix(in srgb, var(--intaglio) 8%, transparent);
+}
+.meta {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px 16px;
+}
+.wide {
+  grid-column: 1 / -1;
+}
+.area {
+  min-height: 84px;
+  padding: 12px 14px;
+  line-height: 1.4;
+  resize: vertical;
+}
+.kind {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}
+.kind legend {
+  font-weight: 600;
+  font-size: 14.5px;
+  padding: 0;
+  margin-bottom: 6px;
+  width: 100%;
+}
+.kind label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  cursor: pointer;
+}
+.kind input {
+  accent-color: var(--ink);
+  width: 18px;
+  height: 18px;
+}
+.fine {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+@media (max-width: 560px) {
+  .box {
+    padding: 18px;
+  }
+  .form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .list div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+  .mark {
+    width: 44px;
+    height: 44px;
+  }
+}

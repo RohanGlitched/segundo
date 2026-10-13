@@ -110,14 +110,14 @@ export default function Join() {
             {payer.name} wants to pay you {formatUsd(rateUsd)} an hour, by the second.
           </h1>
           <p className={styles.lede}>
-            {formatUsd(toUsd(t.budget))} is already waiting in the Till contract on Monad, enough for {hoursCovered} of work. Clock in when you
+            {formatUsd(toUsd(t.budget))} is already waiting in the Segundo contract on Monad, enough for {hoursCovered} of work. Clock in when you
             start and your pay builds up every second. Cash out whenever you like.
           </p>
           <div className={styles.proof}>
             <p>
               <b>The money is already there.</b> {formatUsd(toUsd(t.budget))} sits in the{" "}
               <a href={explorerAddress(TILL)} target="_blank" rel="noreferrer">
-                Till contract
+                Segundo contract
               </a>{" "}
               on Monad, and the contract can only pay it to you for time on the clock or return it to {payer.name}.
               {openedTx && (
@@ -140,7 +140,7 @@ export default function Join() {
             <p className="notice">This is your own tab. Send the link to the freelancer and they join from their browser.</p>
           ) : !wallet.address ? (
             <SignInPanel title="Sign in to join">
-              <p>A passkey or your email is all you need. Till creates a wallet for you; you never need gas.</p>
+              <p>A passkey or your email is all you need. Segundo creates a wallet for you; you never need gas.</p>
             </SignInPanel>
           ) : (
             <form

@@ -240,3 +240,49 @@
     display: none;
   }
 }
+
+/* The bill: budget, Segundo's fee and the total, set like the stub of a banknote. */
+.bill {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fees {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 16px;
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--intaglio);
+  border-radius: var(--radius);
+  font-size: 14.5px;
+  font-variant-numeric: tabular-nums;
+}
+.fees dt {
+  color: var(--ink-soft);
+}
+.fees dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 600;
+}
+.fees .total {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1.5px solid var(--ink);
+  color: var(--ink);
+  font-weight: 650;
+}
+.fees dd.total {
+  font-variation-settings: "wdth" 115;
+  font-size: 16px;
+}
+.feeLine {
+  font-size: 14.5px;
+  color: var(--ink-soft);
+}
+.feeLine a {
+  text-decoration: none;
+}

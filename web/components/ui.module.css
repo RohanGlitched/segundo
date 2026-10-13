@@ -28,3 +28,66 @@
   font-size: 13.5px;
   color: var(--ink-soft);
 }
+.choices {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  max-width: 440px;
+}
+.lead {
+  min-height: 56px;
+  font-size: 16.5px;
+  width: 100%;
+}
+.leadNote {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  margin-top: -2px;
+  margin-bottom: 6px;
+}
+.full {
+  width: 100%;
+}
+.textBtn {
+  align-self: flex-start;
+  background: none;
+  border: 0;
+  padding: 6px 0;
+  font: inherit;
+  font-size: 14px;
+  color: var(--intaglio);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.textBtn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  max-width: none;
+  margin: 4px 0;
+}
+.or::before,
+.or::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--rule);
+}
+.choices .signinActions {
+  align-items: center;
+}
+.compact {
+  max-width: none;
+}
+.compact .lead {
+  min-height: 50px;
+  font-size: 15.5px;
+}
