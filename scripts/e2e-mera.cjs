@@ -1,6 +1,6 @@
 // End to end with a Mera passkey account, through the real UI: a Chrome virtual authenticator with PRF stands in
 // for the phone's fingerprint. Creates the account, waits for test AUSD, opens a tab to a demo freelancer with the
-// 1% fee, watches a payout land, closes it, then seals private details and opens them again after a lock.
+// 1% fee, watches a payout land, then seals private details.
 // Usage: node scripts/e2e-mera.cjs <baseUrl> [shotsDir]
 const { chromium } = require(process.env.PLAYWRIGHT || "playwright");
 const base = process.argv[2] || "http://localhost:3310";

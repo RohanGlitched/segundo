@@ -3,7 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const { chromium } = require(process.env.PLAYWRIGHT || "playwright");
 
-const BASE = process.argv[2] || "https://till-pay.vercel.app";
+const BASE = process.argv[2] || "https://segundo.world";
 const OUT = path.join(__dirname, "..", "docs", "screens");
 fs.mkdirSync(OUT, { recursive: true });
 const keys = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "keys", "wallets.json"), "utf8"));

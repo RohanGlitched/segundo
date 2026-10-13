@@ -1,6 +1,6 @@
-# Verify Till
+# Verify Segundo
 
-Everything here can be checked on Monad testnet (chain 10143) without trusting us.
+Everything here can be checked on Monad testnet (chain 10143) without trusting us. The contract is deployed under Segundo's working name, **Till**, so that is the name you will see on MonadVision and Sourcify (and in the forwarder's EIP-712 domain).
 
 ## Deployed contracts
 
@@ -9,13 +9,14 @@ Everything here can be checked on Monad testnet (chain 10143) without trusting u
 | Till (AUSD) | [`0xeb6c2c519c9bcc4495364c34ac116c20098113d1`](https://testnet.monadvision.com/address/0xeb6c2c519c9bcc4495364c34ac116c20098113d1) | Verified on Sourcify, exact match ([job](https://sourcify-api-monad.blockvision.org/v2/verify/e3300355-e6e0-40ff-8435-6642865d38f9)) |
 | ERC2771Forwarder (OpenZeppelin 5.4, unmodified) | [`0xB0Af71Dfb11df900B2B1a63De0D156e7f035B4D1`](https://testnet.monadvision.com/address/0xB0Af71Dfb11df900B2B1a63De0D156e7f035B4D1) | Verified on Sourcify, exact match ([job](https://sourcify-api-monad.blockvision.org/v2/verify/197e7720-567e-4e95-81d2-336d820b0aba)) |
 | AUSD (Agora) | [`0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC`](https://testnet.monadvision.com/address/0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC) | [Agora's deployments](https://docs.agora.finance/developer/contract-deployments) |
+| Segundo treasury | [`0xAdF0F9443EafD19916cBd8f7541ea5e19e69F62c`](https://testnet.monadvision.com/address/0xAdF0F9443EafD19916cBd8f7541ea5e19e69F62c) | A plain account; receives the 1% client fee |
 | Agora AUSD faucet | [`0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C`](https://testnet.monadvision.com/address/0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C) | Used to fund test accounts |
 
 Deployment transactions: [forwarder](https://testnet.monadvision.com/tx/0x4ec106a8034299c0146d51b18ef56852c693ee1205eb16c93623fa3958625a15), [Till on AUSD](https://testnet.monadvision.com/tx/0x12ec03d3c85cfe1ae59fdb67c29d1b4b181af40584c189ac158b0643f30760d6). An earlier Till on Circle USDC (`0x4720B1FA15a8e3b8AEc7aA6B7b627dCacEaa1b4f`, retired, holds nothing) was replaced by the AUSD deployment on Oct 4.
 
 ## One tab, every action, on chain
 
-`bots/proof.mjs` runs a whole tab with fresh wallets and no gas on either side: the client is funded from Agora's AUSD faucet, then every Till action is signed by the client or freelancer and submitted by the relayer through the forwarder. Tab № 6, client `0x828ac92115c7F12AF1C7A37265C600048dd24F53`, freelancer `0x2aAEABf549E313f2cF19d2928Ee95603C218AC0c`.
+`bots/proof.mjs` runs a whole tab with fresh wallets and no gas on either side: the client is funded from Agora's AUSD faucet, then every contract action is signed by the client or freelancer and submitted by the relayer through the forwarder. Tab № 6, client `0x828ac92115c7F12AF1C7A37265C600048dd24F53`, freelancer `0x2aAEABf549E313f2cF19d2928Ee95603C218AC0c`.
 
 | # | Step | Transaction | Block | Submit to receipt |
 |---|---|---|---|---|
@@ -44,6 +45,37 @@ Run it yourself (needs a deployer with MON and a keeper in `keys/wallets.json`):
 ```bash
 TILL=0xeb6c2c519c9bcc4495364c34ac116c20098113d1 FORWARDER=0xB0Af71Dfb11df900B2B1a63De0D156e7f035B4D1 node bots/proof.mjs
 ```
+
+## The 1% fee on chain
+
+Clients pay Segundo 1% on top of every budget and top-up; freelancers pay nothing. The fee is not part of the contract. The client signs an AUSD `transferWithAuthorization` (EIP-3009) to the treasury in the same step as the open or top-up, and the relayer submits it as its own transaction right after the forwarded call lands (`web/app/api/relay/route.ts`). Fee = budget ÷ 100, rounded up to the next AUSD unit (6 decimals).
+
+So every fee is an AUSD `Transfer` log whose recipient (topic 2) is the treasury. Envio HyperRPC answers a log query over the whole range in one call (Monad's public RPC caps `eth_getLogs` at 100 blocks):
+
+```bash
+curl -s https://monad-testnet.rpc.hypersync.xyz/$ENVIO_API_TOKEN -H 'content-type: application/json' -d '{
+  "jsonrpc":"2.0","id":1,"method":"eth_getLogs","params":[{
+    "address":"0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC",
+    "topics":["0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+              null,
+              "0x000000000000000000000000adf0f9443eafd19916cbd8f7541ea5e19e69f62c"],
+    "fromBlock":"0x4300000","toBlock":"latest"}]}'
+```
+
+(`0x4300000` is block 70,254,592, before the fee went live. If a range is too heavy, split it; `web/lib/envio.ts` reads 400,000 blocks per call. Without a token, the same filter works on `https://testnet-rpc.monad.xyz` 100 blocks at a time, or open the [treasury's token transfers on MonadVision](https://testnet.monadvision.com/address/0xAdF0F9443EafD19916cBd8f7541ea5e19e69F62c).)
+
+The first fees, found on Oct 13 2026:
+
+| # | Fee transaction | Block | From (client) | Fee | Matching open | Block | Tab |
+|---|---|---|---|---|---|---|---|
+| 1 | [0xe1b850e8…](https://testnet.monadvision.com/tx/0xe1b850e8d7c93a155af39ee6e7173b77e42fdd2709cb823d047c936cb2888e31) | 70,674,757 | `0xca158574f9f167A186C0fe66591081a7072582f3` | 0.020000 AUSD | [0x1a67bc4a…](https://testnet.monadvision.com/tx/0x1a67bc4ac068cd905a287e028bb1d8798212ce6bc86ec609ae78278b6d206ba6) | 70,674,749 | № 20, $2.00 budget |
+| 2 | [0xf3fd946b…](https://testnet.monadvision.com/tx/0xf3fd946bbf466db65971adf340a606937ff5243e22bdea3cb8e41e66b0338d3a) | 70,676,847 | `0xAD7F23EC8C2c6c86e84ED063C525542EA6749d93` | 0.020000 AUSD | [0x7c0468f2…](https://testnet.monadvision.com/tx/0x7c0468f29b0bad2836e3ddafaadc30eae937c10d3ed664ad4f4e49d94a29e0ef) | 70,676,844 | № 21, $2.00 budget |
+
+Both are from passkey end-to-end runs (`scripts/e2e-mera.cjs`), each with a fresh Mera account. Take the first: it opened tab № 20 to the demo freelancer Tunde Bakare (`0x929835102eb2e16F5678C8c3B4830C369D1d4bE0`) at $60 an hour with a $2.00 budget (memo "API review, passkey run", the script's own). The `Opened(id = 20, payer = 0xca15…82f3, payee = 0x9298…4bE0, rate = 60,000,000, budget = 2,000,000)` event is in block 70,674,749 at 11:52:27 UTC; the fee of 20,000 units (1% of 2,000,000) left the same client eight blocks later, at 11:52:30 UTC. Both transactions were sent by the relayer `0xe77f8062f66767428b1786709e079cabd01abf40`: the open to the forwarder, the fee straight to AUSD (selector `0xe3ee160e`, `transferWithAuthorization`). The client never held MON. Fee № 2 is the same shape: `Opened(id = 21)` from `0xAD7F…9d93` in block 70,676,844 (12:03:09 UTC), its 20,000-unit fee three blocks later.
+
+More fees appear here as the demo studios open and top up tabs (they pay the fee like any client) and as people try the app. To pair a fee with its tab yourself: find an `Opened` or `ToppedUp` event from the same client at or shortly before the fee's block whose amount ÷ 100, rounded up, equals the fee. That is the rule `/api/history` uses (`feeTabs` in `web/lib/envio.ts`), and the live totals are on [the business page](https://segundo.world/business#live) and at `GET /api/stats`.
+
+What the fee path guarantees, and what it doesn't, is in [SECURITY.md](SECURITY.md#the-fee-path).
 
 ## Tests
 
@@ -76,7 +108,15 @@ forge test --match-contract Fork --fork-url monad_testnet     # Agora AUSD (fauc
 | An invite signature works on its own tab, contract and chain only, and once; a client cannot claim their own invite | `test_inviteSignatureIsBoundToTabContractAndChain`, `test_clientCannotClaimTheirOwnInvite` |
 | A rate change never touches a running shift and only prices the next one | `test_rateChangeNeverTouchesARunningShift` |
 
-The web app has an end-to-end test that drives the real UI on the deployed site: faucet, profile, open a tab to a demo freelancer, payouts while watching, pause, close and refund, then an invite joined from a second browser at phone width (`scripts/e2e.cjs`).
+The web app has two end-to-end tests that drive the real UI:
+
+- `scripts/e2e.cjs` (practice wallet): faucet, profile, open a tab to a demo freelancer, payouts while watching, pause, close and refund, then an invite joined from a second browser at phone width.
+- `scripts/e2e-mera.cjs` (passkey): a Chrome virtual authenticator with PRF stands in for a fingerprint. It creates a Mera account, waits for test AUSD, opens a tab with the 1% fee, sees the freelancer clock in and a payout land, then seals private details. Fee № 1 above is from this run.
+
+```bash
+node scripts/e2e.cjs <baseUrl>
+node scripts/e2e-mera.cjs <baseUrl>
+```
 
 ## Claim to code
 
@@ -85,6 +125,10 @@ The web app has an end-to-end test that drives the real UI on the deployed site:
 | "Pay builds up every second" | `Till._earned`: `banked + (now - since) * rate / 3600`, capped at the budget |
 | "Can only pay you or refund the client" | `Till._settle` pays `payee` only; `Till.close` refunds `payer` only; no owner or admin functions exist |
 | "No gas, one signature" | `web/lib/relay.ts` (EIP-712 forward requests, EIP-2612 permit and EIP-3009 transfers on AUSD), `web/app/api/relay/route.ts` |
+| "Clients pay 1% on top; freelancers pay nothing" | `feeFor` in `web/lib/money.ts`; `signFee` in `web/lib/relay.ts`; the relayer checks and simulates the fee before the open and sends it after (`web/app/api/relay/route.ts`); the demo studios do the same (`bots/till-bots.mjs`) |
+| "Your passkey is your account" | `web/lib/mera.ts`: PRF output → BIP-39 entropy → key at `m/44'/60'/0'/0/0` → Mera signing session; `web/lib/wallet.tsx` locks it after 15 min idle or 5 min in the background |
+| "Sealed with your passkey; our servers never see them" | `web/lib/seal.ts`: PRF with salt `sha256("segundo/seal/v1")` → HKDF-SHA-256 → AES-256-GCM, account address as additional data; stored in this browser only |
+| "Revenue, live from the chain" and income statements | `web/lib/envio.ts` reads every Till event and treasury fee through Envio HyperRPC; `web/app/api/stats`, `web/app/api/history`, `web/app/proof/[address]` |
 | "Payouts every few seconds while you watch" | `web/app/tab/[id]/page.tsx` calls `/api/settle` every 6 s for the first two minutes a page is open, then every 20 s, then once a minute; it also settles once when a clock stops |
-| Live numbers on the landing page | `web/app/api/live/route.ts` reads every tab's state from the contract (no indexer) |
+| Live numbers on the landing page | `web/app/api/live/route.ts` reads every tab's state from the contract |
 | Pay stub from chain | `web/lib/hooks.ts` `useHistory` walks `Activity(id, prevBlock)` one exact block at a time |

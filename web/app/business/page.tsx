@@ -710,7 +710,7 @@ export default function Business() {
             <div className={styles.founderText}>
               <p>
                 Rohan is building Segundo on his own. He wrote the contract, the relayer and the app during Monad Metropolis, and every line of it is{" "}
-                <a href="https://github.com/RohanGlitched/till-pay" target="_blank" rel="noreferrer">
+                <a href="https://github.com/RohanGlitched/segundo" target="_blank" rel="noreferrer">
                   public on GitHub
                 </a>
                 .

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="appName">Segundo</string>
+    <string name="launchUrl" translatable="false">https://segundo.world/app</string>
+    <string name="providerAuthority" translatable="false">world.segundo.app.fileprovider</string>
+    <string name="assetStatements" translatable="false">[{\"relation\": [\"delegate_permission/common.handle_all_urls\"], \"target\": {\"namespace\": \"web\", \"site\": \"https://segundo.world\"}}]</string>
+    <string name="shortcutTabs">Your tabs</string>
+    <string name="shortcutOpen">Open a tab</string>
+    <string name="shortcutSend">Send AUSD</string>
+</resources>

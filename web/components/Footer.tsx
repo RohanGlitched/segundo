@@ -44,10 +44,10 @@ export function Footer() {
           <p className={styles.note}>Contracts deployed under Segundo&apos;s working name, Till.</p>
         </div>
         <p className={styles.links}>
-          <a href="https://github.com/RohanGlitched/till-pay" target="_blank" rel="noreferrer">
+          <a href="https://github.com/RohanGlitched/segundo" target="_blank" rel="noreferrer">
             Source on GitHub
           </a>
-          <a href="https://github.com/RohanGlitched/till-pay/blob/main/VERIFY.md" target="_blank" rel="noreferrer">
+          <a href="https://github.com/RohanGlitched/segundo/blob/main/VERIFY.md" target="_blank" rel="noreferrer">
             How to verify it
           </a>
         </p>

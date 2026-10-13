@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The same three shortcuts as the web manifest: long-press the icon. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutId="tabs"
+        android:shortcutLongLabel="@string/shortcutTabs"
+        android:shortcutShortLabel="@string/shortcutTabs">
+        <intent
+            android:action="android.intent.action.MAIN"
+            android:data="https://segundo.world/app"
+            android:targetClass="com.google.androidbrowserhelper.trusted.LauncherActivity"
+            android:targetPackage="world.segundo.app" />
+    </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutId="open"
+        android:shortcutLongLabel="@string/shortcutOpen"
+        android:shortcutShortLabel="@string/shortcutOpen">
+        <intent
+            android:action="android.intent.action.MAIN"
+            android:data="https://segundo.world/open"
+            android:targetClass="com.google.androidbrowserhelper.trusted.LauncherActivity"
+            android:targetPackage="world.segundo.app" />
+    </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutId="send"
+        android:shortcutLongLabel="@string/shortcutSend"
+        android:shortcutShortLabel="@string/shortcutSend">
+        <intent
+            android:action="android.intent.action.MAIN"
+            android:data="https://segundo.world/app?send=1"
+            android:targetClass="com.google.androidbrowserhelper.trusted.LauncherActivity"
+            android:targetPackage="world.segundo.app" />
+    </shortcut>
+</shortcuts>
