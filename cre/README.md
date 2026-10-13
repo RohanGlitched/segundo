@@ -26,6 +26,16 @@ The tabs live in Till, the contract deployed under Segundo's working name.
 Both forwarder addresses come from the CRE [Forwarder Directory](https://docs.chain.link/cre/guides/workflow/using-evm-client/forwarder-directory-ts).
 SegundoKeeper accepts reports only from them, so nobody else can post rates.
 
+## Verified on chain
+
+`cre workflow simulate --broadcast` ran this workflow against Monad testnet on 13 October 2026. Full output: [SIMULATION.md](SIMULATION.md).
+
+- **Transaction:** [`0x17d86a59…975d03`](https://testnet.monadscan.com/tx/0x17d86a590a0ed22bc60d941db6d0b0e462a449a6f7fe48a43704d97ebe975d03), block 70688328, success.
+- **Route:** keeper wallet → CRE MockKeystoneForwarder → `SegundoKeeper.onReport`. The forwarder's `ReportProcessed` result is `true`.
+- **Rates:** `RatesPosted` with six rates the DON agreed on: PHP 62.770608, NGN 1331.514171, INR 95.78, BRL 4.989911, KES 129.717362 and EUR 0.89437 per USD.
+- **Payments:** `Till.settleMany` paid three running tabs (2, 4 and 5) a total of 4.238888 AUSD. That shows as three `Settled` events and three AUSD transfers to the freelancers.
+- **Before the broadcast:** a dry run read 127 tabs and built the same kind of report without sending it.
+
 ## What one run does
 
 ```
@@ -118,7 +128,10 @@ Rates are units per 1 USD, times 10^6 (for example `62757000` means 62.757 PHP t
 
 ## Going to production
 
-Deploy the workflow with `cre workflow deploy segundo-keeper --target production-settings`. SegundoKeeper
+Deploying needs CRE deploy access for the organization (request it with `cre account access`). Then set
+`deployment-registry: "private"` (Chainlink-hosted, so no wallet or gas is needed for registry operations) under
+`production-settings` in `segundo-keeper/workflow.yaml`, and run
+`cre workflow deploy ./segundo-keeper --target production-settings`. SegundoKeeper
 already accepts the Monad testnet KeystoneForwarder. After the first deploy, the owner should call
 `setExpectedWorkflowId(id)`, so that only this workflow's reports are accepted. Leave it unset while
 simulating, because the mock forwarder sends no workflow metadata.

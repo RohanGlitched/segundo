@@ -30,7 +30,8 @@ export type Currency = (typeof CURRENCIES)[number]
 
 const fxSource = z.object({
 	name: z.string(),
-	url: z.string().url(),
+	// A pattern, not z.string().url(): the WASM runtime has no URL constructor.
+	url: z.string().regex(/^https:\/\/[^\s/]+\/\S*$/),
 	format: z.enum(['er-api', 'currency-api', 'frankfurter']),
 })
 
