@@ -13,7 +13,7 @@ one relayer address in nonce order and that we had no load test. So we measured 
    long each takes to reach a block.
 2. The same kind of payout from one key with its nonces pipelined (all sent at once).
 3. The same kind of payout from one key, one at a time, waiting for each receipt: how Segundo's relayer
-   (`web/lib/server.ts`) works today.
+   (`web/lib/server.ts`) worked before this test.
 
 ## Method (run of October 13, 2026)
 
@@ -59,12 +59,19 @@ time over the 10,000 blocks to 70,682,181 was 0.305 s. 402 of the 461 successful
 other 59 landed in the same one-second timestamp as that tab's previous settle, so there was nothing new to pay.
 
 **What it means.** One key is not the limit on Monad: 48 consecutive nonces from one key landed in one block. The
-bottleneck is the relayer's send-and-wait loop. A pool of relayer keys, each pipelining its own nonces, is what
-production needs, and is what run A used.
+bottleneck was the relayer's send-and-wait loop (1.1 payouts a second, run C). A pool of relayer keys, each pipelining
+its own nonces, is what production needs, and is what run A used.
+
+**What changed since.** Segundo's relayer is now a pool of 7 keys (`web/lib/pool.ts`): `KEEPER_KEY` plus
+`RELAYER_KEYS`. Each person's actions go to one key chosen from their address (a tab's payouts, from its id), so they
+keep their order, and `sendAndWait` in `web/lib/server.ts` only serialises choosing the nonce and handing the
+transaction to the node, so each key keeps many transactions in flight instead of waiting for each receipt.
 
 **What it does not show.** Parallel execution: every settle changes the contract's AUSD balance (one storage slot),
-so these transactions conflict and Monad's optimistic execution re-runs the later ones. The 23 reverts were all out
-of gas on the same 5 tabs, because we used one tight gas limit for every tab to keep the cost down. Times are from one
+so these transactions conflict and Monad's optimistic execution re-runs the later ones. The 23 reverts across the three
+runs (19 in A, 3 in B, 1 in C) were all out of gas on the same 5 tabs, because we used one tight gas limit for every
+tab to keep the cost down. Segundo's relayer estimates each call and adds 15%, and refuses a signed request asking for
+more than 1.5 times its own estimate. Times are from one
 machine through public endpoints.
 
 **Cost.** About 11.7 test MON for the whole exercise (setup 3.9, the three runs 5.6, teardown about 2.2), all from

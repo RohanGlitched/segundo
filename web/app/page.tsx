@@ -4,6 +4,7 @@ import { LiveHero, LiveStrip } from "@/components/LiveHero";
 import { ArrivalChart } from "@/components/home/ArrivalChart";
 import { Divider, GrandRosette } from "@/components/home/Art";
 import { BlockTape } from "@/components/home/BlockTape";
+import { ByAccounts } from "@/components/home/ByAccounts";
 import { Faq } from "@/components/home/Faq";
 import { InkSheet } from "@/components/home/InkSheet";
 import { Money } from "@/components/home/Money";
@@ -25,7 +26,7 @@ const STEPS = [
   },
   {
     title: "You're paid as you go",
-    body: "Your pay lands in your wallet while you work, every few seconds while the tab is open. When the tab closes, the unspent budget goes straight back to the client, and so does the 1% fee on it.",
+    body: "Pay is earned every second and lands in your wallet while you work: every few seconds while the tab is open on screen, and every few minutes from Segundo's keeper otherwise. When the tab closes, the unspent budget goes straight back to the client, and so does the 1% fee on it.",
   },
 ];
 
@@ -77,9 +78,16 @@ export default function Home() {
               <Link href="/request" className="btn">
                 I freelance
               </Link>
+              <Link href="/send" className="btn quiet">
+                Send dollars abroad
+              </Link>
             </div>
             <p className={styles.note}>
-              Sign up with a passkey or your email, or try it without signing up. No wallet app, no seed phrase. It runs on test dollars for now. Cash-out
+              <ByAccounts
+                full="Sign up with a passkey or your email, or try it without signing up."
+                mera="Sign up with a passkey: your fingerprint or face, nothing else."
+              />{" "}
+              No wallet app, no seed phrase. It runs on test dollars for now. Cash-out
               to local money comes next, with partners: <Link href="/cashout">see how cash-out will work</Link>.
             </p>
           </div>
@@ -95,7 +103,7 @@ export default function Home() {
               Who&apos;s on the clock right now
             </h2>
             <p className={styles.sub}>
-              Three studios pay five freelancers on Monad testnet, around their own working hours. Every figure below is a real tab, read from
+              Three demo studios pay five demo freelancers on Monad testnet, during their own working hours, staggered so someone is usually on. Every figure below is a real tab, read from
               the chain as you watch.
             </p>
           </div>
@@ -248,7 +256,8 @@ export default function Home() {
                   <b>Your money, your currency.</b> See every second of pay in rupees, pesos, naira or shillings.
                 </li>
                 <li>
-                  <b>Nothing to set up.</b> Sign in with a passkey or your email; there&apos;s no wallet app and no gas.
+                  <b>Nothing to set up.</b>{" "}
+                  <ByAccounts full="Sign in with a passkey or your email; there's no wallet app and no gas." mera="Sign in with a passkey; there's no wallet app and no gas." />
                 </li>
                 <li>
                   <b>Ask for a tab.</b> Send a client a link with your rate and a suggested budget; they fund it in one step.

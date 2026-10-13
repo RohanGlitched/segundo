@@ -6,7 +6,7 @@ import { LiveHero } from "@/components/LiveHero";
 import { Mark } from "@/components/Mark";
 import { GrandRosette } from "@/components/home/Art";
 import { useBench, type Bench } from "@/components/home/UnderLoad";
-import { count, money, usdOf, useStats, type Stats } from "@/components/business/stats";
+import { catchingUp, count, isFull, money, usdOf, useStats, type Stats } from "@/components/business/stats";
 import { NetworkProvider } from "@/lib/network";
 import styles from "./deck.module.css";
 
@@ -17,7 +17,13 @@ type Slide = { id: string; title: string; notes: string; body: (s: Stats | null 
 
 const live = (s: Stats | null | undefined, pick: (s: Stats) => string) => (s ? pick(s) : s === undefined ? "…" : "—");
 /** False when /api/stats fell back to the public RPC, whose short window can't split or count the whole history. */
-const whole = (s: Stats) => s.source !== "rpc";
+const whole = isFull;
+/** Fees net of the refunds sent back at close, and the gross they come from: the same two lines on every slide. */
+const feesNet = (x: Stats) => money(usdOf(x.fees.net ?? x.fees.total));
+const feesGross = (x: Stats) =>
+  `net of ${count(x.fees.refunds ?? 0)} ${x.fees.refunds === 1 ? "refund" : "refunds"} at close; ${money(usdOf(x.fees.total))} collected in ${count(x.fees.count)} ${
+    x.fees.count === 1 ? "fee" : "fees"
+  }`;
 /** Monad's average block time, measured from the chain by /api/stats; the October 13 measurement until it answers. */
 const blockTime = (s: Stats | null | undefined) =>
   `${((s?.chain?.blockMs ?? 305) / 1000).toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} s`;
@@ -194,11 +200,11 @@ const SLIDES: Slide[] = [
           </ol>
         </div>
         <div className={styles.stat}>
-          <span className={styles.statLabel}>Fees in the Segundo treasury</span>
-          <span className={`denom ${styles.bigNum} ${styles.serialNum}`}>{live(s, (x) => money(usdOf(x.fees.total)))}</span>
-          <span className={styles.statLabel}>{live(s, (x) => `${count(x.fees.count)} fees, each a public transfer on Monad`)}</span>
+          <span className={styles.statLabel}>Fees kept in the Segundo treasury</span>
+          <span className={`denom ${styles.bigNum} ${styles.serialNum}`}>{live(s, (x) => (whole(x) ? feesNet(x) : "—"))}</span>
+          <span className={styles.source}>{live(s, (x) => (whole(x) ? feesGross(x) : catchingUp(x) ?? ""))}</span>
           <span className={styles.source}>
-            Testnet, including our demo studios. Test AUSD has no value. The tab contract has no fee switch and anyone can call it directly; the fee
+            {s && whole(s) && catchingUp(s) ? `${catchingUp(s)} ` : ""}Every fee is a public transfer on Monad. Testnet, including our demo studios. Test AUSD has no value. The tab contract has no fee switch and anyone can call it directly; the fee
             pays for the service around it.
           </span>
         </div>
@@ -272,13 +278,13 @@ const SLIDES: Slide[] = [
     ),
   },
   {
-    id: "traction",
-    title: "Traction",
+    id: "proof",
+    title: "Live proof",
     notes:
-      "It's live. These numbers come from the chain right now, split honestly: wallets that aren't ours, then our demo studios, which are bots. Every open and top-up through Segundo since launch is checked for its fee.",
+      "It's live. These numbers come from the chain right now, split honestly: wallets that aren't ours, then our demo studios, which are bots. Fees are shown net of what went back to clients at close.",
     body: (s) => (
       <div>
-        <p className={styles.kicker}>Traction</p>
+        <p className={styles.kicker}>Live proof</p>
         <h2 className={styles.h}>Live on Monad testnet, read from the chain now.</h2>
         <dl className={styles.traction}>
           {(
@@ -288,23 +294,18 @@ const SLIDES: Slide[] = [
               ["Paid on their tabs", (x: Stats) => (whole(x) && x.outside ? money(usdOf(x.outside.paid)) : "—")],
               ["Demo studios' tabs (bots)", (x: Stats) => (whole(x) && x.demo ? count(x.demo.tabs) : "—")],
               ["Paid by demo studios (bots)", (x: Stats) => (whole(x) && x.demo ? money(usdOf(x.demo.paid)) : "—")],
-              ["Fee collection", (x: Stats) => (whole(x) && x.feeRate?.opens ? `${count(x.feeRate.opensWithFee)} of ${count(x.feeRate.opens)}` : "—")],
+              ["Fees kept, net of refunds", (x: Stats) => (whole(x) ? feesNet(x) : "—")],
             ] as const
           ).map(([k, f]) => (
             <div key={k}>
               <dt>{k}</dt>
               <dd className="denom">{live(s, f)}</dd>
+              {k.startsWith("Fees") && s && whole(s) && <dd className={styles.tractionSub}>{feesGross(s)}</dd>}
             </div>
           ))}
         </dl>
         <p className={styles.source}>
-          {s &&
-            (whole(s) && s.feeRate?.opens
-              ? `Fee collection: ${count(s.feeRate.opensWithFee)} of ${count(s.feeRate.opens)} opens and top-ups through Segundo since launch paid the fee${
-                  s.feeRate.missed.length ? "; the misses are linked on segundo.world/business" : ""
-                }. `
-              : "")}
-          Outside wallets are everyone who isn&apos;t a demo studio, our own test runs included. Demo studios: three bot studios paying five bot
+          {s && catchingUp(s) ? `${catchingUp(s)} ` : ""}Outside wallets are everyone who isn&apos;t a demo studio, our own test runs included. Demo studios: three bot studios paying five bot
           freelancers. The load test is left out. Contract verified on Sourcify, 53 Foundry tests including fuzz and invariant runs.
         </p>
       </div>
@@ -322,16 +323,24 @@ const SLIDES: Slide[] = [
           <h2 className={styles.h}>From testnet to the first real paycheck.</h2>
           <ol className={styles.lines}>
             <li>
-              <b>Mainnet on AUSD, the same contract, audited</b>
+              <div className={styles.lineText}>
+                <b>Mainnet on AUSD:</b> the same contract, audited first
+              </div>
             </li>
             <li>
-              <b>Cash-out partners:</b> pesos, naira, rupees, shillings and reais to banks and mobile money
+              <div className={styles.lineText}>
+                <b>Cash-out partners:</b> pesos, naira, rupees, shillings and reais to banks and mobile money
+              </div>
             </li>
             <li>
-              <b>Time-tracker plug-ins:</b> the tools freelancers already use clock them in
+              <div className={styles.lineText}>
+                <b>Time-tracker plug-ins:</b> the tools freelancers already use clock them in
+              </div>
             </li>
             <li>
-              <b>Advances</b> against verified on-chain income
+              <div className={styles.lineText}>
+                <b>Advances:</b> credit against verified on-chain income
+              </div>
             </li>
           </ol>
         </div>

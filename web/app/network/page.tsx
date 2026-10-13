@@ -3,6 +3,7 @@ import { Footer } from "@/components/Footer";
 import { Divider } from "@/components/home/Art";
 import { TILL, explorerAddress, explorerTx, publicClient } from "@/lib/chain";
 import bench from "@/public/bench.json";
+import { CrePanel } from "./CrePanel";
 import styles from "./network.module.css";
 
 // The block-time figure is read live from Monad; the rest is the recorded run in public/bench.json.
@@ -188,7 +189,8 @@ export default async function Network() {
               </div>
             </dl>
             <p className={styles.certFoot}>
-              {bench.succeeded} succeeded and {bench.failed} reverted (out of gas, explained below). Monad testnet, Segundo&apos;s contract{" "}
+              In the burst, {bench.succeeded} succeeded and {bench.failed} reverted ({reverts} across all three runs, every one out of gas, explained
+              below). Monad testnet, Segundo&apos;s contract{" "}
               <a className="serial" href={explorerAddress(TILL)} target="_blank" rel="noreferrer">
                 {TILL.slice(0, 8)}…{TILL.slice(-4)}
               </a>
@@ -369,8 +371,7 @@ export default async function Network() {
             <p>
               <b>Since this run, Segundo&apos;s relayer uses a pool of 7 keys.</b> Each person&apos;s actions go to one key chosen from their address (a
               tab&apos;s payouts, from its number), so they stay in order, and each key sends its next transaction without waiting for the last one&apos;s
-              receipt. In our own test of 12 transfers sent at once by 12 people, the last one finished in 5.6 to 9.4 s over three runs; through the
-              one-key relayer it took 25 to 57 s, and one timed out.
+              receipt.
             </p>
           </div>
         </Sec>
@@ -399,6 +400,22 @@ export default async function Network() {
               </p>
             </div>
           </div>
+          <div className={styles.creRow}>
+            <div className={styles.body}>
+              <h3 className={styles.h3}>Who pays out when nobody is watching</h3>
+              <p>
+                Pay is earned every second. While a tab is open on someone&apos;s screen, the app asks for a payout every few seconds; when nobody has it
+                open, a keeper settles every running tab that owes at least a cent, every few minutes. Segundo runs one keeper itself, and a second runs
+                as a <b>Chainlink CRE workflow</b>: several nodes each read the running tabs from Monad and fetch exchange rates from three public
+                sources, agree on one report, and SegundoKeeper settles those tabs with <span className="serial">settleMany</span> and stores the rates.
+              </p>
+              <p>
+                Because anyone may settle any tab, neither keeper is trusted with anything: the worst either can do is stop, and then the other, the
+                app or the freelancer settles instead.
+              </p>
+            </div>
+            <CrePanel />
+          </div>
         </Sec>
 
         {/* ------------------------------------------------------------ honesty */}
@@ -417,14 +434,16 @@ export default async function Network() {
               </p>
             </li>
             <li>
-              <h3>{reverts} reverts</h3>
+              <h3>{reverts} reverts across the three runs</h3>
               <p>
-                All out of gas, all on the same 5 tabs. Monad charges the whole gas limit, not the gas used
+                {bench.failed} in the burst, {bench.pipelined.reverted} from the single key sent all at once and {bench.singleSender.reverted} sent one at a
+                time. All out of gas, all on the same 5 tabs. Monad charges the whole gas limit, not the gas used
                 <a className={styles.ref} href={DOCS.gas} target="_blank" rel="noreferrer" aria-label="Source: Monad docs, gas pricing">
                   3
                 </a>
                 , so to keep the bill down we gave every tab one tight limit taken from the others; those 5 need {n(bench.gasPerSettle.steadySomeTabs)} gas, not{" "}
-                {n(bench.gasPerSettle.steady)}. The relayer in production estimates each call and adds 25%. Reverted transactions still landed and count in
+                {n(bench.gasPerSettle.steady)}. Segundo&apos;s relayer estimates each call and adds 15%, and refuses a
+                signed request asking for more than 1.5 times its own estimate. Reverted transactions still landed and count in
                 the throughput.
               </p>
             </li>

@@ -264,11 +264,37 @@ const ROAD: { when: string; status: "live" | "next" | "later"; label: string; it
         <b>The 1% client fee</b>, signed with the tab and paid into a public treasury
       </>,
       <>
-        <b>Live notes</b> in twelve currencies, with demo studios paying demo freelancers around the clock
+        <b>Live notes</b> in twelve currencies, with demo studios paying demo freelancers during their own working hours
       </>,
       <>
         <b>Revenue and income read from the chain</b> with Envio: the live panel above and an{" "}
-        <Link href={`/proof/${PROOF_SAMPLE.address}`}>income statement</Link> for every wallet
+        <Link href={`/proof/${PROOF_SAMPLE.address}`}>income statement</Link> for every wallet, with selective disclosure of sealed details to one
+        verifier
+      </>,
+      <>
+        <b>Send by link or email</b>: AUSD to anyone, collected with a passkey, and taken back if nobody does
+      </>,
+      <>
+        <b>
+          <Link href="/request">Ask for a tab</Link>
+        </b>
+        : a freelancer sends a client a link with their rate and a suggested budget
+      </>,
+      <>
+        <b>A Chainlink CRE keeper</b> that settles running tabs and posts exchange rates on Monad, run as a simulation with broadcast
+      </>,
+      <>
+        <b>
+          <Link href="/cashout">Cash-out</Link>
+        </b>{" "}
+        route for five corridors, with a simulated partner on testnet
+      </>,
+      <>
+        <b>A relayer pool</b> of 7 keys with many transactions in flight each, after our{" "}
+        <Link href="/network">Monad load test</Link>
+      </>,
+      <>
+        <b>An Android app</b> (installs from segundo.world) and an installable web app on every phone
       </>,
     ],
   },
@@ -433,7 +459,7 @@ export default function Business() {
           <div className={styles.neutral}>
             <h3>The contract is a public good. The fee pays for the service.</h3>
             <p>
-              Till, the tab contract, is neutral: it has no fee switch and no owner, and anyone can call it directly and pay their own gas. Our own{" "}
+              The Segundo contract (working name Till) is neutral: it has no fee switch and no owner, and anyone can call it directly and pay their own gas. Our own{" "}
               <Link href="/network">load test</Link> did exactly that, so those tabs owe no fee. Segundo&apos;s 1% pays for what sits around the contract,
               the way a front end does: no gas for either side, passkey sign-up, and cash-out to local money as it arrives.
             </p>

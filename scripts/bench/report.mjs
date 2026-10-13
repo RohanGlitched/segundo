@@ -93,7 +93,7 @@ const samples = [
   { label: "First settle of the burst", r: pick((r) => r.run === "multi" && r.block === multi.firstBlock && r.status === "success") },
   ...fullBlocks.map((b) => ({ label: `One of ${b.ours} settles in block ${b.number.toLocaleString("en-US")}`, r: pick((r) => r.run === "multi" && r.block === b.number && r.status === "success") })),
   { label: `One of ${pipe.perBlockMax} settles from a single key in block ${pipe.firstBlock.toLocaleString("en-US")}`, r: pick((r) => r.run === "pipe" && r.status === "success") },
-  { label: "A settle sent one at a time, the way the relayer works today", r: pick((r) => r.run === "serial" && r.status === "success") },
+  { label: "A settle sent one at a time, the way the relayer worked before this test", r: pick((r) => r.run === "serial" && r.status === "success") },
   { label: "One of the reverts (out of gas)", r: pick((r) => r.status === "reverted") },
 ]
   .filter((s) => s.r)
@@ -160,11 +160,11 @@ const out = {
   samples,
   notes: [
     `Every transaction was a real settle(id) on Segundo's contract (deployed under its working name, Till), paying a freelancer what they had earned since the last one. ${multi.paidOut} of the ${multi.succeeded} that succeeded moved money; the rest landed in the same one-second block timestamp as that tab's previous settle, so there was nothing new to pay.`,
-    `${multi.reverted + pipe.reverted + serial.reverted} transactions reverted, all out of gas on the same 5 tabs: settling them costs 8,032 more gas than the rest (92,488 instead of 84,456; 129,434 instead of 118,591 for a first payout), and we gave every tab one limit taken from the others (plus 6% to 8%) to keep the bill down, because Monad charges the whole gas limit. The relayer in production estimates each call and adds 25%.`,
+    `${multi.reverted + pipe.reverted + serial.reverted} transactions reverted, all out of gas on the same 5 tabs: settling them costs 8,032 more gas than the rest (92,488 instead of 84,456; 129,434 instead of 118,591 for a first payout), and we gave every tab one limit taken from the others (plus 6% to 8%) to keep the bill down, because Monad charges the whole gas limit. Segundo's relayer estimates each call and adds 15%, and refuses a signed request asking for more than 1.5 times its own estimate.`,
     `Latency for the bursts is from sending the transaction to this machine receiving the header of the block that holds it over WebSocket (newHeads). For the one-at-a-time run it is from sending to the receipt, polled every 150 ms as the relayer does.`,
     `The first wave took ${waves[0]?.sendMs} ms just to be accepted by the three public RPC endpoints (new connections); later waves took about ${waves[1] ? q(waves.slice(1).map((w) => w.sendMs), 0.5) : "-"} ms. The Monad Foundation endpoint allows 50 calls a second per client, so senders were spread over three endpoints.`,
     `This does not show parallel execution. Every settle changes the contract's AUSD balance, a single storage slot, so under Monad's optimistic parallel execution these transactions conflict and some are re-executed. What it does show is capacity and speed: the busiest block was ${r1(fullest * 100)}% full.`,
-    `One key is not the limit on Monad: ${pipe.perBlockMax} settles sent at once from a single fresh key with consecutive nonces all landed in one block. The bottleneck is Segundo's relayer today, which sends one transaction and waits for its receipt before the next (${r2(serial.landed / serial.durationS)} a second).`,
+    `One key is not the limit on Monad: ${pipe.perBlockMax} settles sent at once from a single fresh key with consecutive nonces all landed in one block. The bottleneck was Segundo's relayer, which then sent one transaction and waited for its receipt before the next (${r2(serial.landed / serial.durationS)} a second). Since this run it is a pool of 7 keys, each keeping many transactions in flight.`,
     `Test MON spent on the whole exercise (setting up ${d.tabs.length} tabs, the runs, closing the tabs and sweeping funds back): ${monSpent} MON, of which ${burstMon} MON was the settles themselves.`,
   ],
 };

@@ -514,8 +514,13 @@ export type Stats = {
   /** Kept for older readers: the median gap between payouts on a running tab. Not a measure of speed. */
   settle: { medianMs: number | null };
   source: Source;
-  /** With source "rpc": why HyperRPC wasn't used (rate limit, timeout, no token). */
+  /**
+   * Why HyperRPC wasn't used for this read (rate limit, timeout, no token). With source "rpc" the counts cover a
+   * recent window only; with `asOf` the figures are this instance's last full read, served instead of that window.
+   */
   fallback?: string;
+  /** Set when HyperRPC didn't answer and this is the last full snapshot this instance holds: when it was read. */
+  asOf?: string;
 };
 
 const BENCH: ReadonlySet<string> = new Set(BENCH_ADDRESSES.map(lower));
@@ -535,12 +540,28 @@ async function measureBlockTime(): Promise<Stats["chain"]> {
   return v ?? blockTime?.v ?? null;
 }
 
+/** The last stats built from a full HyperRPC ledger on this instance, kept for when HyperRPC stops answering. */
+let lastFull: Stats | null = null;
+
 /**
  * Network numbers for the landing page and the business case. From HyperRPC they cover every block since
- * deployment. From the public RPC fallback, the all-time totals come from contract state (getTabs) and the
- * counts, fees and daily rows only from the recent window.
+ * deployment. When HyperRPC fails, the last full snapshot this instance built is served with `asOf` (block time
+ * kept fresh), rather than the public RPC's few minutes, which would read as no fees and almost no payouts.
+ * Only an instance that has never had a full read returns the window, marked `source: "rpc"`.
  */
 export async function getStats(): Promise<Stats> {
+  const s = await buildStats();
+  if (s.source !== "rpc") {
+    // A held HyperRPC ledger whose refresh just failed is a full snapshot too, and says so.
+    if (envioFailedAt > Date.parse(s.updatedAt)) return { ...s, fallback: envioError ?? "HyperRPC unavailable", asOf: s.updatedAt };
+    lastFull = s;
+    return s;
+  }
+  if (!lastFull) return s;
+  return { ...lastFull, chain: s.chain ?? lastFull.chain, fallback: s.fallback, asOf: lastFull.updatedAt };
+}
+
+async function buildStats(): Promise<Stats> {
   const [l, chain] = await Promise.all([ledger(), measureBlockTime()]);
   const now = Math.floor(Date.now() / 1000);
   const who = parties(l.events);

@@ -29,7 +29,47 @@ export type Stats = {
   settle: { medianMs: number | null };
   /** "envio-hyperrpc" when read through Envio, "rpc" when the public RPC fallback covers only a recent window. */
   source: string;
+  /** Set when HyperRPC didn't answer and these are the last full figures instead: when they were read. */
+  asOf?: string;
+  /** Why HyperRPC wasn't used for this read. */
+  fallback?: string;
 };
+
+/** True when the figures cover the whole history (HyperRPC), even if they are a held snapshot. */
+export const isFull = (s: Stats) => s.source !== "rpc";
+
+/**
+ * When the live figures are catching up (a held snapshot, or the public RPC's short window), the line that says so:
+ * "Live numbers are catching up; last full read at 14:05". Null when the figures are live and whole.
+ */
+export function catchingUp(s: Stats): string | null {
+  if (isFull(s) && !s.asOf) return null;
+  const t = isFull(s) ? new Date(s.asOf!) : null;
+  if (!t || Number.isNaN(t.getTime())) return "Live numbers are catching up; the full read is back in a minute or two.";
+  const today = new Date().toDateString() === t.toDateString();
+  const when = t.toLocaleString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false, ...(today ? {} : { month: "short", day: "numeric" }) });
+  return `Live numbers are catching up; last full read at ${when}.`;
+}
+
+const iso = (t: string | number) => (typeof t === "number" ? new Date(t < 1e12 ? t * 1000 : t).toISOString() : t);
+
+const KEEP = "segundo-stats-full";
+/** The last full figures this browser saw, so a fallback read never replaces them with a short window. */
+function kept(): Stats | null {
+  try {
+    const d = JSON.parse(localStorage.getItem(KEEP) ?? "null") as unknown;
+    return isStats(d) && isFull(d) ? d : null;
+  } catch {
+    return null;
+  }
+}
+function keep(s: Stats) {
+  try {
+    localStorage.setItem(KEEP, JSON.stringify(s));
+  } catch {
+    /* private window or storage blocked: the page still works without it */
+  }
+}
 
 /** AUSD base units (a decimal string) to dollars. */
 export const usdOf = (units: string | undefined | null): number => {
@@ -59,8 +99,16 @@ export function useStats(everyMs = 60_000) {
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
         .then((d: unknown) => {
           if (stop) return;
-          if (isStats(d)) setStats(d);
-          else setStats((old) => old ?? null);
+          if (!isStats(d)) return setStats((old) => old ?? null);
+          if (isFull(d)) {
+            if (!d.asOf) keep(d);
+            return setStats(d);
+          }
+          // The public RPC's window can't count the whole history: keep the last full figures, marked as held.
+          setStats((old) => {
+            const held = old && isFull(old) ? old : kept();
+            return held ? { ...held, chain: d.chain ?? held.chain, asOf: held.asOf ?? iso(held.updatedAt) } : d;
+          });
         })
         .catch(() => !stop && setStats((old) => old ?? null));
     load();

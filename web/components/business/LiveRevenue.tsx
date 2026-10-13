@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { TREASURY, explorerAddress, explorerTx } from "@/lib/chain";
 import { DailyBars } from "./DailyBars";
-import { count, money, usdOf, useStats, type Stats } from "./stats";
+import { catchingUp, count, isFull, money, usdOf, useStats, type Stats } from "./stats";
 import styles from "./parts.module.css";
 
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -65,16 +65,19 @@ export function LiveRevenue() {
   const at = updated(stats);
   const refunded = usdOf(stats.fees.refunded);
   const rate = stats.feeRate;
+  // The public RPC fallback only sees the last few minutes, so a split, a fee or a payout count from it would read as
+  // zero: those wait for the full read. Totals read from contract state are shown when they have something in them.
+  const whole = isFull(stats);
+  const behind = catchingUp(stats);
+  const some = (v: number, text: string) => (whole || v > 0 ? text : "—");
   const figures: [string, string][] = [
-    ["Paid to freelancers", money(paid)],
-    ["Payouts", count(stats.paid.payouts)],
-    ["Tabs opened", count(stats.paid.tabs)],
-    ["Freelancers paid", count(stats.paid.freelancers)],
-    ["Clients paying", count(stats.paid.clients)],
-    ["Fees refunded at close", money(refunded)],
+    ["Paid to freelancers", some(paid, money(paid))],
+    ["Payouts", whole ? count(stats.paid.payouts) : "—"],
+    ["Tabs opened", some(stats.paid.tabs, count(stats.paid.tabs))],
+    ["Freelancers paid", some(stats.paid.freelancers, count(stats.paid.freelancers))],
+    ["Clients paying", some(stats.paid.clients, count(stats.paid.clients))],
+    ["Fees refunded at close", whole ? money(refunded) : "—"],
   ];
-  // The public RPC fallback only sees the last few minutes, so a split or a fee count from it would read as zero.
-  const whole = stats.source !== "rpc";
   const { outside, demo } = whole ? stats : { outside: undefined, demo: undefined };
 
   return (
@@ -84,19 +87,25 @@ export function LiveRevenue() {
           <i aria-hidden /> Live from Monad testnet
         </span>
         <span className={styles.soft}>
-          {at ? `Updated ${at}` : "Updated a moment ago"} · read with {sourceName(stats.source)}
+          {behind ?? `${at ? `Updated ${at}` : "Updated a moment ago"} · read with ${sourceName(stats.source)}`}
         </span>
       </div>
       <div className={styles.ledgerMain}>
         <div className={styles.treasury}>
           <span className={styles.label}>Fees collected in the Segundo treasury</span>
-          <strong className={`denom ${styles.big}`}>{money(fees)}</strong>
-          <span className={styles.soft}>
-            {stats.fees.count === 0
-              ? "No fees yet: the first lands when the next client opens or tops up a tab."
-              : `from ${count(stats.fees.count)} ${stats.fees.count === 1 ? "fee" : "fees"}, ${money(week)} of it in the last 7 days`}
-          </span>
-          {stats.fees.net != null && (
+          {whole ? (
+            <>
+              <strong className={`denom ${styles.big}`}>{money(fees)}</strong>
+              <span className={styles.soft}>
+                {stats.fees.count === 0
+                  ? "No fees yet: the first lands when the next client opens or tops up a tab."
+                  : `from ${count(stats.fees.count)} ${stats.fees.count === 1 ? "fee" : "fees"}, ${money(week)} of it in the last 7 days`}
+              </span>
+            </>
+          ) : (
+            <p className={styles.unavailable}>{behind} Every fee is a public transfer into the treasury, so you can count them yourself meanwhile.</p>
+          )}
+          {whole && stats.fees.net != null && (
             <span className={styles.soft}>
               {money(usdOf(stats.fees.net))} net of {count(stats.fees.refunds ?? 0)} {stats.fees.refunds === 1 ? "refund" : "refunds"} to clients who closed a
               tab with budget left
@@ -136,7 +145,7 @@ export function LiveRevenue() {
           <div className={styles.splitCol}>
             <span className={styles.label}>Our demo studios</span>
             <p className={styles.soft}>
-              {demo.studios} bot studios paying {demo.people} bot freelancers around the clock (and the one proof-script tab), so there is always a tab to watch.
+              {demo.studios} bot studios paying {demo.people} bot freelancers during their own working hours, staggered so someone is usually on (and the one proof-script tab).
             </p>
             <dl className={styles.splitFigs}>
               <div>
@@ -180,12 +189,14 @@ export function LiveRevenue() {
             ` ${count(rate.direct)} more went straight to the contract without the app; they owe no fee, because the contract is open to anyone.`}
         </p>
       )}
-      <div className={styles.charts}>
-        <DailyBars title="Fees per day" tone="serial" points={daily.map((d) => ({ day: d.day, value: usdOf(d.fees) }))} />
-        <DailyBars title="Paid to freelancers per day" tone="ink" points={daily.map((d) => ({ day: d.day, value: usdOf(d.paid) }))} />
-      </div>
+      {whole && (
+        <div className={styles.charts}>
+          <DailyBars title="Fees per day" tone="serial" points={daily.map((d) => ({ day: d.day, value: usdOf(d.fees) }))} />
+          <DailyBars title="Paid to freelancers per day" tone="ink" points={daily.map((d) => ({ day: d.day, value: usdOf(d.paid) }))} />
+        </div>
+      )}
       <p className={styles.honest}>
-        Testnet, including our demo studios: three bot studios pay five bot freelancers on their local working hours, alongside everyone who
+        Testnet, including our demo studios: three bot studios pay five bot freelancers during their own working hours, alongside everyone who
         tries the app. Test AUSD has no value. Fees started when the 1% went live, so paid-out money before that carries no fee. Only transfers that
         match an open or top-up count as fees.
         {stats.bench && stats.bench.tabs > 0 && (
@@ -195,7 +206,6 @@ export function LiveRevenue() {
             every figure here.
           </>
         )}
-        {stats.source === "rpc" && " While the indexer is unavailable, fee and payout counts cover recent blocks only."}
       </p>
     </div>
   );

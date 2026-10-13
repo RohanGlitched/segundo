@@ -289,6 +289,11 @@
   color: var(--ink);
   font-weight: 650;
 }
+/* A line's words as one block beside its number, so a long one wraps under itself, not under the number. */
+.lineText {
+  flex: 1 1 0;
+  min-width: 0;
+}
 .lines span {
   font-size: var(--fs-small);
   font-weight: 650;
@@ -312,6 +317,11 @@
 }
 .market p {
   font-size: var(--fs-body);
+}
+/* Each figure stays on one line: a range broken at its dash reads as two numbers. */
+.market .bigNum {
+  white-space: nowrap;
+  font-size: min(var(--fs-big), 13vw);
 }
 .matrix {
   border-top: 1.5px solid var(--ink);
@@ -358,6 +368,12 @@
   font-size: calc(var(--fs-big) * 0.55);
   font-weight: 450;
   overflow-wrap: anywhere;
+}
+.traction dd.tractionSub {
+  font-size: var(--fs-small);
+  font-weight: 400;
+  color: var(--ink-soft);
+  margin-top: 2px;
 }
 .ask {
   background: var(--sheet);
@@ -528,6 +544,9 @@
   .market {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 3cqw;
+  }
+  .market .bigNum {
+    font-size: min(var(--fs-big), 4.4cqw);
   }
   .matrix > div {
     grid-template-columns: 1fr 1.1fr 1.2fr 1.1fr;

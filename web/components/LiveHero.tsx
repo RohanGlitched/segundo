@@ -35,7 +35,8 @@ export function LiveHero() {
         <>
           <TabNote view={featured} profiles={net?.profiles ?? {}} engrave />
           <p className={styles.caption}>
-            A real tab on Monad testnet, updating as blocks arrive. <Link href={`/tab/${featured.id}`}>Watch it pay out</Link>
+            A real tab on Monad testnet. Pay is earned every second and paid out every few seconds while a tab is open on screen, every few minutes
+            by the keeper otherwise. <Link href={`/tab/${featured.id}`}>Watch it pay out</Link>
           </p>
         </>
       ) : (

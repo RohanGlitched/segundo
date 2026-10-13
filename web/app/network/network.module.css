@@ -461,6 +461,59 @@
   font-size: 15.5px;
 }
 
+/* ---------------------------------------------------------------- the CRE keeper */
+.creRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr);
+  gap: 40px;
+  align-items: start;
+  margin-top: 48px;
+  padding-top: 24px;
+  border-top: 1px solid var(--rule);
+}
+.h3 {
+  font-size: 18px;
+  color: var(--ink);
+}
+.cre .certList dd {
+  white-space: normal;
+  text-align: right;
+}
+.creWhen {
+  font-size: 14px;
+  font-weight: 450;
+  color: var(--ink-soft);
+}
+.creRatesHead {
+  margin: 14px 0 6px;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+.creRates {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px 14px;
+}
+.creRates li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 14.5px;
+  border-bottom: 1px dashed var(--rule);
+  padding-bottom: 4px;
+  min-width: 0;
+}
+.creRates span {
+  color: var(--ink-soft);
+}
+.creRates b {
+  font-weight: 550;
+  font-variation-settings: var(--wide);
+}
+
 /* ---------------------------------------------------------------- pace and price */
 .pair {
   display: grid;
@@ -544,6 +597,7 @@
 @media (max-width: 960px) {
   .top,
   .formulaRow,
+  .creRow,
   .pair,
   .verdict {
     grid-template-columns: minmax(0, 1fr);
@@ -598,6 +652,9 @@
 @media (max-width: 420px) {
   .stats {
     gap: 20px;
+  }
+  .creRates {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .statFig {
     font-size: 40px;

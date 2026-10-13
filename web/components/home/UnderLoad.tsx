@@ -69,9 +69,9 @@ export function UnderLoad({ className }: { className?: string }) {
               <dd className={styles.loadSub}>{bench.pipelined?.perBlockMax != null ? `${n(bench.pipelined.perBlockMax)} from a single key` : "payouts in a single block"}</dd>
             </div>
             <div>
-              <dt>Sent to receipt</dt>
+              <dt>Send to block</dt>
               <dd className="denom">{secs(bench.p50ms)}</dd>
-              <dd className={styles.loadSub}>median; {secs(bench.p90ms)} for nine in ten</dd>
+              <dd className={styles.loadSub}>median, from sending to the block holding it; {secs(bench.p90ms)} for nine in ten</dd>
             </div>
             <div>
               <dt>Block time</dt>
@@ -82,9 +82,9 @@ export function UnderLoad({ className }: { className?: string }) {
             </div>
           </dl>
           <p className={styles.loadNote}>
-            Real payouts on Segundo&apos;s contract on Monad testnet{day ? `, ${day}` : ""}. Our relayer sends one transaction at a time today
-            {bench.singleSender?.txPerS != null ? ` (${n(bench.singleSender.txPerS, 1)} a second)` : ""}; batching and parallel senders are how it grows
-            into what the chain already handles.
+            Real payouts on Segundo&apos;s contract on Monad testnet{day ? `, ${day}` : ""}. Before this test our relayer sent one transaction at a
+            time{bench.singleSender?.txPerS != null ? ` (${n(bench.singleSender.txPerS, 1)} a second)` : ""}; it is now a pool of 7 keys, each with many
+            transactions in flight, so it sends the way this test did.
           </p>
         </>
       ) : (

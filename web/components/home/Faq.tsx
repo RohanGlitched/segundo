@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { ByAccounts } from "./ByAccounts";
 import styles from "./home.module.css";
 
 const QA: { q: string; a: ReactNode }[] = [
@@ -9,7 +10,12 @@ const QA: { q: string; a: ReactNode }[] = [
   },
   {
     q: "Do I need a crypto wallet or any MON?",
-    a: "No. Sign in with a passkey or your email and Segundo creates a wallet for you. Every action is a signature; Segundo's relayer submits it and pays the gas.",
+    a: (
+      <>
+        No. <ByAccounts full="Sign in with a passkey or your email" mera="Sign in with a passkey" /> and Segundo creates a wallet for you. Every action
+        is a signature; Segundo&apos;s relayer submits it and pays the gas.
+      </>
+    ),
   },
   {
     q: "What does it cost?",
@@ -35,12 +41,26 @@ const QA: { q: string; a: ReactNode }[] = [
     a: "The client watches the same tab live and can pause pay at any moment; the clock stops in the same block. The most either side can lose is a few seconds.",
   },
   {
+    q: "How often am I paid?",
+    a: "You earn every second you're on the clock. While the tab is open on someone's screen, what you've earned is paid out to your wallet every few seconds; when nobody has it open, Segundo's keeper pays it out every few minutes. Either way, anything earned and not yet paid out is locked in the contract for you.",
+  },
+  {
+    q: "How do clients add money?",
+    a: (
+      <>
+        On testnet, Segundo hands out free test AUSD to try it with. Or send AUSD on Monad from any wallet to your Segundo address (the{" "}
+        <Link href="/app">Add money</Link> sheet in your tabs shows it with a QR code). On mainnet, a business would get AUSD from Agora, which
+        issues it, by bank wire, or buy it on an exchange, then send it the same way; that route isn&apos;t live in Segundo yet.
+      </>
+    ),
+  },
+  {
     q: "How do I get money into my local currency?",
     a: (
       <>
-        Not yet. Your pay lands in your wallet as AUSD, a digital dollar issued by Agora, and stays there until you move it. Cash-out to local banks and
-        mobile money is next, through licensed partners in each country; the note already shows your pay in your currency at today&apos;s rate.{" "}
-        <Link href="/cashout">See how cash-out will work</Link>.
+        Your pay lands in your wallet as AUSD, a digital dollar issued by Agora. Cash-out to local banks and mobile money is the next step, through
+        licensed partners in each country. <Link href="/cashout">Cash-out</Link> already shows the whole route for each country, today&apos;s rate, the
+        cost and the wait, with a simulated partner on testnet; the note shows your pay in your currency as it builds.
       </>
     ),
   },
