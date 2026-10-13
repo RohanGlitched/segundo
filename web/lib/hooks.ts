@@ -10,15 +10,49 @@ import { requestTestDollars, type Landed } from "./relay";
 /** Fired by the profile form after a save lands, so every profile on the page re-reads at once. */
 export const PROFILE_SAVED = "till:profile";
 
+/**
+ * Monad's public RPC answers "429 Too Many Requests" when a browser asks too often. Every poll on the page shares
+ * one cool-down: after a 429 the polls skip their turns for 2 s, then 4, 8, up to 30 s, and the first answer that
+ * comes back resets it. Polls also rest while the page is in the background.
+ */
+const cool = { until: 0, step: 0 };
+const isRateLimit = (e: unknown): boolean => {
+  const x = e as { status?: number; cause?: unknown; message?: string } | null;
+  if (!x) return false;
+  if (x.status === 429 || /429|too many requests|rate limit/i.test(x.message ?? "")) return true;
+  return x.cause != null && x.cause !== e && isRateLimit(x.cause);
+};
+/** Call with the error of a failed read; returns true when it was a rate limit and the cool-down grew. */
+export function noteRpcError(e: unknown): boolean {
+  if (!isRateLimit(e)) return false;
+  cool.step = Math.min(cool.step + 1, 5);
+  cool.until = Date.now() + Math.min(30_000, 1000 * 2 ** cool.step);
+  return true;
+}
+export function noteRpcOk() {
+  cool.step = 0;
+}
+/** Whether a poll should skip this turn: the RPC asked us to slow down, or nobody is looking at the page. */
+export const rpcResting = () => Date.now() < cool.until || (typeof document !== "undefined" && document.visibilityState === "hidden");
+
+/** What useProfile returns for an account that has never saved a profile, as opposed to undefined: not read yet. */
+export const NO_PROFILE: Profile = { name: "", place: "", currency: "" };
+
 /** One person's on-chain profile (name, city, currency), refreshed now and then and the moment it is saved. */
 export function useProfile(address?: Address) {
   const [p, setP] = useState<Profile | undefined>();
   useEffect(() => {
     if (!address) return setP(undefined);
     let stop = false;
-    const load = () => readProfiles([address]).then((m) => !stop && setP(m[address.toLowerCase()])).catch(() => {});
+    const load = () =>
+      readProfiles([address])
+        .then((m) => {
+          noteRpcOk();
+          if (!stop) setP(m[address.toLowerCase()] ?? NO_PROFILE);
+        })
+        .catch(noteRpcError);
     load();
-    const t = setInterval(load, 10000);
+    const t = setInterval(() => !rpcResting() && load(), 10000);
     window.addEventListener(PROFILE_SAVED, load);
     return () => {
       stop = true;
@@ -42,13 +76,19 @@ export function useTabs(ids: bigint[] | null, everyMs = 3000) {
     busy.current = true;
     try {
       const v = await readTabs(ids);
+      // Names arrive with the tabs, not a moment after: a note that reads "0x9298…" and then "Tunde Bakare" (and
+      // switches currency) reflows the page. A failed name read still shows the tabs.
+      const people = v.flatMap((x) => [x.tab.payer, x.tab.payee]);
+      const p = await readProfiles(people).catch((e) => {
+        noteRpcError(e);
+        return {} as Record<string, Profile>;
+      });
+      setProfiles((old) => ({ ...old, ...p }));
       setViews(v);
       setError(null);
-      const people = v.flatMap((x) => [x.tab.payer, x.tab.payee]);
-      const p = await readProfiles(people);
-      setProfiles((old) => ({ ...old, ...p }));
-    } catch {
-      setError("Monad's public RPC didn't answer. Retrying…");
+      noteRpcOk();
+    } catch (e) {
+      setError(noteRpcError(e) ? "Monad's public RPC asked us to slow down. Retrying in a moment…" : "Monad's public RPC didn't answer. Retrying…");
     } finally {
       busy.current = false;
     }
@@ -59,7 +99,7 @@ export function useTabs(ids: bigint[] | null, everyMs = 3000) {
     if (!ids) return;
     setViews(ids.length ? null : []);
     refresh();
-    const t = setInterval(refresh, everyMs);
+    const t = setInterval(() => !rpcResting() && refresh(), everyMs);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, everyMs]);
@@ -75,13 +115,15 @@ export function useMyTabIds(address?: Address) {
     try {
       const r = (await publicClient.readContract({ address: TILL, abi: tillAbi, functionName: "tabsOf", args: [address] })) as readonly bigint[];
       setIds((old) => (old && old.length === r.length ? old : [...r].reverse()));
-    } catch {
-      setIds((old) => old ?? []);
+      noteRpcOk();
+    } catch (e) {
+      // A rate limit isn't "no tabs": keep waiting rather than show an empty list.
+      if (!noteRpcError(e)) setIds((old) => old ?? []);
     }
   }, [address]);
   useEffect(() => {
     refresh();
-    const t = setInterval(refresh, 6000);
+    const t = setInterval(() => !rpcResting() && refresh(), 6000);
     return () => clearInterval(t);
   }, [refresh]);
   return { ids, refresh };
@@ -93,14 +135,40 @@ export function useDollarBalance(address?: Address) {
     if (!address) return setBalance(null);
     try {
       setBalance((await publicClient.readContract({ address: DOLLAR, abi: dollarAbi, functionName: "balanceOf", args: [address] })) as bigint);
-    } catch {}
+      noteRpcOk();
+    } catch (e) {
+      noteRpcError(e);
+    }
   }, [address]);
   useEffect(() => {
+    // A new address starts unknown, never with the last one's balance.
+    setBalance(null);
     refresh();
-    const t = setInterval(refresh, 2500);
+    const t = setInterval(() => !rpcResting() && refresh(), 2500);
     return () => clearInterval(t);
   }, [refresh]);
   return { balance, refresh };
+}
+
+/** Faucet requests in flight, one per wallet. */
+const drips = new Map<string, Promise<Landed>>();
+
+/**
+ * Asks the faucet for 25 test AUSD, sharing one request per wallet: the "Get 25 test AUSD" buttons and the
+ * automatic first drip all call this, so a new account never gets (or spends a faucet turn on) two at once.
+ */
+export function dripOnce(address: Address): Promise<Landed> {
+  const k = address.toLowerCase();
+  let p = drips.get(k);
+  if (!p) {
+    // The automatic drip is once per wallet per browser session, whichever way it went out.
+    try {
+      sessionStorage.setItem(`till.drip.${k}`, "1");
+    } catch {}
+    p = requestTestDollars(address).finally(() => drips.delete(k));
+    drips.set(k, p);
+  }
+  return p;
 }
 
 /**
@@ -115,10 +183,9 @@ export function useAutoDrip(address: Address | undefined, balance: bigint | null
     const key = `till.drip.${address.toLowerCase()}`;
     try {
       if (sessionStorage.getItem(key)) return setState("done");
-      sessionStorage.setItem(key, "1");
     } catch {}
     setState("sending");
-    requestTestDollars(address)
+    dripOnce(address)
       .then((r) => {
         setLanded({ ...r, what: "25 test AUSD arrived" });
         setState("done");
@@ -238,8 +305,11 @@ export function useHistory(id: bigint | null, lastBlock: bigint | undefined, max
       setLines(merged);
       setMore(block > 0n && block !== stopAt);
     })()
-      .catch(() => {
-        if (!cancelled()) setLines((l) => l ?? []);
+      .catch((e) => {
+        if (cancelled()) return;
+        // Rate-limited: try the walk again after the cool-down rather than show an empty stub.
+        if (noteRpcError(e)) setTimeout(() => !cancelled() && setAgain((n) => n + 1), 4000);
+        else setLines((l) => l ?? []);
       })
       .finally(() => {
         walking.current = false;

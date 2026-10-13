@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useMemo } from "react";
 import { useLive, useChainNow } from "@/lib/live";
-import { currency, formatMoney, formatUsd, toUsd, type Currency } from "@/lib/money";
+import { currency, formatCents, formatMoney, formatUsd, toUsd, type Currency } from "@/lib/money";
 import { earnedAt, stateOf, type Profile, type TabView } from "@/lib/tabs";
 import { Note } from "./Note";
 import styles from "./WalletPanel.module.css";
@@ -54,7 +55,7 @@ export function WalletNote({
 }
 
 /** A statement of where your money is: earned, paid out, and what you have committed as a client. */
-export function Ledger({ paid, paying, cur }: { paid: TabView[]; paying: TabView[]; cur: Currency }) {
+export function Ledger({ paid, paying, cur, loading }: { paid: TabView[]; paying: TabView[]; cur: Currency; loading?: boolean }) {
   const { rates } = useLive();
   const now = useChainNow();
   const sum = (xs: TabView[], f: (v: TabView) => bigint) => toUsd(xs.reduce((a, v) => a + f(v), 0n));
@@ -65,13 +66,30 @@ export function Ledger({ paid, paying, cur }: { paid: TabView[]; paying: TabView
     const left = v.tab.budget - earnedAt(v.tab, now);
     return left > 0n ? left : 0n;
   });
-  const money = (usd: number) => (cur.code !== "USD" && rates ? `${formatUsd(usd)} (${formatMoney(usd, cur, rates)})` : formatUsd(usd, usd > 0 && usd < 1 ? 4 : 2));
+  const money = (usd: number) => (cur.code !== "USD" && rates ? `${formatUsd(usd)} (${formatMoney(usd, cur, rates)})` : formatCents(usd));
   const rows = [
     { k: "Earned as a freelancer", v: money(earned), show: paid.length > 0 },
     { k: "Already in your wallet from tabs", v: money(paidOut), show: paid.length > 0 },
     { k: "Paid to freelancers", v: money(spent), show: paying.length > 0 },
     { k: "Waiting in your open tabs", v: money(held), show: paying.length > 0 },
   ].filter((r) => r.show);
+  // While the tabs are read, two blank rows hold the place most accounts need (paying or paid), so the page
+  // doesn't jump down when the figures arrive.
+  if (loading)
+    return (
+      <dl className={styles.ledger} aria-busy="true" aria-label="Reading your tabs">
+        {[0, 1].map((i) => (
+          <div key={i}>
+            <dt>
+              <span className="skeleton" style={{ display: "inline-block", width: 170, height: "1em", verticalAlign: "middle" }} />
+            </dt>
+            <dd>
+              <span className="skeleton" style={{ display: "inline-block", width: 64, height: "1em", verticalAlign: "middle" }} />
+            </dd>
+          </div>
+        ))}
+      </dl>
+    );
   if (!rows.length) return null;
   return (
     <dl className={styles.ledger}>
@@ -85,21 +103,43 @@ export function Ledger({ paid, paying, cur }: { paid: TabView[]; paying: TabView
   );
 }
 
-/** First visit: the three things to do, each one click away, ticked off as they happen. */
+/**
+ * First visit: the three things to do, each one click away, ticked off as they happen. Drawn only once the balance,
+ * tabs and profile are all read (so it doesn't appear and then fold up), and never again once all three are done.
+ */
 export function GettingStarted({
+  address,
+  ready,
   hasDollars,
   hasProfile,
   hasTab,
   onFaucet,
   faucetBusy,
 }: {
+  address: string;
+  ready: boolean;
   hasDollars: boolean;
   hasProfile: boolean;
   hasTab: boolean;
   onFaucet: () => void;
   faucetBusy: boolean;
 }) {
-  if (hasDollars && hasProfile && hasTab) return null;
+  const key = `segundo.started.${address.toLowerCase()}`;
+  const allDone = ready && hasDollars && hasProfile && hasTab;
+  const doneBefore = useMemo(() => {
+    try {
+      return localStorage.getItem(key) === "1";
+    } catch {
+      return false;
+    }
+  }, [key]);
+  useEffect(() => {
+    if (!allDone) return;
+    try {
+      localStorage.setItem(key, "1");
+    } catch {}
+  }, [allDone, key]);
+  if (!ready || doneBefore || allDone) return null;
   const steps = [
     {
       done: hasDollars,

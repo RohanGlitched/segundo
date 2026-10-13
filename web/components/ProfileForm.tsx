@@ -42,6 +42,13 @@ export function ProfileForm({
 
   const problem = !name.trim() ? "Add the name clients will see." : name.length > 40 || place.length > 40 ? "Keep each under 40 characters." : null;
 
+  // Still reading the profile: hold the one-line summary's place rather than flash the form and fold it up.
+  if (!open && current === undefined && !saved && me)
+    return (
+      <p className={styles.summary} aria-busy="true">
+        <span className="skeleton" style={{ display: "inline-block", width: "min(420px, 80%)", height: "1em", verticalAlign: "middle" }} />
+      </p>
+    );
   if (!open && shown?.name)
     return (
       <p className={styles.summary}>
@@ -75,11 +82,11 @@ export function ProfileForm({
       <div className={styles.grid}>
         <div className="field">
           <label htmlFor="pf-name">Name</label>
-          <input id="pf-name" className="input" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} placeholder="Priya Nair" />
+          <input id="pf-name" className="input" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} placeholder="Your name" />
         </div>
         <div className="field">
           <label htmlFor="pf-place">City</label>
-          <input id="pf-place" className="input" value={place} maxLength={40} onChange={(e) => setPlace(e.target.value)} placeholder="Pune" />
+          <input id="pf-place" className="input" value={place} maxLength={40} onChange={(e) => setPlace(e.target.value)} placeholder="Your city" />
         </div>
         <div className="field">
           <label htmlFor="pf-cur">Show amounts in</label>

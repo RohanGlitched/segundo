@@ -222,3 +222,36 @@
   text-underline-offset: 3px;
   cursor: pointer;
 }
+.noteTitle {
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  text-wrap: wrap;
+}
+.why {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--serial);
+  font-size: 14.5px;
+}
+/* Holds the time card's place while the tab's history is read: the card's padding, its 1000 x 210 drawing
+   (never narrower than 620 px, so at least 130 px tall) and its caption line. */
+.cardSkel {
+  padding: 18px 18px 40px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+}
+.cardSkel > div {
+  width: 100%;
+  min-height: 130px;
+  aspect-ratio: 1000 / 210;
+}
+@media (max-width: 560px) {
+  /* Tab number and date on one line, the copy button under it, whether or not the date has arrived yet. */
+  .noteBar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+  }
+}

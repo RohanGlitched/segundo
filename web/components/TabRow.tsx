@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 import { bandPaths, bandsFor, seedOf } from "@/lib/guilloche";
 import { useChainNow, useLive } from "@/lib/live";
-import { currency, formatMoney, formatUsd, toUsd } from "@/lib/money";
+import { currency, formatCents, formatMoney, formatUsd, toUsd } from "@/lib/money";
 import { STATE_WORDS, earnedAt, stateOf, type Profile, type TabView } from "@/lib/tabs";
 import { Odometer } from "./Odometer";
 import { personOf } from "./TabNote";
@@ -46,7 +46,7 @@ export function TabRow({
   const earned = toUsd(earnedAt(t, now));
   const budget = toUsd(t.budget);
   const state = stateOf(t, now);
-  const shown = iAmPayee && rates ? formatMoney(earned, cur, rates) : formatUsd(earned, 4);
+  const shown = iAmPayee && rates ? formatMoney(earned, cur, rates) : formatCents(earned);
 
   return (
     <li className={styles.row}>

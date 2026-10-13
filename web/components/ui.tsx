@@ -173,11 +173,13 @@ export function SignInChoices({ compact, onDone }: { compact?: boolean; onDone?:
   );
 }
 
-/** Shown wherever an action needs a wallet. */
-export function SignInPanel({ title, children }: { title: string; children?: ReactNode }) {
+/** Shown wherever an action needs a wallet. `level={1}` when the panel is the whole page, so the page keeps one h1. */
+export function SignInPanel({ title, children, level = 2 }: { title: string; children?: ReactNode; level?: 1 | 2 }) {
+  const Heading = level === 1 ? "h1" : "h2";
   return (
     <div className={styles.signin}>
-      <h2>{title}</h2>
+      {/* As an h1 it keeps the look of the usual h2 (ui.module.css, .signin h2). */}
+      <Heading style={level === 1 ? { fontSize: 24, fontVariationSettings: '"wdth" 112' } : undefined}>{title}</Heading>
       {children}
       <SignInChoices />
     </div>

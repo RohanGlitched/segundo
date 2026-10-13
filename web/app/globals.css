@@ -193,8 +193,9 @@ a {
   font: 500 16px/1 var(--font-archivo), sans-serif;
 }
 .input:focus {
-  border-color: var(--ink);
-  outline: none;
+  border-color: var(--intaglio);
+  outline: 2px solid var(--intaglio);
+  outline-offset: 1px;
 }
 select.input {
   appearance: none;

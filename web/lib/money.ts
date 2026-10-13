@@ -33,8 +33,53 @@ export const toUnits = (usd: number) => BigInt(Math.round(usd * 1e6));
 /** Segundo's fee: 1% of every budget and top-up, paid by the client on top, rounded up to the next AUSD unit. */
 export const FEE_PERCENT = 1;
 export const feeFor = (amount: bigint): bigint => (amount <= 0n ? 0n : (amount + 99n) / 100n);
-/** "$0.03" for whole cents, "$0.0151" when the fee has fractions of a cent. */
-export const formatFee = (units: bigint) => formatUsd(toUsd(units), units % 10_000n === 0n ? 2 : 4);
+/** Dollars and cents; four decimals only for an amount under a cent, so it never reads as $0.00. */
+export const formatFee = (units: bigint) => formatUsd(toUsd(units), units > 0n && units < 10_000n ? 4 : 2);
+/** The same rule for a dollar amount already in USD. */
+export const formatCents = (usd: number) => formatUsd(usd, usd > 0 && usd < 0.01 ? 4 : 2);
+
+/** The lowest hourly rate a tab can pay: below it, a second of work is worth less than a hundredth of a cent. */
+export const MIN_RATE_USD = 1;
+
+export type ParsedAmount = { units: bigint; problem: null } | { units: null; problem: string };
+
+/**
+ * Reads a dollar amount as people type it: "5", "12.50", "$1,000.50", and with a comma as the decimal mark,
+ * "2,5" or "1.000,50". With both marks the last one is the decimal mark and the other must group thousands in
+ * threes; a lone comma before exactly three digits ("1,000") groups thousands. Exponents ("1e3"), signs and
+ * anything past AUSD's six decimals are refused with a plain reason. Exact: no floating point on the way to units.
+ */
+export function parseAmount(typed: string): ParsedAmount {
+  const no = (problem: string): ParsedAmount => ({ units: null, problem });
+  const s = typed.replace(/[\s  ]/g, "").replace(/^(US)?\$/i, "");
+  if (!s) return no("Enter an amount.");
+  if (!/^[\d.,]+$/.test(s)) return no("Use digits only, like 5 or 12.50.");
+  const dot = s.lastIndexOf(".");
+  const comma = s.lastIndexOf(",");
+  let whole: string;
+  let frac = "";
+  const grouped = (w: string, mark: string) => w.split(mark).every((g, i) => (i === 0 ? /^\d{1,3}$/.test(g) : /^\d{3}$/.test(g)));
+  if (dot >= 0 && comma >= 0) {
+    const [dec, group] = dot > comma ? [".", ","] : [",", "."];
+    const at = s.lastIndexOf(dec);
+    whole = s.slice(0, at);
+    frac = s.slice(at + 1);
+    if (whole.includes(dec) || !grouped(whole, group)) return no("That number mixes commas and points. Write it like 1000.50.");
+    whole = whole.split(group).join("");
+  } else {
+    const mark = dot >= 0 ? "." : comma >= 0 ? "," : null;
+    const parts = mark ? s.split(mark) : [s];
+    if (parts.length === 1) whole = s;
+    else if (parts.length === 2 && !(mark === "," && parts[1]!.length === 3)) [whole, frac] = parts as [string, string];
+    else if (grouped(s, mark!)) whole = parts.join("");
+    else return no("Write the amount like 1000.50.");
+  }
+  if (!whole && !frac) return no("Enter an amount.");
+  if (frac.length > 6) return no("Use at most six decimal places.");
+  const units = BigInt(whole || "0") * DOLLAR_UNIT + BigInt((frac + "000000").slice(0, 6));
+  if (units <= 0n) return no("Enter an amount above zero.");
+  return { units, problem: null };
+}
 
 export type Rates = Record<string, number>;
 

@@ -12,7 +12,7 @@ import { explorerTx } from "@/lib/chain";
 import { useHistory, useTabs, useDollarBalance, type StubLine } from "@/lib/hooks";
 import { inviteLink, loadInvite } from "@/lib/invite";
 import { useChainNow, useLive } from "@/lib/live";
-import { ago, currency, feeFor, formatDuration, formatFee, formatMoney, formatUsd, toUnits, toUsd } from "@/lib/money";
+import { ago, currency, feeFor, formatCents, formatDuration, formatFee, formatMoney, formatUsd, parseAmount, toUsd } from "@/lib/money";
 import { relay, settleNow, signFee, signPermit, type Landed } from "@/lib/relay";
 import { DEMO_FREELANCERS } from "@/lib/demo";
 import { earnedAt, isZero, stateOf } from "@/lib/tabs";
@@ -142,6 +142,9 @@ export default function TabPage() {
   const money = (usd: number) => (rates && cur.code !== "USD" ? `${formatMoney(usd, cur, rates)} (${formatUsd(usd, 2)})` : formatUsd(usd, 2));
   const lastPaid = lines?.find((l) => l.kind === "paid");
   const everClockedIn = !!lines?.some((l) => l.kind === "in");
+  // Until the history is read (or while only its newest line is in), keep the time card's place. A tab whose whole
+  // history is one line (just opened) has no card, and the walk reaching "opened" says so.
+  const timeCardPending = lines == null || (lines.length === 1 && lines[0]!.kind !== "opened");
   const isDemo = DEMO_FREELANCERS.some((f) => f.address.toLowerCase() === t.payee.toLowerCase());
 
   const go = (what: string, fn: string, args: readonly unknown[]) =>
@@ -154,11 +157,19 @@ export default function TabPage() {
     });
   /** The button that started an action says what it's waiting for; the others just lock. */
   const label = (what: string, idle: string) => (act.busy && act.which === what ? busyLabel(act.phase, idle) : idle);
-  const closedLine = lines?.find((l) => l.kind === "closed");
+  // What went back to the client at close: the contract refunds budget minus paid, so it's known from the tab itself
+  // without waiting for the pay stub (which would make the sentence grow a clause after the page is drawn).
+  const refunded = t.budget > t.paid ? t.budget - t.paid : 0n;
+  const openedAt = lines?.find((l) => l.kind === "opened")?.time;
   const closeButton = (idle: string) =>
     confirmClose ? (
       <span className={styles.confirm} role="group" aria-label="Confirm closing the tab">
-        <span>Close for good? {iAmPayer ? `${payee.name} keeps what they earned and ${formatUsd(toUsd(remaining > 0n ? remaining : 0n))} comes back to you.` : `You keep what you earned; the rest goes back to ${payer.name}.`}</span>
+        <span>
+          Close for good?{" "}
+          {iAmPayer
+            ? `${payee.name} keeps what they earned and ${formatUsd(toUsd(remaining > 0n ? remaining : 0n))} comes back to you, with Segundo's 1% fee on it.`
+            : `You keep what you earned; the rest goes back to ${payer.name}.`}
+        </span>
         <button
           className="btn small primary"
           disabled={act.busy}
@@ -179,12 +190,14 @@ export default function TabPage() {
       </button>
     );
 
-  const topUpUnits = Number(topUp) > 0 ? toUnits(Number(topUp)) : 0n;
+  // The same parser as the open form: "2,5" is two and a half; exponents and stray characters are refused.
+  const topUpIn = parseAmount(topUp);
+  const topUpUnits = topUpIn.units ?? 0n;
   // Top-ups carry Segundo's 1% on top, like the budget did; the freelancer pays nothing.
   const topUpFee = feeFor(topUpUnits);
-  const topUpProblem = !(Number(topUp) > 0)
-    ? "Enter an amount."
-    : Number(topUp) < 0.5
+  const topUpProblem = topUpIn.problem
+    ? topUpIn.problem
+    : topUpUnits < 500_000n
       ? "The smallest top-up is $0.50."
       : balance != null && topUpUnits + topUpFee > balance
         ? `With the 1% fee that's ${formatFee(topUpUnits + topUpFee)}, more than your wallet holds.`
@@ -195,10 +208,10 @@ export default function TabPage() {
       <div className={styles.noteWrap}>
         <TabNote view={view!} profiles={profiles} lastPaidAt={lastPaid?.time} engrave />
         <div className={styles.noteBar}>
-          <span className="soft">
+          <h1 className={styles.noteTitle}>
             Tab <span className="serial">№ {view!.id.toString().padStart(4, "0")}</span>
-            {lines?.find((l) => l.kind === "opened")?.time ? `, opened ${new Date(lines.find((l) => l.kind === "opened")!.time * 1000).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}` : ""}
-          </span>
+            {openedAt ? `, opened ${new Date(openedAt * 1000).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}` : ""}
+          </h1>
           <button
             className={styles.copy}
             onClick={() => navigator.clipboard?.writeText(window.location.href).then(() => {
@@ -232,7 +245,7 @@ export default function TabPage() {
                     className="btn"
                     disabled={act.busy}
                     onClick={() =>
-                      act.run(`Cashed out ${formatUsd(toUsd(owed), 4)}`, async (sent) => {
+                      act.run(`Cashed out ${formatCents(toUsd(owed))}`, async (sent) => {
                         sent();
                         const r = await settleNow(view!.id);
                         refresh();
@@ -247,7 +260,8 @@ export default function TabPage() {
               </div>
               {state === "closed" && (
                 <p className="soft">
-                  This tab is closed. You were paid {money(toUsd(t.paid))} in all{closedLine?.amount != null ? `, and ${formatUsd(toUsd(closedLine.amount))} went back to ${payer.name}` : ""}.
+                  {/* Dollars here, local money in the details beside it: the exchange rate arriving late mustn't rewrap this. */}
+                  This tab is closed. You were paid {formatUsd(toUsd(t.paid))} in all{refunded > 0n ? `, and ${formatUsd(toUsd(refunded))} went back to ${payer.name}` : ""}.
                 </p>
               )}
               {state === "paused" && <p className="notice">{payer.name} has paused pay. You can clock in again when they resume it.</p>}
@@ -290,7 +304,7 @@ export default function TabPage() {
               </div>
               {state === "closed" && (
                 <p className="soft">
-                  This tab is closed. {payee.name} was paid {money(toUsd(t.paid))} in all{closedLine?.amount != null ? `, and ${formatUsd(toUsd(closedLine.amount))} came back to you` : ""}.
+                  This tab is closed. {payee.name} was paid {formatUsd(toUsd(t.paid))} in all{refunded > 0n ? `, and ${formatUsd(toUsd(refunded))} came back to you` : ""}.
                 </p>
               )}
               {showTopUp && (
@@ -299,7 +313,7 @@ export default function TabPage() {
                   onSubmit={(e) => {
                     e.preventDefault();
                     if (topUpProblem) return;
-                    act.run(`Topped up ${formatUsd(Number(topUp))}`, async (sent) => {
+                    act.run(`Topped up ${formatUsd(toUsd(topUpUnits))}`, async (sent) => {
                       const permit = await signPermit(wallet, topUpUnits);
                       const fee = await signFee(wallet, topUpUnits);
                       const p = relay(wallet, "topUpWithPermit", [view!.id, topUpUnits, permit.deadline, permit.v, permit.r, permit.s], fee);
@@ -325,7 +339,15 @@ export default function TabPage() {
                   <button className="btn primary" disabled={!!topUpProblem || act.busy}>
                     {act.busy && act.which?.startsWith("Topped up") ? busyLabel(act.phase, "Add to budget") : "Add to budget"}
                   </button>
-                  <p className={`soft ${styles.feeNote}`}>{payee.name.split(" ")[0]} pays nothing; the whole top-up is theirs to earn.</p>
+                  {topUp.trim() && topUpProblem && (
+                    <p className={styles.why} role="status">
+                      {topUpProblem}
+                    </p>
+                  )}
+                  <p className={`soft ${styles.feeNote}`}>
+                    {payee.name.split(" ")[0]} pays nothing; the whole top-up is theirs to earn. Whatever is unspent when the tab closes comes back
+                    with its 1% fee.
+                  </p>
                 </form>
               )}
             </>
@@ -348,6 +370,7 @@ export default function TabPage() {
 
           <ErrorLine error={act.error} />
           <LandedLine landed={act.landed} />
+          {act.landed?.refund && <RefundLine refund={act.landed.refund} />}
           {act.landed?.fee && (
             <p className={styles.feeLine} role="status">
               {act.landed.fee.hash ? (
@@ -418,6 +441,15 @@ export default function TabPage() {
         </section>
       </div>
 
+      {timeCardPending && (
+        <section className={styles.stub} aria-busy="true">
+          <h2>Time card</h2>
+          <p className="soft">Reading this tab&apos;s history from Monad…</p>
+          <div className={styles.cardSkel}>
+            <div className="skeleton" />
+          </div>
+        </section>
+      )}
       {lines && lines.length > 1 && (
         <section className={styles.stub}>
           <h2 id="timecard">Time card</h2>
@@ -478,6 +510,21 @@ function describe(l: StubLine, payer: string, payee: string, money: (usd: number
     case "closed":
       return `Tab closed, ${formatUsd(amt)} back to ${payer}`;
   }
+}
+
+/** At close the treasury sends back Segundo's 1% on the unspent budget, in its own transaction. */
+function RefundLine({ refund }: { refund: NonNullable<Landed["refund"]> }) {
+  if (refund.error) return <p className="soft">{refund.error}</p>;
+  if (!refund.hash) return null;
+  return (
+    <p className="soft" role="status">
+      Segundo&apos;s 1% on the unspent budget, {formatFee(refund.value)}, went back to the client from the treasury,{" "}
+      <a className="serial" href={explorerTx(refund.hash)} target="_blank" rel="noreferrer">
+        block {refund.block?.toLocaleString("en-US")}
+      </a>
+      .
+    </p>
+  );
 }
 
 function Loading() {

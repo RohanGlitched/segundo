@@ -8,7 +8,7 @@ import { getAddress, isAddress, type Address } from "viem";
 
 export type TabRequest = { to: Address; rate: number; budget: number; memo: string; from: string };
 
-export const REQUEST_LIMITS = { minRate: 0.01, maxRate: 1000, minBudget: 0.5, maxBudget: 10_000, memo: 48, name: 40 } as const;
+export const REQUEST_LIMITS = { minRate: 1, maxRate: 1000, minBudget: 0.5, maxBudget: 10_000, memo: 48, name: 40 } as const;
 
 /** Control characters, zero-width characters and bidirectional overrides: nothing that can hide or reorder text in a name. */
 const HIDDEN = /[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁠-⁩﻿]/g;
@@ -39,7 +39,7 @@ export function requestLink(origin: string, r: TabRequest): string {
 /** What is wrong with a request as typed, in one plain sentence, or null. */
 export function requestProblem(r: { rate: number; budget: number; memo: string; from: string }): string | null {
   const L = REQUEST_LIMITS;
-  if (!(r.rate >= L.minRate)) return "Set an hourly rate above zero.";
+  if (!(r.rate >= L.minRate)) return "The lowest hourly rate is $1.00.";
   if (r.rate > L.maxRate) return "Keep the hourly rate under $1,000 on testnet.";
   if (!(r.budget >= L.minBudget)) return "The smallest tab is $0.50.";
   if (r.budget > L.maxBudget) return "Keep the suggested budget under $10,000 on testnet.";

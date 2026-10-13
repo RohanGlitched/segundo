@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { publicClient } from "./chain";
+import { noteRpcError, noteRpcOk, rpcResting } from "./hooks";
 import type { Rates } from "./money";
 
 type Head = { number: number; timestamp: number; receivedAt: number };
@@ -12,7 +13,8 @@ const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "wss://testnet-rpc.monad.xyz";
 
 /**
  * Follows Monad's blocks as they are produced (a newHeads subscription, roughly 2.5 a second),
- * falling back to polling if the socket can't open. Also loads reference exchange rates once.
+ * falling back to polling if the socket can't open (polls skip their turn while the RPC is rate-limiting us, see
+ * lib/hooks.ts). Also loads reference exchange rates once.
  */
 export function LiveProvider({ children }: { children: ReactNode }) {
   const [head, setHead] = useState<Head | null>(null);
@@ -42,10 +44,14 @@ export function LiveProvider({ children }: { children: ReactNode }) {
     const startPolling = () => {
       if (poll) return;
       const tick = () =>
+        !rpcResting() &&
         publicClient
           .getBlock()
-          .then((b) => accept(Number(b.number), Number(b.timestamp)))
-          .catch(() => {});
+          .then((b) => {
+            noteRpcOk();
+            accept(Number(b.number), Number(b.timestamp));
+          })
+          .catch(noteRpcError);
       tick();
       poll = setInterval(tick, 1000);
     };

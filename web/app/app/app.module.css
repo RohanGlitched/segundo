@@ -38,6 +38,16 @@
   flex-wrap: wrap;
   gap: 10px;
 }
+.more {
+  margin-top: -6px;
+  font-size: 14.5px;
+  color: var(--ink-soft);
+}
+.more a {
+  font-weight: 600;
+  color: var(--intaglio);
+  text-underline-offset: 3px;
+}
 .walletNotes {
   grid-column: 1 / -1;
 }

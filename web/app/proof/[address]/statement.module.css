@@ -225,6 +225,26 @@
   font-size: 25px;
   font-weight: 500;
 }
+.clientFacts {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding-top: 6px;
+  border-top: 1px solid var(--rule);
+}
+.clientFacts dd {
+  font-size: 21px;
+}
+@media (max-width: 720px) {
+  .clientFacts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 560px) {
+  /* "38 h 12 min" on one line in a half-width column. */
+  .facts dd {
+    font-size: 20px;
+    white-space: nowrap;
+  }
+}
 .empty {
   color: var(--ink-soft);
 }

@@ -1,6 +1,6 @@
 // End to end with a Mera passkey account, through the real UI: a Chrome virtual authenticator with PRF stands in
 // for the phone's fingerprint. Creates the account, waits for test AUSD, opens a tab to a demo freelancer with the
-// 1% fee, watches a payout land, then seals private details.
+// 1% fee, watches a payout land, closes the tab (budget and fee on it back), then seals private details.
 // Usage: node scripts/e2e-mera.cjs <baseUrl> [shotsDir]
 const { chromium } = require(process.env.PLAYWRIGHT || "playwright");
 const base = process.argv[2] || "http://localhost:3310";
@@ -49,18 +49,20 @@ async function shot(page, name) {
   await page.getByRole("button", { name: /Create your account with a passkey/i }).first().click();
   step("passkey created");
   await page.waitForFunction(() => /0x[0-9a-fA-F]{4}/.test(document.body.innerText), null, { timeout: 60000 });
-  await page.getByText(/test AUSD/i).first().waitFor({ timeout: 90000 });
   step("signed in with Mera");
+  // The first 25 test AUSD arrive by themselves; wait for them before spending.
+  await page.getByText(/25 test AUSD arrived/).first().waitFor({ timeout: 90000 });
+  step("test AUSD arrived");
   await shot(page, "app");
 
   await page.goto(`${base}/open`);
   await page.getByRole("button", { name: /Tunde Bakare/ }).click();
-  await page.getByLabel("Hourly rate").fill("60");
-  await page.getByLabel("Budget").fill("2");
+  await page.getByLabel("Hourly rate", { exact: true }).fill("60");
+  await page.getByLabel("Budget", { exact: true }).fill("2");
   await page.getByLabel(/What it/).fill("API review, passkey run");
   await page.getByText(/Segundo fee/).first().waitFor({ timeout: 30000 });
   await shot(page, "open");
-  await page.getByRole("button", { name: /Open tab/ }).click();
+  await page.getByRole("button", { name: /Open tab and pay \$/ }).click();
   await expectOk(page, /is open\./);
   step(`opened: ${await page.getByRole("heading", { level: 1 }).innerText()}`);
   const feeLine = await page.getByText(/fee/i).allInnerTexts();
@@ -72,6 +74,15 @@ async function shot(page, name) {
   await page.getByText(/Paid out|payout/i).first().waitFor({ timeout: 90000 });
   step("payout seen");
   await shot(page, "tab");
+
+  // Close it, so a run doesn't leave a demo freelancer on the clock.
+  await page.getByRole("button", { name: /Close and get/ }).click();
+  await page.getByRole("button", { name: "Yes, close the tab" }).click();
+  await expectOk(page, /Tab closed\. Landed/);
+  step("tab closed");
+  const refund = page.getByText(/on the unspent budget/).first();
+  if (await refund.waitFor({ timeout: 20000 }).then(() => true, () => false)) step(`fee refund: ${await refund.innerText()}`);
+  await shot(page, "closed");
 
   await page.goto(`${base}/app#sealed`);
   const edit = page.getByRole("button", { name: /Add|Edit|Seal/i }).filter({ hasText: /detail|seal|add/i }).first();

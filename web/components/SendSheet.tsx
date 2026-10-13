@@ -5,7 +5,7 @@ import { isAddress, type Address } from "viem";
 import { ErrorLine, LandedLine, busyLabel, useAction } from "@/components/ui";
 import { explorerTx } from "@/lib/chain";
 import { useLive } from "@/lib/live";
-import { CURRENCIES, ago, currency, formatMoney, formatUsd, toUnits, toUsd } from "@/lib/money";
+import { CURRENCIES, ago, currency, formatMoney, formatUsd, parseAmount, toUsd } from "@/lib/money";
 import { cleanEmail, resolveRecipient } from "@/lib/recipient";
 import { sendDollars, sweepFromKey, type Landed } from "@/lib/relay";
 import {
@@ -144,9 +144,10 @@ function amountProblem(value: bigint, max: bigint, typed: string): string | null
   return null;
 }
 
+/** Typed dollars to AUSD units, whole cents (shared parser, lib/money.ts: "2,5" is two and a half, "1e3" is refused). */
 const toValue = (typed: string) => {
-  const n = Number(typed.replace(/[$,\s]/g, ""));
-  return Number.isFinite(n) && n > 0 ? toUnits(Math.floor(n * 100 + 1e-6) / 100) : 0n;
+  const { units } = parseAmount(typed);
+  return units == null ? 0n : units - (units % 10_000n);
 };
 
 /** "They receive about ₱56.20": the receiver's amount in their currency's ink. */

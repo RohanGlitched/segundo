@@ -10,10 +10,10 @@ import { SendSheet, SentLinks } from "@/components/SendSheet";
 import { TabRow } from "@/components/TabRow";
 import { GettingStarted, Ledger, WalletNote } from "@/components/WalletPanel";
 import { ErrorLine, LandedLine, SignInPanel, busyLabel, useAction } from "@/components/ui";
-import { useAutoDrip, useMyTabIds, useProfile, useTabs, useDollarBalance } from "@/lib/hooks";
+import { dripOnce, useAutoDrip, useMyTabIds, useProfile, useTabs, useDollarBalance } from "@/lib/hooks";
 import { useLive, useChainNow } from "@/lib/live";
 import { currency, formatMoney, formatUsd, toUsd } from "@/lib/money";
-import { relay, requestTestDollars } from "@/lib/relay";
+import { relay } from "@/lib/relay";
 import { stateOf, type TabView } from "@/lib/tabs";
 import { useWallet } from "@/lib/wallet";
 import styles from "./app.module.css";
@@ -50,7 +50,7 @@ export default function YourTabs() {
   if (!me)
     return (
       <main className={`wrap ${styles.page}`}>
-        <SignInPanel title="Sign in to see your tabs">
+        <SignInPanel title="Sign in to see your tabs" level={1}>
           <p>Your tabs are the ones you pay into as a client and the ones that pay you as a freelancer.</p>
         </SignInPanel>
         <InstallApp id="install" />
@@ -60,10 +60,13 @@ export default function YourTabs() {
   const usd = balance == null ? null : toUsd(balance);
   const lowBalance = balance != null && balance < 5_000_000n;
   const hasStarted = (views?.length ?? 0) > 0 && !!mine?.name;
+  // One faucet request at a time: not before the balance is known (a new wallet gets its first 25 by itself), and not
+  // while the automatic one is on its way.
+  const faucetBusy = faucet.busy || drip.sending || balance == null;
   const getDollars = () =>
     faucet.run("25 test AUSD arrived", async (sent) => {
       sent();
-      const r = await requestTestDollars(me);
+      const r = await dripOnce(me);
       refreshBalance();
       return r;
     });
@@ -127,19 +130,26 @@ export default function YourTabs() {
               Send AUSD
             </button>
             {lowBalance && hasStarted && (
-              <button className="btn quiet" disabled={faucet.busy} onClick={getDollars}>
+              <button className="btn quiet" disabled={faucetBusy} onClick={getDollars}>
                 {faucet.busy ? "Sending test AUSD…" : "Get 25 test AUSD"}
               </button>
             )}
           </div>
+          <p className={styles.more}>
+            <Link href="/request">Ask a client for a tab</Link>
+            <span aria-hidden> · </span>
+            <Link href="/cashout">Cash out to local money</Link>
+          </p>
           <GettingStarted
+            address={me}
+            ready={balance != null && views != null && mine !== undefined}
             hasDollars={(balance ?? 0n) > 0n || (views?.length ?? 0) > 0}
             hasProfile={!!mine?.name}
             hasTab={(views?.length ?? 0) > 0}
             onFaucet={getDollars}
-            faucetBusy={faucet.busy || drip.sending}
+            faucetBusy={faucetBusy}
           />
-          <Ledger paid={paid} paying={paying} cur={myCur} />
+          <Ledger paid={paid} paying={paying} cur={myCur} loading={views == null} />
           <div className={styles.walletNotes}>
             <ErrorLine error={faucet.error} />
             <LandedLine landed={faucet.landed ?? drip.landed} />
@@ -154,7 +164,7 @@ export default function YourTabs() {
         fromName={mine?.name ?? ""}
         onMoved={refreshBalance}
         onFaucet={getDollars}
-        faucetBusy={faucet.busy || drip.sending}
+        faucetBusy={faucetBusy}
       />
       <SentLinks me={me} onMoved={refreshBalance} />
 
@@ -212,7 +222,7 @@ export default function YourTabs() {
   );
 }
 
-/** After 15 idle minutes (or a while in the background) the signing key is dropped; one tap brings it back. */
+/** The signing key lives only in memory: dropped on reload, after 15 idle minutes or a while in the background; one tap brings it back. */
 function PasskeyLock() {
   const wallet = useWallet();
   const [busy, setBusy] = useState(false);
@@ -220,7 +230,8 @@ function PasskeyLock() {
   return (
     <div className={styles.lock} role="status">
       <p>
-        <b>Signing is locked.</b> Your passkey unlocks it until you&rsquo;ve been away for 15 minutes.
+        <b>Signing is locked.</b> Your passkey unlocks it until you&rsquo;ve been away for 15 minutes, and whenever you reload or close the
+        page.
       </p>
       <button
         className="btn small"

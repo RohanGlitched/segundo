@@ -1,6 +1,6 @@
 // End to end through the real UI with a practice wallet: faucet, profile, open a tab to a demo
-// freelancer, watch it pay out, pause, close and get the rest back. Then the invite flow with a
-// second browser as the freelancer.
+// freelancer, watch it pay out, pause, close (with its confirm step) and get the rest back. Then the
+// invite flow with a second browser as the freelancer.
 // Usage: node scripts/e2e.cjs <baseUrl> [shotsDir]
 const { chromium } = require(process.env.PLAYWRIGHT || "playwright");
 const base = process.argv[2] || "http://localhost:3310";
@@ -33,12 +33,15 @@ async function shot(page, name) {
   await page.goto(`${base}/app`);
   await page.getByRole("button", { name: /practice wallet/i }).click();
   step("practice wallet created");
-  await page.getByRole("button", { name: "Get 25 test AUSD" }).click();
-  await page.getByText(/25 test AUSD arrived/).waitFor({ timeout: 60000 });
+  // A new wallet gets its first 25 test AUSD by itself; the button only matters if that drip didn't go.
+  await page.getByText(/25 test AUSD arrived/).waitFor({ timeout: 60000 }).catch(async () => {
+    await page.getByRole("button", { name: "Get 25 test AUSD" }).first().click();
+    await page.getByText(/25 test AUSD arrived/).waitFor({ timeout: 60000 });
+  });
   step("faucet: 25 test AUSD arrived");
 
-  await page.getByLabel("Name").fill("Mara Lindqvist");
-  await page.getByLabel("City").fill("Stockholm");
+  await page.getByLabel("Name", { exact: true }).fill("Mara Lindqvist");
+  await page.getByLabel("City", { exact: true }).fill("Stockholm");
   await page.getByLabel("Show amounts in").selectOption("EUR");
   await page.getByRole("button", { name: "Save" }).click();
   await page.getByText(/Your notes print/).waitFor({ timeout: 60000 });
@@ -47,11 +50,11 @@ async function shot(page, name) {
 
   await page.goto(`${base}/open`);
   await page.getByRole("button", { name: /Tunde Bakare/ }).click();
-  await page.getByLabel("Hourly rate").fill("60");
-  await page.getByLabel("Budget").fill("2");
+  await page.getByLabel("Hourly rate", { exact: true }).fill("60");
+  await page.getByLabel("Budget", { exact: true }).fill("2");
   await page.getByLabel(/What it/).fill("API review, first session");
   await shot(page, "open");
-  await page.getByRole("button", { name: /Open tab with/ }).click();
+  await page.getByRole("button", { name: /Open tab and pay \$/ }).click();
   await expectOk(page, /is open\./);
   const title = await page.getByRole("heading", { level: 1 }).innerText();
   step(`opened: ${title}`);
@@ -67,6 +70,7 @@ async function shot(page, name) {
   await page.getByText("Pay paused by the client").first().waitFor({ timeout: 60000 });
   step("client paused pay");
   await page.getByRole("button", { name: /Close and get/ }).click();
+  await page.getByRole("button", { name: "Yes, close the tab" }).click();
   await page.getByText(/Tab closed\. Landed/).waitFor({ timeout: 60000 });
   step("closed and refunded");
   await page.getByText(/Tab closed, \$/).first().waitFor({ timeout: 30000 });
@@ -76,9 +80,9 @@ async function shot(page, name) {
   // Invite flow: the client opens a tab by link; a second browser joins as the freelancer.
   await page.goto(`${base}/open`);
   await page.getByText("Someone I'll invite by link").click();
-  await page.getByLabel("Hourly rate").fill("25");
-  await page.getByLabel("Budget").fill("1");
-  await page.getByRole("button", { name: /Open tab with/ }).click();
+  await page.getByLabel("Hourly rate", { exact: true }).fill("25");
+  await page.getByLabel("Budget", { exact: true }).fill("1");
+  await page.getByRole("button", { name: /Open tab and pay \$/ }).click();
   const linkBox = page.getByLabel("Invite link");
   await linkBox.waitFor({ timeout: 60000 });
   const link = await linkBox.inputValue();
@@ -112,7 +116,7 @@ async function shot(page, name) {
       const raw = await p.locator("[data-balance]").first().getAttribute("data-balance").catch(() => "0");
       const amount = Number(raw || 0) / 1e6;
       if (amount < 0.01) continue;
-      await p.getByRole("button", { name: "Send AUSD to someone" }).click();
+      await p.getByRole("button", { name: "Send AUSD" }).first().click();
       await p.getByLabel("Send to").fill(process.env.RETURN_TO);
       await p.getByLabel("Amount in AUSD").fill(String(Math.floor(amount * 100) / 100));
       await p.getByRole("button", { name: "Send AUSD", exact: true }).click();

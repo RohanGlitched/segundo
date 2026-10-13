@@ -14,7 +14,7 @@ import { TILL, explorerAddress, explorerTx } from "@/lib/chain";
 import { mulberry32, seedOf, wavePath } from "@/lib/guilloche";
 import { useProfile } from "@/lib/hooks";
 import { useLive } from "@/lib/live";
-import { currency, formatDuration, formatMoney, formatUsd, toUsd, type Currency, type Rates } from "@/lib/money";
+import { currency, formatDuration, formatFee, formatMoney, formatUsd, toUsd, type Currency, type Rates } from "@/lib/money";
 import { canSeal, hasSealedDetails, unsealDetails, type SealedDetails } from "@/lib/seal";
 import { shortAddress } from "@/lib/tabs";
 import { useWallet } from "@/lib/wallet";
@@ -99,6 +99,9 @@ function StatementFor({ address }: { address: Address }) {
   const names = useNames(income.map((i) => i.counterparty).filter((a): a is Address => !!a));
   const total = income.reduce((s, i) => s + BigInt(i.amount!), 0n);
   const clients = useMemo(() => byClient(income), [income]);
+  // Tabs this account funded: not income, so they stay out of the totals, but a client looking up their own
+  // statement should see where their money went rather than an empty page.
+  const funded = useMemo(() => asClient(data?.items ?? [], since), [data, since]);
   const bars = useMemo(() => buckets(income, since, now), [income, since, now]);
   const owner = !!wallet.address && wallet.address.toLowerCase() === address.toLowerCase();
   const first = income.at(-1)?.time;
@@ -262,12 +265,21 @@ function StatementFor({ address }: { address: Address }) {
                       {clients.map((c) => (
                         <tr key={c.address}>
                           <td data-label="Client">
-                            <span className={styles.client}>{nameOf(names, c.address)}</span>
-                            {names[c.address.toLowerCase()]?.place && <span className="soft"> · {names[c.address.toLowerCase()].place}</span>}
-                            {demoNames.has(c.address.toLowerCase()) && <span className={styles.demo}>demo studio</span>}
-                            <a className={`serial ${styles.small}`} href={explorerAddress(c.address)} target="_blank" rel="noreferrer">
-                              {shortAddress(c.address)}
-                            </a>
+                            {names[c.address.toLowerCase()]?.name ? (
+                              <>
+                                <span className={styles.client}>{nameOf(names, c.address)}</span>
+                                {names[c.address.toLowerCase()]?.place && <span className="soft"> · {names[c.address.toLowerCase()].place}</span>}
+                                {demoNames.has(c.address.toLowerCase()) && <span className={styles.demo}>demo studio</span>}
+                                <a className={`serial ${styles.small}`} href={explorerAddress(c.address)} target="_blank" rel="noreferrer">
+                                  {shortAddress(c.address)}
+                                </a>
+                              </>
+                            ) : (
+                              // No name on Segundo: the address is the name, printed once.
+                              <a className={`serial ${styles.client}`} href={explorerAddress(c.address)} target="_blank" rel="noreferrer">
+                                {shortAddress(c.address)}
+                              </a>
+                            )}
                           </td>
                           <td data-label="Tabs">
                             {c.tabs.map((t) => (
@@ -342,6 +354,44 @@ function StatementFor({ address }: { address: Address }) {
                   )}
                 </section>
               </>
+            )}
+
+            {funded.tabs > 0 && (
+              <section className={styles.section} aria-labelledby="as-client">
+                <h2 id="as-client">Paid out as a client</h2>
+                <p className="soft">
+                  Tabs this account funded for freelancers in this period. A statement counts only pay received, so none of this is in the totals
+                  above.
+                </p>
+                <dl className={`${styles.facts} ${styles.clientFacts}`}>
+                  <div>
+                    <dt>Tabs funded</dt>
+                    <dd className="denom">{funded.tabs}</dd>
+                  </div>
+                  <div>
+                    <dt>Budgets and top-ups</dt>
+                    <dd className="denom">{formatUsd(toUsd(funded.funded))}</dd>
+                  </div>
+                  <div>
+                    <dt>Paid to freelancers</dt>
+                    <dd className="denom">{formatUsd(toUsd(funded.paid))}</dd>
+                  </div>
+                  <div>
+                    <dt>Unspent, back to this account</dt>
+                    <dd className="denom">{formatUsd(toUsd(funded.refunded))}</dd>
+                  </div>
+                  <div>
+                    <dt>Segundo fees (1%)</dt>
+                    <dd className="denom">{formatFee(funded.fees)}</dd>
+                  </div>
+                  {BigInt(data.totals.feesRefunded ?? "0") > 0n && (
+                    <div>
+                      <dt>Fees refunded at close, all time</dt>
+                      <dd className="denom">{formatFee(BigInt(data.totals.feesRefunded ?? "0"))}</dd>
+                    </div>
+                  )}
+                </dl>
+              </section>
             )}
 
             <section className={styles.verify} aria-labelledby="verify">
@@ -431,6 +481,26 @@ function clockTime(items: HistoryItem[], since: number, now: number) {
   return { seconds, count };
 }
 
+/** What this account put into tabs as the client in the period: funded, paid out, refunded and fees. */
+function asClient(items: HistoryItem[], since: number) {
+  const tabs = new Set<string>();
+  let funded = 0n;
+  let paid = 0n;
+  let refunded = 0n;
+  let fees = 0n;
+  for (const i of items) {
+    if (i.role !== "client" || i.time < since) continue;
+    const amount = i.amount ? BigInt(i.amount) : 0n;
+    if (i.kind === "opened" || i.kind === "topup") {
+      funded += amount;
+      if (i.tab) tabs.add(i.tab);
+    } else if (i.kind === "paid") paid += amount;
+    else if (i.kind === "refund") refunded += amount;
+    else if (i.kind === "fee") fees += amount;
+  }
+  return { tabs: tabs.size, funded, paid, refunded, fees };
+}
+
 function byClient(income: HistoryItem[]) {
   const map = new Map<string, { address: Address; units: bigint; count: number; tabs: Set<string> }>();
   for (const i of income) {
@@ -504,7 +574,8 @@ function Bars({ bars, byDay, cur, rates }: { bars: Bar[]; byDay: boolean; cur: C
                 </span>
               </span>
               <span className={styles.tick} aria-hidden>
-                {i % every === 0 || i === bars.length - 1 ? b.label : ""}
+                {/* Every few bars and the last one, dropping a regular label that would sit on top of the last. */}
+                {i === bars.length - 1 || (i % every === 0 && bars.length - 1 - i >= Math.max(2, every)) ? b.label : ""}
               </span>
             </li>
           );
