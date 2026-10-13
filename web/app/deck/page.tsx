@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { LiveHero } from "@/components/LiveHero";
 import { Mark } from "@/components/Mark";
 import { GrandRosette } from "@/components/home/Art";
+import { useBench, type Bench } from "@/components/home/UnderLoad";
 import { count, money, usdOf, useStats, type Stats } from "@/components/business/stats";
 import { NetworkProvider } from "@/lib/network";
 import styles from "./deck.module.css";
@@ -12,9 +13,14 @@ import styles from "./deck.module.css";
 /** Present mode: one 16:9 slide filling the screen. Below this, the deck reads as a scroll. */
 const PRESENT = "(min-width: 900px) and (min-height: 520px)";
 
-type Slide = { id: string; title: string; notes: string; body: (s: Stats | null | undefined) => ReactNode };
+type Slide = { id: string; title: string; notes: string; body: (s: Stats | null | undefined, b: Bench | null | undefined) => ReactNode };
 
 const live = (s: Stats | null | undefined, pick: (s: Stats) => string) => (s ? pick(s) : s === undefined ? "…" : "—");
+/** False when /api/stats fell back to the public RPC, whose short window can't split or count the whole history. */
+const whole = (s: Stats) => s.source !== "rpc";
+/** Monad's average block time, measured from the chain by /api/stats; the October 13 measurement until it answers. */
+const blockTime = (s: Stats | null | undefined) =>
+  `${((s?.chain?.blockMs ?? 305) / 1000).toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} s`;
 
 const CITIES = [
   { city: "Manila", code: "PHP", ink: "#2557B0", night: "#93B4F2" },
@@ -34,7 +40,7 @@ const SLIDES: Slide[] = [
       <div className={styles.cover}>
         <div className={styles.coverText}>
           <p className={styles.kicker}>Segundo</p>
-          <h2 className={styles.display}>Get paid every second you work.</h2>
+          <h1 className={styles.display}>Get paid every second you work.</h1>
           <p className={styles.lead}>
             Hourly work across borders still pays late and costs too much: <b>10 days</b> before Upwork releases hourly pay, and <b>6.36%</b> on
             average to send money abroad.
@@ -51,16 +57,16 @@ const SLIDES: Slide[] = [
     id: "who",
     title: "Who it hurts",
     notes:
-      "The World Bank counts up to four hundred and thirty-five million online gig workers. We start with five cities: Manila, Lagos, Pune, Nairobi and São Paulo.",
+      "The World Bank counts between a hundred and fifty-four and four hundred and thirty-five million online gig workers. We start with five cities: Manila, Lagos, Pune, Nairobi and São Paulo.",
     body: () => (
       <div className={styles.split}>
         <div>
           <p className={styles.kicker}>Who it hurts</p>
           <h2 className={styles.h}>The people doing the work, far from the people paying for it.</h2>
           <p className={styles.bigNum}>
-            <span className="denom">435M</span>
+            <span className="denom">154–435M</span>
           </p>
-          <p className={styles.lead}>online gig workers at the top of the World Bank&apos;s estimate (154 million at the bottom).</p>
+          <p className={styles.lead}>online gig workers worldwide, the World Bank&apos;s range: 4.4% to 12.5% of the global labour force.</p>
           <p className={styles.source}>World Bank, Working Without Borders, 2023</p>
         </div>
         <ul className={styles.cities}>
@@ -88,8 +94,8 @@ const SLIDES: Slide[] = [
           <ul className={styles.ticks}>
             <li>The client funds a budget before work starts.</li>
             <li>Pay builds up every second the freelancer is clocked in.</li>
-            <li>It lands in their wallet every few seconds, in digital dollars.</li>
-            <li>Unspent budget goes straight back to the client.</li>
+            <li>It lands in their wallet as they work, in digital dollars.</li>
+            <li>Unspent budget, and the 1% fee on it, goes back to the client.</li>
           </ul>
         </div>
         <div className={styles.noteBox}>
@@ -121,7 +127,7 @@ const SLIDES: Slide[] = [
           <li>
             <span className="denom">3</span>
             <h3>Paid as they go</h3>
-            <p>Earnings land every few seconds. Either side can stop the clock; closing refunds every unspent cent.</p>
+            <p>Earnings land in their wallet as they work. Either side can stop the clock; closing refunds every unspent cent.</p>
           </li>
         </ol>
       </div>
@@ -131,24 +137,33 @@ const SLIDES: Slide[] = [
     id: "monad",
     title: "Why Monad",
     notes:
-      "This needs Monad. Blocks every three hundred milliseconds mean a payout lands while you're watching, and tabs never queue behind each other.",
-    body: (s) => (
+      "This needs Monad. We measured a block every three hundred and five milliseconds, and our payouts land in under three seconds from the moment they're sent. When we pushed hundreds of payouts at once, Monad put up to ninety-six of them in one block.",
+    body: (s, b) => (
       <div className={styles.split}>
         <div>
           <p className={styles.kicker}>Why Monad</p>
           <h2 className={styles.h}>Pay you can watch arrive.</h2>
           <ul className={styles.ticks}>
-            <li>A block every 0.3 s and finality in 0.6 s: a payout lands while the freelancer is still looking.</li>
-            <li>Pay accrues from timestamps, so tabs never queue behind each other.</li>
+            <li>A block every {blockTime(s)} on average, measured over the last 10,000 blocks.</li>
+            <li>Every step of a whole tab landed 0.6 to 2.6 s after it was sent, from a laptop in India.</li>
+            <li>
+              Under load:{" "}
+              {b?.txs != null && b.durationS != null && b.perBlockMax != null
+                ? `${b.txs.toLocaleString("en-US")} payouts in ${b.durationS.toLocaleString("en-US")} s, up to ${b.perBlockMax} in one block.`
+                : "hundreds of payouts at once, recorded block by block."}{" "}
+              <Link href="/network">segundo.world/network</Link>
+            </li>
             <li>Every action is a signature; Segundo&apos;s relayer pays the gas.</li>
           </ul>
         </div>
         <div className={styles.stat}>
-          <span className={styles.statLabel}>Pay lands on a running tab every</span>
-          <span className={`denom ${styles.bigNum}`}>
-            {live(s, (x) => (x.settle.medianMs == null ? "—" : `${(x.settle.medianMs / 1000).toLocaleString("en-US", { maximumFractionDigits: 1 })} s`))}
+          <span className={styles.statLabel}>Average Monad block</span>
+          <span className={`denom ${styles.bigNum}`}>{blockTime(s)}</span>
+          <span className={styles.statLabel}>From sent to on chain</span>
+          <span className={`denom ${styles.bigNum}`}>0.6–2.6 s</span>
+          <span className={styles.source}>
+            Block time from block timestamps over the last 10,000 blocks; landing times from our 17-step proof tab (VERIFY.md), Monad testnet.
           </span>
-          <span className={styles.source}>Median gap between payouts on Segundo tabs, Monad testnet. Block and finality times from Monad&apos;s docs.</span>
         </div>
       </div>
     ),
@@ -157,15 +172,15 @@ const SLIDES: Slide[] = [
     id: "model",
     title: "Business model",
     notes:
-      "Here's how we make money. Clients pay one percent on top of what they fund; freelancers pay nothing. It's live on testnet: that's our treasury. Next come yield on escrowed budgets, cash-out, and advances.",
+      "Here's how we make money. Clients pay one percent of what they spend; unspent budget and its fee come back at close. Freelancers pay nothing. The contract itself is a public good with no fee switch; our one percent pays for the gasless, passkey and cash-out service around it. It's live on testnet: that's our treasury. Next come yield on escrowed budgets, cash-out, and advances.",
     body: (s) => (
       <div className={styles.split}>
         <div>
           <p className={styles.kicker}>Business model</p>
-          <h2 className={styles.h}>Clients pay 1%. Freelancers pay nothing.</h2>
+          <h2 className={styles.h}>Clients pay 1% of what they spend. Freelancers pay nothing.</h2>
           <ol className={styles.lines}>
             <li>
-              <b>1% client fee</b> <span className={styles.on}>Live on testnet</span>
+              <b>1% client fee; unspent budget and its fee come back</b> <span className={styles.on}>Live on testnet</span>
             </li>
             <li>
               <b>Share of AUSD reserve yield on budgets in escrow</b> <span>Next</span>
@@ -182,7 +197,10 @@ const SLIDES: Slide[] = [
           <span className={styles.statLabel}>Fees in the Segundo treasury</span>
           <span className={`denom ${styles.bigNum} ${styles.serialNum}`}>{live(s, (x) => money(usdOf(x.fees.total)))}</span>
           <span className={styles.statLabel}>{live(s, (x) => `${count(x.fees.count)} fees, each a public transfer on Monad`)}</span>
-          <span className={styles.source}>Testnet, including our demo studios. Test AUSD has no value.</span>
+          <span className={styles.source}>
+            Testnet, including our demo studios. Test AUSD has no value. The tab contract has no fee switch and anyone can call it directly; the fee
+            pays for the service around it.
+          </span>
         </div>
       </div>
     ),
@@ -191,7 +209,7 @@ const SLIDES: Slide[] = [
     id: "market",
     title: "Market",
     notes:
-      "Hundreds of millions of people work online, and Upwork alone handled about four billion dollars of work last year. One percent of that is forty million a year.",
+      "Hundreds of millions of people work online. From the bottom up: Payoneer alone pays five hundred and thirty-six thousand people more than five hundred dollars a month across borders. Their pay is three to ten billion dollars a year, and one percent of it is thirty-two to a hundred and five million. That's an estimate, and every input is on the business page.",
     body: () => (
       <div>
         <p className={styles.kicker}>Market</p>
@@ -208,9 +226,12 @@ const SLIDES: Slide[] = [
             <p className={styles.source}>World Bank estimate, December 2024</p>
           </div>
           <div>
-            <span className={`denom ${styles.bigNum}`}>$4.03B</span>
-            <p>of work bought through Upwork alone in 2025</p>
-            <p className={styles.source}>Upwork gross services volume, FY 2025 (Form 8-K)</p>
+            <span className={`denom ${styles.bigNum}`}>$32–105M</span>
+            <p>a year at 1%: our bottom-up estimate of the serviceable market</p>
+            <p className={styles.source}>
+              536,000 Payoneer customers moving over $500 a month (Payoneer FY 2025, Form 8-K) × $6,000 to $19,500 a year (the upper end is our assumption:
+              25 h a week at $15)
+            </p>
           </div>
         </div>
       </div>
@@ -237,7 +258,7 @@ const SLIDES: Slide[] = [
             ["Contractor payroll", "On the payroll date", "None; the company pays $29–49 a month", "Chase an invoice"],
             ["Receive and convert", "When the client pays", "Receiving and conversion fees", "Chase an invoice"],
             ["Crypto streaming", "By calendar time, not time worked", "Gas, a wallet, a seed phrase", "Paid until the stream stops"],
-            ["Segundo", "Every second you're clocked in", "Nothing. Client pays 1%", "Already paid for every second"],
+            ["Segundo", "Every second you're clocked in", "Nothing. Client pays 1% of what they spend", "Every second worked is paid or locked to you"],
           ].map((r) => (
             <div role="row" key={r[0]} className={r[0] === "Segundo" ? styles.mUs : undefined}>
               <span role="rowheader">{r[0]}</span>
@@ -254,7 +275,7 @@ const SLIDES: Slide[] = [
     id: "traction",
     title: "Traction",
     notes:
-      "It's live. These numbers come from the chain right now. To be clear, it's testnet, and they include our demo studios, which are bots.",
+      "It's live. These numbers come from the chain right now, split honestly: wallets that aren't ours, then our demo studios, which are bots. Every open and top-up through Segundo since launch is checked for its fee.",
     body: (s) => (
       <div>
         <p className={styles.kicker}>Traction</p>
@@ -262,12 +283,12 @@ const SLIDES: Slide[] = [
         <dl className={styles.traction}>
           {(
             [
-              ["Paid to freelancers", (x: Stats) => money(usdOf(x.paid.total))],
-              ["Payouts", (x: Stats) => count(x.paid.payouts)],
-              ["Tabs", (x: Stats) => count(x.paid.tabs)],
-              ["Freelancers paid", (x: Stats) => count(x.paid.freelancers)],
-              ["Clients", (x: Stats) => count(x.paid.clients)],
-              ["Fees collected", (x: Stats) => money(usdOf(x.fees.total))],
+              ["Outside wallets", (x: Stats) => (whole(x) && x.outside ? count(x.outside.wallets) : "—")],
+              ["Their tabs", (x: Stats) => (whole(x) && x.outside ? count(x.outside.tabs) : "—")],
+              ["Paid on their tabs", (x: Stats) => (whole(x) && x.outside ? money(usdOf(x.outside.paid)) : "—")],
+              ["Demo studios' tabs (bots)", (x: Stats) => (whole(x) && x.demo ? count(x.demo.tabs) : "—")],
+              ["Paid by demo studios (bots)", (x: Stats) => (whole(x) && x.demo ? money(usdOf(x.demo.paid)) : "—")],
+              ["Fee collection", (x: Stats) => (whole(x) && x.feeRate?.opens ? `${count(x.feeRate.opensWithFee)} of ${count(x.feeRate.opens)}` : "—")],
             ] as const
           ).map(([k, f]) => (
             <div key={k}>
@@ -277,8 +298,14 @@ const SLIDES: Slide[] = [
           ))}
         </dl>
         <p className={styles.source}>
-          Testnet, including our demo studios (three bot studios paying five bot freelancers). Contract verified on Sourcify, 53 Foundry tests including
-          fuzz and invariant runs.
+          {s &&
+            (whole(s) && s.feeRate?.opens
+              ? `Fee collection: ${count(s.feeRate.opensWithFee)} of ${count(s.feeRate.opens)} opens and top-ups through Segundo since launch paid the fee${
+                  s.feeRate.missed.length ? "; the misses are linked on segundo.world/business" : ""
+                }. `
+              : "")}
+          Outside wallets are everyone who isn&apos;t a demo studio, our own test runs included. Demo studios: three bot studios paying five bot
+          freelancers. The load test is left out. Contract verified on Sourcify, 53 Foundry tests including fuzz and invariant runs.
         </p>
       </div>
     ),
@@ -298,10 +325,10 @@ const SLIDES: Slide[] = [
               <b>Mainnet on AUSD, the same contract, audited</b>
             </li>
             <li>
-              <b>Cash-out partners</b>: pesos, naira, rupees, shillings and reais to banks and mobile money
+              <b>Cash-out partners:</b> pesos, naira, rupees, shillings and reais to banks and mobile money
             </li>
             <li>
-              <b>Time-tracker plug-ins</b>: the tools freelancers already use clock them in
+              <b>Time-tracker plug-ins:</b> the tools freelancers already use clock them in
             </li>
             <li>
               <b>Advances</b> against verified on-chain income
@@ -323,6 +350,7 @@ const SLIDES: Slide[] = [
 
 export default function DeckPage() {
   const stats = useStats(30_000);
+  const bench = useBench();
   const [at, setAt] = useState(0);
   const [notes, setNotes] = useState(false);
   const [present, setPresent] = useState(false);
@@ -345,6 +373,32 @@ export default function DeckPage() {
     if (!present) return;
     window.history.replaceState(null, "", `#${at + 1}`);
   }, [at, present]);
+
+  // In present mode the deck covers the page, so the site's own header and footer underneath leave the tab order
+  // (and the accessibility tree) until it stops covering them.
+  useEffect(() => {
+    if (!present) return;
+    const hidden = new Set<HTMLElement>();
+    const hide = () => {
+      for (const el of document.querySelectorAll<HTMLElement>("header, footer")) {
+        if (hidden.has(el) || stage.current?.contains(el) || el.inert) continue;
+        el.inert = true;
+        el.setAttribute("aria-hidden", "true");
+        hidden.add(el);
+      }
+    };
+    hide();
+    // The layout can mount its header after the deck does; catch it when it arrives.
+    const watch = new MutationObserver(hide);
+    watch.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      watch.disconnect();
+      for (const el of hidden) {
+        el.inert = false;
+        el.removeAttribute("aria-hidden");
+      }
+    };
+  }, [present]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -409,7 +463,7 @@ export default function DeckPage() {
                     № {String(i + 1).padStart(2, "0")} / {String(n).padStart(2, "0")}
                   </span>
                 </header>
-                <div className={styles.slideBody}>{s.body(stats)}</div>
+                <div className={styles.slideBody}>{s.body(stats, bench)}</div>
               </div>
               <aside className={styles.notes} aria-label={`Speaker notes for slide ${i + 1}`}>
                 {s.notes}

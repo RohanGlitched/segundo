@@ -9,21 +9,21 @@ export function Money() {
         <p className={`denom ${styles.moneyDenom}`}>
           1<span>%</span>
         </p>
-        <p className={styles.moneyLine}>paid by the client, on top of what they fund. Freelancers pay nothing.</p>
+        <p className={styles.moneyLine}>of what the client spends. Unspent budget and its fee come back. Freelancers pay nothing.</p>
       </div>
       <div className={styles.moneyText}>
-        <dl className={styles.moneyStub} aria-label="A $500 tab">
+        <dl className={styles.moneyStub} aria-label="A $500 tab, $400 of it used">
           <div>
-            <dt>The client funds a tab</dt>
-            <dd className="denom">$500.00</dd>
+            <dt>The freelancer is paid, for time worked</dt>
+            <dd className="denom">$400.00</dd>
           </div>
           <div>
-            <dt>Segundo fee, 1%</dt>
-            <dd className="denom">$5.00</dd>
+            <dt>Segundo fee: 1% of what was spent</dt>
+            <dd className="denom">$4.00</dd>
           </div>
           <div>
-            <dt>The freelancer receives, for time worked</dt>
-            <dd className="denom">up to $500.00</dd>
+            <dt>Back to the client at close: $100 unspent, and its $1 fee</dt>
+            <dd className="denom">$101.00</dd>
           </div>
           <div>
             <dt>The freelancer pays</dt>
@@ -31,8 +31,10 @@ export function Money() {
           </div>
         </dl>
         <p className={styles.moneyNote}>
-          The fee is live on testnet: it is signed in the same step as the tab and lands in a public treasury on Monad. After it come a share of the yield on
-          budgets waiting in tabs, a margin on local cash-out, and later, advances against income the chain has already verified.
+          A $500 tab with $400 used. The fee is live on testnet: it is signed in the same step as the tab and lands in a public treasury on Monad. The tab
+          contract itself has no fee switch, and anyone can use it directly; the 1% pays for the gasless, passkey and cash-out service around it. After it
+          come a share of the yield on budgets waiting in tabs, a margin on local cash-out, and later, advances against income the chain has already
+          verified.
         </p>
         <p className={styles.moneyLinks}>
           <Link href="/business" className="btn primary">

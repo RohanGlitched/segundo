@@ -3,13 +3,29 @@
 import { useEffect, useState } from "react";
 
 /** GET /api/stats: network-wide money read from the chain. Money fields are AUSD base units (6 dp) as strings. */
+/** One slice of the network: tabs, payouts, pay sent (AUSD base units) and the wallets on them. */
+export type Slice = { tabs: number; payouts: number; paid: string; clients: number; freelancers: number; wallets: number };
+
 export type Stats = {
   updatedAt: string | number;
   treasury: string;
-  fees: { total: string; count: number; last7d: string };
+  /** Only transfers matched to an open or top-up count as fees. refunded/net arrive with the close-time fee refund. */
+  fees: { total: string; count: number; last7d: string; refunded?: string; refunds?: number; net?: string };
   paid: { total: string; payouts: number; tabs: number; freelancers: number; clients: number };
+  /** Tabs opened in the app by wallets other than our demo studios (our own test runs included). */
+  outside?: Slice;
+  /** Tabs our demo studios opened; studios and people are how many demo wallets we run. */
+  demo?: Slice & { studios: number; people: number };
+  /** Tabs opened straight on the contract, without the app (allowed by design; no fee is due). */
+  direct?: Slice;
+  /** The load benchmark, left out of every other figure. */
+  bench?: { tabs: number; payouts: number };
+  /** Opens and top-ups sent through Segundo since the fee went live, and how many paid it. */
+  feeRate?: { opensWithFee: number; opens: number; direct: number; since: number; missed: { tab: string; kind: "open" | "topup"; block: number; hash: string }[] };
+  /** Monad's average block time over the last `blocks` blocks, measured from the chain. */
+  chain?: { blockMs: number; blocks: number; head: number } | null;
   daily: { day: string; paid: string; fees: string; payouts: number; tabs: number }[];
-  /** The median gap between one payout and the next on a running tab. */
+  /** Kept for older readers: the median gap between payouts on a running tab. Not shown anywhere. */
   settle: { medianMs: number | null };
   /** "envio-hyperrpc" when read through Envio, "rpc" when the public RPC fallback covers only a recent window. */
   source: string;

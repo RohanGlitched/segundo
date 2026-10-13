@@ -18,3 +18,14 @@ export const DEMO_CLIENTS: { address: Address; name: string; place: string; curr
   { address: "0x6833B6CC1B48bd21352559Ea6fba79CaA7b13621", name: "Lumen Labs", place: "Austin", currency: "USD" },
   { address: "0xe3bDcadC352ec1b9230fB63193D493b27E2Dc5d0", name: "Kite & Co", place: "Singapore", currency: "SGD" },
 ];
+
+/** The two fresh wallets bots/proof.mjs used for the end-to-end proof tab (№ 6, see VERIFY.md). */
+export const PROOF_WALLETS: Address[] = ["0x828ac92115c7F12AF1C7A37265C600048dd24F53", "0x2aAEABf549E313f2cF19d2928Ee95603C218AC0c"];
+
+/**
+ * Every wallet we run ourselves (the demo studios and freelancers in bots/till-bots.mjs, and the proof script's),
+ * lower-cased, so the network numbers can be split into ours and everyone else's.
+ */
+export const DEMO_WALLETS: ReadonlySet<string> = new Set(
+  [...DEMO_CLIENTS.map((c) => c.address), ...DEMO_FREELANCERS.map((f) => f.address), ...PROOF_WALLETS].map((a) => a.toLowerCase()),
+);

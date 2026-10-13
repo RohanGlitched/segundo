@@ -739,3 +739,77 @@
 .ref:hover {
   background: color-mix(in srgb, var(--serial) 12%, transparent);
 }
+
+/* ---------------------------------------------------------------- the contract as a public good */
+.neutral {
+  margin-top: 32px;
+  padding: 18px 22px 20px;
+  border-left: 3px solid var(--intaglio);
+  background: var(--sheet);
+  box-shadow: var(--shadow);
+  max-width: 920px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.neutral h3 {
+  font-size: 18px;
+}
+.neutral p {
+  color: var(--ink-soft);
+  font-size: 15.5px;
+  max-width: 80ch;
+}
+
+/* ---------------------------------------------------------------- serviceable market, bottom up */
+.sam {
+  border-top: 1.5px solid var(--ink);
+  max-width: 1040px;
+}
+.samRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.6fr) minmax(0, 1.6fr);
+  gap: 20px;
+  align-items: baseline;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: 15.5px;
+}
+.samRow > span {
+  min-width: 0;
+}
+.samRow > span:first-child {
+  font-weight: 650;
+}
+.samRow > :global(.denom) {
+  font-size: clamp(20px, 2vw, 26px);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.samSrc {
+  color: var(--ink-soft);
+  font-size: 14.5px;
+}
+.samAssume {
+  color: var(--warn);
+  font-weight: 600;
+}
+.samTotal {
+  border-bottom: 1.5px solid var(--ink);
+}
+.samTotal > :global(.denom),
+.samTotal b {
+  color: var(--serial);
+}
+@media (max-width: 640px) {
+  .samRow {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 12px;
+  }
+  .samSrc {
+    grid-column: 1 / -1;
+  }
+  .neutral {
+    padding: 16px 16px 18px;
+  }
+}

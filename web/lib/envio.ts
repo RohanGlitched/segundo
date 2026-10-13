@@ -1,7 +1,9 @@
 import "server-only";
 import { decodeEventLog, encodeEventTopics, getAddress, pad, type Address, type Hex } from "viem";
 import { tillAbi } from "./abi";
-import { DOLLAR, RPC_URL, TILL, TREASURY, publicClient } from "./chain";
+import { DOLLAR, FORWARDER, RPC_URL, TILL, TREASURY, publicClient } from "./chain";
+import { BENCH_ADDRESSES, BENCH_TABS } from "./bench-addresses";
+import { DEMO_CLIENTS, DEMO_FREELANCERS, DEMO_WALLETS } from "./demo";
 import { feeFor } from "./money";
 import { readTabs, type TabView } from "./tabs";
 
@@ -20,10 +22,19 @@ import { readTabs, type TabView } from "./tabs";
 /** Block of Till's deployment (tx 0x12ec03d3…, see VERIFY.md); nothing older can hold its events. */
 export const DEPLOY_BLOCK = 68_119_428n;
 const TILL_ADDRESS: Address = /^0x0+$/.test(TILL) ? "0xeb6c2c519c9bcc4495364c34ac116c20098113d1" : TILL;
+const FORWARDER_ADDRESS: Address = /^0x0+$/.test(FORWARDER) ? "0xB0Af71Dfb11df900B2B1a63De0D156e7f035B4D1" : FORWARDER;
+/** First block of the 1% client fee (see VERIFY.md): opens and top-ups sent through Segundo from here on carry it. */
+export const FEE_BLOCK = 70_674_000;
+/** How far apart a fee and the open or top-up it paid for may sit, either way round (the fee now goes first). */
+const FEE_MATCH_BLOCKS = 600;
 
 const TTL_MS = 60_000;
-/** HyperRPC: blocks per log query. A query that times out is split in half and tried again. */
-const ENVIO_SPAN = 400_000n;
+/**
+ * HyperRPC: blocks per log query. The filters are sparse, so one query covers everything since deployment in a
+ * few seconds, and few queries matter: HyperRPC answers 429 after a handful in quick succession. A query that
+ * times out is split in half and tried again.
+ */
+const ENVIO_SPAN = 3_000_000n;
 const ENVIO_MIN_SPAN = 5_000n;
 /** Public RPC fallback: its 100-block cap means only the most recent stretch is read (about four minutes). */
 const RPC_SPAN = 100n;
@@ -47,6 +58,8 @@ export type TillEvent = Base &
     | { name: "Closed"; id: bigint; paid: bigint; refunded: bigint }
   );
 export type FeeEvent = Base & { from: Address; amount: bigint };
+/** AUSD leaving the treasury: a fee refund (1% of the unspent budget at close, or a whole fee whose open failed). */
+export type Outflow = Base & { to: Address; amount: bigint };
 
 type Ledger = {
   source: Source;
@@ -55,7 +68,18 @@ type Ledger = {
   /** First block read: the deployment block for HyperRPC, the start of the recent window for the public RPC. */
   from: bigint;
   events: TillEvent[];
+  /**
+   * Every AUSD transfer into the treasury. Anyone can send AUSD to any address, so only the ones in `linked`
+   * (paired with an open or top-up) count as fees anywhere on the site.
+   */
   fees: FeeEvent[];
+  refunds: Outflow[];
+  /** Fee → the tab it paid for. Rebuilt once per refresh, not per request. */
+  linked: Map<FeeEvent, string>;
+  /** Opens and top-ups ("txHash:logIndex") that a fee was matched to. */
+  feePaid: Set<string>;
+  /** Transactions (lower-case hashes) that went through the forwarder: signed in the app, sent by Segundo's relayer. */
+  forwarded: Set<string>;
   keys: Set<string>;
   at: number;
 };
@@ -73,25 +97,36 @@ const WATCHED = ["Opened", "Claimed", "ClockedIn", "ClockedOut", "ToppedUp", "Se
 const TILL_TOPICS = WATCHED.map((eventName) => encodeEventTopics({ abi: tillAbi, eventName } as never)[0] as Hex);
 const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" as Hex;
 const TREASURY_TOPIC = pad(TREASURY.toLowerCase() as Hex, { size: 32 });
+/** OpenZeppelin ERC2771Forwarder's ExecutedForwardRequest(address indexed signer, uint256 nonce, bool success). */
+const FORWARDED_TOPIC = "0x842fb24a83793558587a3dab2be7674da4a51d09c5542d6dd354e5d0ea70813c" as Hex;
 
 const envioUrl = () => {
   const token = process.env.ENVIO_API_TOKEN?.trim();
   return token ? `https://monad-testnet.rpc.hypersync.xyz/${token}` : null;
 };
 
+/** A per-call timeout that also ends when the read it belongs to is abandoned. */
+const within = (ms: number, outer?: AbortSignal) => (outer ? AbortSignal.any([outer, AbortSignal.timeout(ms)]) : AbortSignal.timeout(ms));
+
 /** One JSON-RPC call with a hard timeout. Errors carry the method, never the URL. */
-async function call<T>(url: string, method: string, params: unknown[], ms: number): Promise<T> {
+async function call<T>(url: string, method: string, params: unknown[], ms: number, outer?: AbortSignal, retries = 2): Promise<T> {
   let res: Response;
   try {
     res = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-      signal: AbortSignal.timeout(ms),
+      signal: within(ms, outer),
       cache: "no-store",
     });
   } catch (e) {
+    if (outer?.aborted) throw new Error(`${method}: abandoned`);
     throw new Error(`${method}: ${e instanceof Error && e.name === "TimeoutError" ? "timed out" : "unreachable"}`);
+  }
+  if (res.status === 429 && retries > 0 && !outer?.aborted) {
+    // Rate limited: wait a moment and ask again rather than fall back to a four-minute window.
+    await new Promise((r) => setTimeout(r, 1_200));
+    return call<T>(url, method, params, ms, outer, retries - 1);
   }
   if (!res.ok) throw new Error(`${method}: HTTP ${res.status}`);
   const body = (await res.json()) as { result?: T; error?: { message?: string } };
@@ -116,17 +151,18 @@ async function pool<T>(tasks: (() => Promise<T>)[], width: number): Promise<T[]>
   return out;
 }
 
-type Filter = { address: Address; topics: (Hex | Hex[] | null)[] };
+type Filter = { address: Address | Address[]; topics: (Hex | Hex[] | null)[] };
 
 /** HyperRPC: big ranges, split in half whenever one is too heavy to answer in time. */
-async function envioLogs(url: string, filter: Filter, from: bigint, to: bigint): Promise<RawLog[]> {
+async function envioLogs(url: string, filter: Filter, from: bigint, to: bigint, signal?: AbortSignal): Promise<RawLog[]> {
   const ranges: [bigint, bigint][] = [];
   for (let a = from; a <= to; a += ENVIO_SPAN) ranges.push([a, a + ENVIO_SPAN - 1n > to ? to : a + ENVIO_SPAN - 1n]);
   const one = async (a: bigint, b: bigint): Promise<RawLog[]> => {
     try {
-      return await call<RawLog[]>(url, "eth_getLogs", [{ ...filter, fromBlock: hex(a), toBlock: hex(b) }], 9_000);
+      return await call<RawLog[]>(url, "eth_getLogs", [{ ...filter, fromBlock: hex(a), toBlock: hex(b) }], 9_000, signal);
     } catch (e) {
-      if (b - a < ENVIO_MIN_SPAN) throw e;
+      // An abandoned or rate-limited read stops here instead of splitting into ever more requests.
+      if (b - a < ENVIO_MIN_SPAN || signal?.aborted || (e instanceof Error && e.message.includes("HTTP 429"))) throw e;
       const mid = a + (b - a) / 2n;
       const [x, y] = await Promise.all([one(a, mid), one(mid + 1n, b)]);
       return [...x, ...y];
@@ -136,22 +172,22 @@ async function envioLogs(url: string, filter: Filter, from: bigint, to: bigint):
 }
 
 /** Public RPC: 100-block pages over a short window. */
-async function rpcLogs(filter: Filter, from: bigint, to: bigint): Promise<RawLog[]> {
+async function rpcLogs(filter: Filter, from: bigint, to: bigint, signal?: AbortSignal): Promise<RawLog[]> {
   const tasks: (() => Promise<RawLog[]>)[] = [];
   for (let a = from; a <= to; a += RPC_SPAN) {
     const b = a + RPC_SPAN - 1n > to ? to : a + RPC_SPAN - 1n;
-    tasks.push(() => call<RawLog[]>(RPC_URL, "eth_getLogs", [{ ...filter, fromBlock: hex(a), toBlock: hex(b) }], 4_000));
+    tasks.push(() => call<RawLog[]>(RPC_URL, "eth_getLogs", [{ ...filter, fromBlock: hex(a), toBlock: hex(b) }], 4_000, signal));
   }
   return (await pool(tasks, 6)).flat();
 }
 
 /** Several JSON-RPC calls in one POST (HyperRPC answers batches of 50 block reads in a second or two). */
-async function batch<T>(url: string, method: string, params: unknown[][], ms: number): Promise<(T | null)[]> {
+async function batch<T>(url: string, method: string, params: unknown[][], ms: number, signal?: AbortSignal): Promise<(T | null)[]> {
   const res = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(params.map((p, id) => ({ jsonrpc: "2.0", id, method, params: p }))),
-    signal: AbortSignal.timeout(ms),
+    signal: within(ms, signal),
     cache: "no-store",
   }).catch(() => null);
   if (!res?.ok) return params.map(() => null);
@@ -166,21 +202,25 @@ async function batch<T>(url: string, method: string, params: unknown[][], ms: nu
  * still unknown after that (a timeout) take a time interpolated between the nearest known blocks, which on Monad's
  * steady block pace lands within seconds.
  */
-async function fillTimes(logs: RawLog[], url: string, known: [number, number][]) {
+async function fillTimes(logs: RawLog[], url: string, known: [number, number][], signal?: AbortSignal) {
   const missing = [...new Set(logs.filter((l) => !l.blockTimestamp).map((l) => l.blockNumber))];
   if (!missing.length) return;
   const times = new Map<string, Hex>();
   const groups: string[][] = [];
   for (let i = 0; i < missing.length; i += 50) groups.push(missing.slice(i, i + 50));
   const stop = Date.now() + 9_000;
+  // A batch that comes back empty (usually HyperRPC's rate limit) ends the reads: the rest are interpolated.
+  let refused = false;
   await pool(
     groups.map((g) => async () => {
-      if (Date.now() > stop) return;
-      const blocks = await batch<{ timestamp: Hex }>(url, "eth_getBlockByNumber", g.map((n) => [n, false]), 6_000);
+      if (refused || Date.now() > stop || signal?.aborted) return;
+      const blocks = await batch<{ timestamp: Hex }>(url, "eth_getBlockByNumber", g.map((n) => [n, false]), 6_000, signal);
+      if (blocks.every((b) => !b)) refused = true;
       blocks.forEach((b, i) => b && times.set(g[i], b.timestamp));
     }),
-    4,
+    2,
   );
+  if (signal?.aborted) throw new Error("block times: abandoned");
   for (const l of logs) if (!l.blockTimestamp) l.blockTimestamp = times.get(l.blockNumber);
   const points = [...known, ...logs.filter((l) => l.blockTimestamp).map((l) => [Number(l.blockNumber), Number(l.blockTimestamp)] as [number, number])].sort(
     (a, b) => a[0] - b[0],
@@ -232,7 +272,8 @@ function decodeTill(l: RawLog): TillEvent | null {
   }
 }
 
-function decodeFee(l: RawLog): FeeEvent | null {
+/** An AUSD Transfer log, both sides. */
+function decodeTransfer(l: RawLog) {
   if (l.topics.length < 3) return null;
   return {
     block: Number(l.blockNumber),
@@ -240,6 +281,7 @@ function decodeFee(l: RawLog): FeeEvent | null {
     hash: l.transactionHash,
     logIndex: Number(l.logIndex),
     from: getAddress(`0x${l.topics[1].slice(26)}`),
+    to: getAddress(`0x${l.topics[2].slice(26)}`),
     amount: BigInt(l.data),
   };
 }
@@ -247,17 +289,36 @@ function decodeFee(l: RawLog): FeeEvent | null {
 const keyOf = (l: RawLog) => `${l.transactionHash}:${Number(l.logIndex)}`;
 const order = (a: Base, b: Base) => a.block - b.block || a.logIndex - b.logIndex;
 
-/** Reads [from, to] from one provider and folds it into a ledger (new or existing), skipping logs already held. */
-async function scan(source: Source, from: bigint, to: bigint, into?: Ledger): Promise<Ledger> {
+/**
+ * Reads [from, to] from one provider and folds it into a ledger (new or existing), skipping logs already held.
+ * Nothing is folded in until every read has answered, so an abandoned scan leaves a held ledger as it was.
+ */
+async function scan(source: Source, from: bigint, to: bigint, into?: Ledger, signal?: AbortSignal): Promise<Ledger> {
   const url = source === "envio-hyperrpc" ? envioUrl()! : RPC_URL;
-  const read = source === "envio-hyperrpc" ? (f: Filter) => envioLogs(url, f, from, to) : (f: Filter) => rpcLogs(f, from, to);
-  const [tillLogs, feeLogs] = await Promise.all([
-    read({ address: TILL_ADDRESS, topics: [TILL_TOPICS] }),
+  const read = source === "envio-hyperrpc" ? (f: Filter) => envioLogs(url, f, from, to, signal) : (f: Filter) => rpcLogs(f, from, to, signal);
+  // Till's events and the forwarder's share one query (neither contract emits the other's events).
+  const [contractLogs, feeLogs, outLogs] = await Promise.all([
+    read({ address: [TILL_ADDRESS, FORWARDER_ADDRESS], topics: [[...TILL_TOPICS, FORWARDED_TOPIC]] }),
     read({ address: DOLLAR, topics: [TRANSFER_TOPIC, null, TREASURY_TOPIC] }),
+    read({ address: DOLLAR, topics: [TRANSFER_TOPIC, TREASURY_TOPIC] }),
   ]);
+  const tillLogs = contractLogs.filter((l) => l.topics[0] !== FORWARDED_TOPIC);
+  const fwdLogs = contractLogs.filter((l) => l.topics[0] === FORWARDED_TOPIC);
   const known: [number, number][] = into ? [...into.events, ...into.fees].slice(-50).map((e) => [e.block, e.time]) : [];
-  await fillTimes([...tillLogs, ...feeLogs], url, known);
-  const ledger: Ledger = into ?? { source, head: to, from, events: [], fees: [], keys: new Set(), at: Date.now() };
+  await fillTimes([...tillLogs, ...feeLogs, ...outLogs], url, known, signal);
+  const ledger: Ledger = into ?? {
+    source,
+    head: to,
+    from,
+    events: [],
+    fees: [],
+    refunds: [],
+    linked: new Map(),
+    feePaid: new Set(),
+    forwarded: new Set(),
+    keys: new Set(),
+    at: Date.now(),
+  };
   for (const l of tillLogs) {
     const k = keyOf(l);
     if (ledger.keys.has(k)) continue;
@@ -269,13 +330,26 @@ async function scan(source: Source, from: bigint, to: bigint, into?: Ledger): Pr
   for (const l of feeLogs) {
     const k = keyOf(l);
     if (ledger.keys.has(k)) continue;
-    const f = decodeFee(l);
-    if (!f) continue;
+    const t = decodeTransfer(l);
+    if (!t) continue;
     ledger.keys.add(k);
-    ledger.fees.push(f);
+    ledger.fees.push({ block: t.block, time: t.time, hash: t.hash, logIndex: t.logIndex, from: t.from, amount: t.amount });
   }
+  for (const l of outLogs) {
+    const k = `out:${keyOf(l)}`;
+    if (ledger.keys.has(k)) continue;
+    const t = decodeTransfer(l);
+    if (!t) continue;
+    ledger.keys.add(k);
+    ledger.refunds.push({ block: t.block, time: t.time, hash: t.hash, logIndex: t.logIndex, to: t.to, amount: t.amount });
+  }
+  for (const l of fwdLogs) ledger.forwarded.add(l.transactionHash.toLowerCase());
   ledger.events.sort(order);
   ledger.fees.sort(order);
+  ledger.refunds.sort(order);
+  const matched = feeTabs(ledger.events, ledger.fees, parties(ledger.events));
+  ledger.linked = matched.byFee;
+  ledger.feePaid = matched.funded;
   ledger.head = to > ledger.head ? to : ledger.head;
   ledger.at = Date.now();
   return ledger;
@@ -286,9 +360,28 @@ let rpcLedger: Ledger | null = null;
 let inflight: Promise<Ledger> | null = null;
 /** After HyperRPC fails with nothing held, the fallback is used for a minute before HyperRPC is tried again. */
 let envioFailedAt = 0;
+/** Why the last HyperRPC read failed (the method and the error, never the URL), for `fallback` in the stats. */
+let envioError: string | null = null;
 
 const withDeadline = <T>(p: Promise<T>, ms: number, what: string) =>
   Promise.race([p, new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`${what}: over ${ms} ms`)), ms))]);
+
+/** Like withDeadline, but the work gets a signal that is aborted at the deadline, so its requests stop as well. */
+async function abortable<T>(work: (signal: AbortSignal) => Promise<T>, ms: number, what: string): Promise<T> {
+  const stop = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      stop.abort();
+      reject(new Error(`${what}: over ${ms} ms`));
+    }, ms);
+  });
+  try {
+    return await Promise.race([work(stop.signal), late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 async function refresh(): Promise<Ledger> {
   const envio = envioUrl();
@@ -297,16 +390,18 @@ async function refresh(): Promise<Ledger> {
       // HyperRPC's own head, so a range never runs past the block it has indexed.
       const tip = BigInt(await call<Hex>(envio, "eth_blockNumber", [], 4_000));
       if (envioLedger) {
+        const held = envioLedger;
         // A few blocks of overlap; logs already held are skipped by key.
-        const from = envioLedger.head > 5n ? envioLedger.head - 5n : 0n;
-        if (tip > envioLedger.head) await withDeadline(scan("envio-hyperrpc", from, tip, envioLedger), 8_000, "HyperRPC refresh");
-        envioLedger.at = Date.now();
-        return envioLedger;
+        const from = held.head > 5n ? held.head - 5n : 0n;
+        if (tip > held.head) await abortable((signal) => scan("envio-hyperrpc", from, tip, held, signal), 8_000, "HyperRPC refresh");
+        held.at = Date.now();
+        return held;
       }
-      envioLedger = await withDeadline(scan("envio-hyperrpc", DEPLOY_BLOCK, tip), 25_000, "HyperRPC first read");
+      envioLedger = await abortable((signal) => scan("envio-hyperrpc", DEPLOY_BLOCK, tip, undefined, signal), 25_000, "HyperRPC first read");
       return envioLedger;
     } catch (e) {
-      console.warn("envio:", e instanceof Error ? e.message : "failed");
+      envioError = e instanceof Error ? e.message : "failed";
+      console.warn("envio:", envioError);
       envioFailedAt = Date.now();
       // A full ledger a minute old beats a short window: keep serving it and try again on the next request.
       if (envioLedger) return envioLedger;
@@ -314,7 +409,7 @@ async function refresh(): Promise<Ledger> {
   }
   const tip = await withDeadline(publicClient.getBlockNumber({ cacheTime: 0 }), RPC_TIP_MS, "block number");
   const from = tip > RPC_WINDOW ? tip - RPC_WINDOW + 1n : 0n;
-  rpcLedger = await withDeadline(scan("rpc", from, tip), RPC_WINDOW_MS, "RPC window");
+  rpcLedger = await abortable((signal) => scan("rpc", from, tip, undefined, signal), RPC_WINDOW_MS, "RPC window");
   return rpcLedger;
 }
 
@@ -332,6 +427,7 @@ export async function ledger(): Promise<Ledger> {
 const lower = (a: string) => a.toLowerCase();
 const ZERO = "0x0000000000000000000000000000000000000000";
 const dayOf = (t: number) => new Date(t * 1000).toISOString().slice(0, 10);
+const evKey = (e: Base) => `${e.hash}:${e.logIndex}`;
 
 /** Who is on each tab, from Opened and Claimed. */
 function parties(events: TillEvent[]) {
@@ -348,27 +444,36 @@ function parties(events: TillEvent[]) {
 
 /**
  * Pairs each fee with the open or top-up it was charged on: the same client, an amount whose 1% (rounded up) is
- * the fee, the nearest one at or before the fee's block. The fee is its own transaction, sent right after.
+ * the fee, the nearest one within FEE_MATCH_BLOCKS either side. The fee is its own transaction: it used to follow
+ * the open, and now goes just before it. A transfer into the treasury that pairs with nothing is not a fee.
  */
 function feeTabs(events: TillEvent[], fees: FeeEvent[], who: Map<string, { payer: Address; payee: Address }>) {
-  const used = new Set<string>();
-  const out = new Map<FeeEvent, string>();
-  const funding = events.filter((e) => e.name === "Opened" || e.name === "ToppedUp");
-  for (const f of fees) {
-    for (let i = funding.length - 1; i >= 0; i--) {
-      const e = funding[i];
-      if (e.block > f.block || f.block - e.block > 600) continue;
-      const k = `${e.hash}:${e.logIndex}`;
-      if (used.has(k)) continue;
-      const amount = e.name === "Opened" ? e.budget : e.name === "ToppedUp" ? e.amount : 0n;
-      const payer = who.get(String(e.id))?.payer;
-      if (!payer || lower(payer) !== lower(f.from) || feeFor(amount) !== f.amount) continue;
-      used.add(k);
-      out.set(f, String(e.id));
-      break;
-    }
+  const byPayer = new Map<string, { e: TillEvent; amount: bigint; id: string }[]>();
+  for (const e of events) {
+    if (e.name !== "Opened" && e.name !== "ToppedUp") continue;
+    const payer = who.get(String(e.id))?.payer;
+    if (!payer) continue;
+    const amount = e.name === "Opened" ? e.budget : e.amount;
+    const list = byPayer.get(lower(payer)) ?? [];
+    list.push({ e, amount, id: String(e.id) });
+    byPayer.set(lower(payer), list);
   }
-  return out;
+  const funded = new Set<string>();
+  const byFee = new Map<FeeEvent, string>();
+  for (const f of fees) {
+    let best: { e: TillEvent; id: string } | null = null;
+    let gap = Infinity;
+    for (const c of byPayer.get(lower(f.from)) ?? []) {
+      const d = Math.abs(c.e.block - f.block);
+      if (d > FEE_MATCH_BLOCKS || d >= gap || funded.has(evKey(c.e)) || feeFor(c.amount) !== f.amount) continue;
+      best = c;
+      gap = d;
+    }
+    if (!best) continue;
+    funded.add(evKey(best.e));
+    byFee.set(f, best.id);
+  }
+  return { byFee, funded };
 }
 
 const median = (xs: number[]) => {
@@ -378,15 +483,57 @@ const median = (xs: number[]) => {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 };
 
+/** Pay sent, tabs and people for one slice of the network. Money fields are AUSD base units as strings. */
+type Slice = { tabs: number; payouts: number; paid: string; clients: number; freelancers: number; wallets: number };
+
 export type Stats = {
   updatedAt: string;
   treasury: Address;
-  fees: { total: string; count: number; last7d: string };
+  /**
+   * Fees matched to an open or top-up. `refunded` is what the treasury sent back (1% of unspent budget at close,
+   * or a fee whose open failed); `net` = total − refunded.
+   */
+  fees: { total: string; count: number; last7d: string; refunded: string; refunds: number; net: string };
   paid: { total: string; payouts: number; tabs: number; freelancers: number; clients: number };
+  /** Tabs opened in the app (through Segundo's relayer) by anyone other than our demo studios and the proof script. */
+  outside: Slice;
+  /** Tabs our demo studios (and the proof script) opened. `studios` and `people` are how many demo wallets we run. */
+  demo: Slice & { studios: number; people: number };
+  /** Tabs opened straight on the contract, without the app or the relayer (allowed by design; no fee is due). */
+  direct: Slice;
+  /** The Monad load benchmark's tabs (BENCH_TABS) and wallets: left out of every other figure here. */
+  bench: { tabs: number; payouts: number };
+  /**
+   * Opens and top-ups sent through Segundo since the fee went live (block FEE_BLOCK), and how many of them a fee was
+   * matched to. `missed` lists the rest so anyone can check them; `direct` counts those that skipped the app.
+   */
+  feeRate: { opensWithFee: number; opens: number; direct: number; since: number; missed: { tab: string; kind: "open" | "topup"; block: number; hash: Hex }[] };
+  /** Monad's average block time over the last `blocks` blocks, from their timestamps. */
+  chain: { blockMs: number; blocks: number; head: number } | null;
   daily: { day: string; paid: string; fees: string; payouts: number; tabs: number }[];
+  /** Kept for older readers: the median gap between payouts on a running tab. Not a measure of speed. */
   settle: { medianMs: number | null };
   source: Source;
+  /** With source "rpc": why HyperRPC wasn't used (rate limit, timeout, no token). */
+  fallback?: string;
 };
+
+const BENCH: ReadonlySet<string> = new Set(BENCH_ADDRESSES.map(lower));
+const BLOCK_SPAN = 10_000n;
+let blockTime: { at: number; v: Stats["chain"] } | null = null;
+
+/** (t(head) − t(head − 10,000)) ÷ 10,000 from the chain itself, kept for ten minutes. */
+async function measureBlockTime(): Promise<Stats["chain"]> {
+  if (blockTime && Date.now() - blockTime.at < 600_000) return blockTime.v;
+  const read = async () => {
+    const head = await publicClient.getBlock({ blockTag: "latest" });
+    const old = await publicClient.getBlock({ blockNumber: head.number - BLOCK_SPAN });
+    return { blockMs: (Number(head.timestamp - old.timestamp) * 1000) / Number(BLOCK_SPAN), blocks: Number(BLOCK_SPAN), head: Number(head.number) };
+  };
+  const v = await withDeadline(read(), 2_500, "block time").catch(() => null);
+  if (v) blockTime = { at: Date.now(), v };
+  return v ?? blockTime?.v ?? null;
+}
 
 /**
  * Network numbers for the landing page and the business case. From HyperRPC they cover every block since
@@ -394,17 +541,32 @@ export type Stats = {
  * counts, fees and daily rows only from the recent window.
  */
 export async function getStats(): Promise<Stats> {
-  const l = await ledger();
+  const [l, chain] = await Promise.all([ledger(), measureBlockTime()]);
   const now = Math.floor(Date.now() / 1000);
-  const settled = l.events.filter((e): e is Extract<TillEvent, { name: "Settled" }> => e.name === "Settled");
-  const opened = l.events.filter((e): e is Extract<TillEvent, { name: "Opened" }> => e.name === "Opened");
+  const who = parties(l.events);
+  // The load benchmark is test traffic: its tabs and wallets are counted on their own and nowhere else.
+  const isBench = (id: bigint | string) => {
+    const n = Number(id);
+    if (n >= BENCH_TABS.from && n <= BENCH_TABS.to) return true;
+    const p = who.get(String(id));
+    return !!p && (BENCH.has(lower(p.payer)) || BENCH.has(lower(p.payee)));
+  };
+  const benchEvents = l.events.filter((e) => isBench(e.id));
+  const events = l.events.filter((e) => !isBench(e.id));
+  const settled = events.filter((e): e is Extract<TillEvent, { name: "Settled" }> => e.name === "Settled");
+  const opened = events.filter((e): e is Extract<TillEvent, { name: "Opened" }> => e.name === "Opened");
+  const fees = l.fees.filter((f) => l.linked.has(f));
 
   let paidTotal = settled.reduce((s, e) => s + e.amount, 0n);
   let tabs = opened.length;
   let freelancers = new Set(settled.map((e) => lower(e.payee))).size;
   let clients = new Set(opened.map((e) => lower(e.payer))).size;
   if (l.source === "rpc") {
-    const views = await withDeadline(allTabs(), RPC_STATE_MS, "tabs").catch(() => null);
+    const all = await withDeadline(allTabs(), RPC_STATE_MS, "tabs").catch(() => null);
+    const views = all?.filter((v) => {
+      const n = Number(v.id);
+      return !(n >= BENCH_TABS.from && n <= BENCH_TABS.to) && !BENCH.has(lower(v.tab.payer)) && !BENCH.has(lower(v.tab.payee));
+    });
     if (views) {
       paidTotal = views.reduce((s, v) => s + v.tab.paid, 0n);
       tabs = views.length;
@@ -412,6 +574,43 @@ export async function getStats(): Promise<Stats> {
       clients = new Set(views.map((v) => lower(v.tab.payer))).size;
     }
   }
+
+  // Each tab belongs to one slice, by who funded it and how it was opened.
+  type Kind = "demo" | "outside" | "direct";
+  const kindOf = new Map<string, Kind>();
+  for (const e of opened) {
+    const k: Kind = DEMO_WALLETS.has(lower(e.payer)) ? "demo" : l.forwarded.has(lower(e.hash)) ? "outside" : "direct";
+    kindOf.set(String(e.id), k);
+  }
+  const slice = (kind: Kind): Slice => {
+    const ids = new Set([...kindOf].filter(([, k]) => k === kind).map(([id]) => id));
+    const pays = settled.filter((e) => ids.has(String(e.id)));
+    const payers = new Set<string>();
+    const payees = new Set<string>();
+    for (const id of ids) {
+      const p = who.get(id);
+      if (!p) continue;
+      payers.add(lower(p.payer));
+      if (p.payee !== ZERO) payees.add(lower(p.payee));
+    }
+    // People outside our own wallets: a demo freelancer hired by an outside client is still one of ours.
+    const theirs = (s: Set<string>) => [...s].filter((a) => kind === "demo" || !DEMO_WALLETS.has(a));
+    return {
+      tabs: ids.size,
+      payouts: pays.length,
+      paid: pays.reduce((s, e) => s + e.amount, 0n).toString(),
+      clients: theirs(payers).length,
+      freelancers: theirs(payees).length,
+      wallets: new Set([...theirs(payers), ...theirs(payees)]).size,
+    };
+  };
+
+  // Fee collection since launch: every open and top-up the relayer sent, and whether a fee was matched to it.
+  const fundings = events.filter((e) => (e.name === "Opened" || e.name === "ToppedUp") && e.block >= FEE_BLOCK);
+  const relayed = fundings.filter((e) => l.forwarded.has(lower(e.hash)));
+  const missed = relayed
+    .filter((e) => !l.feePaid.has(evKey(e)))
+    .map((e) => ({ tab: String((e as { id: bigint }).id), kind: e.name === "Opened" ? ("open" as const) : ("topup" as const), block: e.block, hash: e.hash }));
 
   const days = new Map<string, { paid: bigint; fees: bigint; payouts: number; tabs: number }>();
   const day = (t: number) => {
@@ -426,7 +625,7 @@ export async function getStats(): Promise<Stats> {
     r.payouts++;
   }
   for (const e of opened) day(e.time).tabs++;
-  for (const f of l.fees) day(f.time).fees += f.amount;
+  for (const f of fees) day(f.time).fees += f.amount;
   // Every day from the first with activity to today, quiet days included, so a chart reads true.
   const first = [...days.keys()].sort()[0];
   const daily: Stats["daily"] = [];
@@ -438,11 +637,11 @@ export async function getStats(): Promise<Stats> {
     }
   }
 
-  // How often pay lands on a running tab: the median gap between one payout and the next on the same tab
-  // within a shift (gaps across a clock-out, or longer than ten minutes, are left out).
+  // The median gap between one payout and the next on the same tab within a shift (gaps across a clock-out, or
+  // longer than ten minutes, are left out). It mostly measures how often someone is watching, so no page shows it.
   const gaps: number[] = [];
   const lastPay = new Map<string, number>();
-  for (const e of l.events) {
+  for (const e of events) {
     const id = String(e.id);
     if (e.name === "ClockedIn" || e.name === "ClockedOut" || e.name === "Closed") lastPay.delete(id);
     if (e.name !== "Settled") continue;
@@ -451,16 +650,35 @@ export async function getStats(): Promise<Stats> {
     lastPay.set(id, e.time);
   }
 
-  const fees = l.fees.reduce((s, f) => s + f.amount, 0n);
-  const fees7 = l.fees.filter((f) => f.time >= now - 7 * 86_400).reduce((s, f) => s + f.amount, 0n);
+  // Refunds go back to clients who paid a fee; anything else leaving the treasury isn't a fee refund.
+  const feePayers = new Set(fees.map((f) => lower(f.from)));
+  const refunds = l.refunds.filter((r) => feePayers.has(lower(r.to)));
+  const feeTotal = fees.reduce((s, f) => s + f.amount, 0n);
+  const refunded = refunds.reduce((s, r) => s + r.amount, 0n);
+  const fees7 = fees.filter((f) => f.time >= now - 7 * 86_400).reduce((s, f) => s + f.amount, 0n);
+  const demo = slice("demo");
   return {
     updatedAt: new Date(l.at).toISOString(),
     treasury: TREASURY,
-    fees: { total: fees.toString(), count: l.fees.length, last7d: fees7.toString() },
+    fees: {
+      total: feeTotal.toString(),
+      count: fees.length,
+      last7d: fees7.toString(),
+      refunded: refunded.toString(),
+      refunds: refunds.length,
+      net: (feeTotal - refunded).toString(),
+    },
     paid: { total: paidTotal.toString(), payouts: settled.length, tabs, freelancers, clients },
+    outside: slice("outside"),
+    demo: { ...demo, studios: DEMO_CLIENTS.length, people: DEMO_FREELANCERS.length },
+    direct: slice("direct"),
+    bench: { tabs: benchEvents.filter((e) => e.name === "Opened").length, payouts: benchEvents.filter((e) => e.name === "Settled").length },
+    feeRate: { opensWithFee: relayed.length - missed.length, opens: relayed.length, direct: fundings.length - relayed.length, since: FEE_BLOCK, missed },
+    chain,
     daily,
     settle: { medianMs: median(gaps) },
     source: l.source,
+    ...(l.source === "rpc" ? { fallback: envioUrl() ? (envioError ?? "HyperRPC unavailable") : "no ENVIO_API_TOKEN" } : {}),
   };
 }
 
@@ -488,7 +706,8 @@ export type HistoryItem = {
 export type History = {
   address: Address;
   items: HistoryItem[];
-  totals: { earned: string; paidOut: string; fees: string };
+  /** feesRefunded: fee refunds the treasury sent back to this address (not part of the shared contract's required fields). */
+  totals: { earned: string; paidOut: string; fees: string; feesRefunded?: string };
   /** Not part of the shared contract's required fields; tells a page how far back the items reach. */
   source: Source;
   fromBlock: number;
@@ -540,12 +759,14 @@ export async function getHistory(address: Address): Promise<History> {
         break;
     }
   }
-  const linked = feeTabs(l.events, l.fees, who);
+  // Only transfers paired with an open or top-up are fees; the pairing is built once per ledger refresh.
   for (const f of l.fees) {
-    if (lower(f.from) !== me) continue;
+    const tab = l.linked.get(f);
+    if (tab === undefined || lower(f.from) !== me) continue;
     feesPaid += f.amount;
-    items.push({ kind: "fee", tab: linked.get(f) ?? null, amount: f.amount.toString(), block: f.block, time: f.time, hash: f.hash, counterparty: TREASURY, role: "client" });
+    items.push({ kind: "fee", tab, amount: f.amount.toString(), block: f.block, time: f.time, hash: f.hash, counterparty: TREASURY, role: "client" });
   }
+  const feesRefunded = feesPaid > 0n ? l.refunds.filter((r) => lower(r.to) === me).reduce((s, r) => s + r.amount, 0n) : 0n;
 
   // The fallback window can't sum a whole history; contract state can (each tab keeps what it has paid).
   if (l.source === "rpc") {
@@ -566,7 +787,7 @@ export async function getHistory(address: Address): Promise<History> {
   return {
     address,
     items,
-    totals: { earned: earned.toString(), paidOut: paidOut.toString(), fees: feesPaid.toString() },
+    totals: { earned: earned.toString(), paidOut: paidOut.toString(), fees: feesPaid.toString(), feesRefunded: feesRefunded.toString() },
     source: l.source,
     fromBlock: Number(l.from),
     head: Number(l.head),

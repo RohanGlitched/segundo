@@ -395,7 +395,8 @@
     width: auto;
     padding: 0;
     z-index: 2;
-    opacity: 0.35;
+    /* Quiet, but still readable: ink at this strength stays well above 4.5:1 on the paper. */
+    opacity: 0.88;
     transition: opacity 0.2s;
   }
   .toolbar:hover,

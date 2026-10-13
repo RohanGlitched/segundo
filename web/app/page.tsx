@@ -8,6 +8,7 @@ import { Faq } from "@/components/home/Faq";
 import { InkSheet } from "@/components/home/InkSheet";
 import { Money } from "@/components/home/Money";
 import { NoteAnatomy } from "@/components/home/NoteAnatomy";
+import { UnderLoad } from "@/components/home/UnderLoad";
 import { WorldClock } from "@/components/home/WorldClock";
 import home from "@/components/home/home.module.css";
 import { NetworkProvider } from "@/lib/network";
@@ -16,7 +17,7 @@ import styles from "./page.module.css";
 const STEPS = [
   {
     title: "The client opens a tab",
-    body: "They set an hourly rate and a budget in AUSD, Agora's digital dollar, and send you an invite link. The budget waits in Segundo's contract on Monad, where it can only go to you or back to them.",
+    body: "They set an hourly rate and a budget in digital dollars (AUSD, issued by Agora) and send you an invite link. Or you send them a link asking for a tab, with your rate already on it. The budget waits in a public contract, where it can only go to you or back to them.",
   },
   {
     title: "You clock in",
@@ -24,7 +25,7 @@ const STEPS = [
   },
   {
     title: "You're paid as you go",
-    body: "Earnings move to your wallet while you work, and you can cash out at any second. When the tab closes, the unspent budget goes straight back to the client.",
+    body: "Your pay lands in your wallet while you work, every few seconds while the tab is open. When the tab closes, the unspent budget goes straight back to the client, and so does the 1% fee on it.",
   },
 ];
 
@@ -33,13 +34,13 @@ const COMPARE = [
     what: "When the money arrives",
     wire: "Days after the invoice is finally paid",
     market: "About 10 days after the work week (Upwork hourly)",
-    till: "Every second, while you work",
+    till: "In your wallet while you work",
   },
   {
     what: "What it costs to receive",
     wire: "6.36% on average to send money across borders (World Bank, Q3 2025)",
     market: "A platform fee on every payment, then a withdrawal fee",
-    till: "1% paid by the client. Free for freelancers. Gas is paid for you.",
+    till: "Nothing for freelancers. Clients pay 1% of what they spend. Network fees are paid for you.",
   },
   {
     what: "Who holds the money meanwhile",
@@ -51,7 +52,7 @@ const COMPARE = [
     what: "If the client disappears",
     wire: "You chase an unpaid invoice",
     market: "You open a dispute",
-    till: "You were already paid for every second you worked",
+    till: "Every second you worked is already paid out or locked to you",
   },
 ];
 
@@ -66,18 +67,21 @@ export default function Home() {
           </div>
           <div className={styles.pitch}>
             <p className={styles.lede}>
-              Your client abroad funds a tab in AUSD, a digital dollar. While you&apos;re clocked in, your pay builds up every second on Monad and you can cash out
-              whenever you like. No invoices, no ten-day wait, no wire fees.
+              Your client abroad funds a tab in digital dollars (AUSD). While you&apos;re clocked in, your pay builds up every second and lands in your wallet as
+              you work. No invoices, no ten-day wait.
             </p>
             <div className={styles.ctas}>
               <Link href="/open" className="btn primary">
-                Open a tab
+                I&apos;m hiring
               </Link>
-              <Link href="/app" className="btn">
-                See your tabs
+              <Link href="/request" className="btn">
+                I freelance
               </Link>
             </div>
-            <p className={styles.note}>Sign up with a passkey or your email. No wallet app, no seed phrase, no gas. Test AUSD is one click away.</p>
+            <p className={styles.note}>
+              Sign up with a passkey or your email, or try it without signing up. No wallet app, no seed phrase. It runs on test dollars for now. Cash-out
+              to local money comes next, with partners: <Link href="/cashout">see how cash-out will work</Link>.
+            </p>
           </div>
         </section>
 
@@ -204,25 +208,26 @@ export default function Home() {
             <div>
               <h3>Pay you can watch arrive</h3>
               <p>
-                Monad makes a block about every 0.3 seconds and finalises it in about 0.6, so a payout lands while you&apos;re still looking at
-                the screen. On a tab page Segundo pays out every few seconds as you watch.
+                Monad made a block every 0.305 seconds on average over the last 10,000 we measured. In our end-to-end proof run, each step landed 0.6 to
+                2.6 seconds after it was sent from a laptop in India, so a payout arrives while you&apos;re still looking at the screen.
               </p>
             </div>
             <div>
-              <h3>Tabs that don&apos;t queue behind each other</h3>
+              <h3>Room for everyone&apos;s payday</h3>
               <p>
-                Pay builds up from timestamps, so nothing is written while the clock runs, and each tab settles its own state. The one slot every
-                payout shares is the escrow balance in AUSD, which Monad&apos;s optimistic execution re-runs when two land in a block.
+                Pay builds up from timestamps, so nothing is written while the clock runs. When we sent hundreds of payouts at once, Monad put up to 96 of
+                them in one block. The numbers are below, and the whole test is on <Link href="/network">Monad under load</Link>.
               </p>
             </div>
             <div>
               <h3>One signature, no gas</h3>
               <p>
-                You sign; Segundo&apos;s relayer submits. Deposits use an AUSD permit and transfers an AUSD transfer authorisation, so neither side
-                ever holds MON.
+                You sign; Segundo&apos;s relayer submits and pays the network fee. Deposits use an AUSD permit and transfers an AUSD transfer
+                authorisation, so neither side ever needs MON, Monad&apos;s own token.
               </p>
             </div>
           </div>
+          <UnderLoad />
         </section>
 
         <section className={`wrap ${styles.section}`} aria-labelledby="sides">
@@ -234,7 +239,7 @@ export default function Home() {
               <h3>For freelancers</h3>
               <ul>
                 <li>
-                  <b>No more waiting.</b> Pay lands while you work, and you can cash out at any second.
+                  <b>No more waiting.</b> Pay lands in your wallet while you work, in digital dollars.
                 </li>
                 <li>
                   <b>No chasing invoices.</b> The budget is already in the contract before you start.
@@ -244,6 +249,13 @@ export default function Home() {
                 </li>
                 <li>
                   <b>Nothing to set up.</b> Sign in with a passkey or your email; there&apos;s no wallet app and no gas.
+                </li>
+                <li>
+                  <b>Ask for a tab.</b> Send a client a link with your rate and a suggested budget; they fund it in one step.
+                </li>
+                <li>
+                  <b>Local money is next.</b> Cash-out to banks and mobile money comes with licensed partners.{" "}
+                  <Link href="/cashout">See how cash-out will work</Link>.
                 </li>
               </ul>
             </div>
@@ -257,7 +269,8 @@ export default function Home() {
                   <b>Hire anywhere.</b> One link onboards a freelancer in any country, with no bank details to collect.
                 </li>
                 <li>
-                  <b>Unspent budget comes back.</b> Close the tab and every cent you didn&apos;t use returns in the same block.
+                  <b>Pay 1% of what you spend.</b> Close the tab and every cent you didn&apos;t use comes back in the same block, with its share of the fee
+                  right after.
                 </li>
                 <li>
                   <b>A record you can check.</b> Every shift and payout is on Monad, with a pay stub to match.
@@ -292,12 +305,17 @@ export default function Home() {
             <h2 id="start" className={styles.closingH}>
               Your next hour could pay by the second.
             </h2>
-            <p className={styles.lede}>Open a tab for someone you work with, or hire a demo freelancer and watch the note print. It takes a minute.</p>
+            <p className={styles.lede}>
+              Open a tab for someone you work with, ask a client for one, or hire a demo freelancer and watch the note print. It takes a minute.
+            </p>
             <div className={styles.ctas}>
               <Link href="/open" className="btn primary">
-                Open a tab
+                I&apos;m hiring
               </Link>
-              <Link href="/app" className="btn">
+              <Link href="/request" className="btn">
+                I freelance
+              </Link>
+              <Link href="/app" className="btn quiet">
                 See your tabs
               </Link>
             </div>
