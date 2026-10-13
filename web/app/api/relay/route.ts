@@ -3,6 +3,7 @@ import { forwarderAbi, tillAbi } from "@/lib/abi";
 import { authorizationCall, authorizationKey, type SignedAuthorization } from "@/lib/authorization";
 import { DOLLAR, FORWARDER, TILL, TREASURY, dollarAbi, publicClient } from "@/lib/chain";
 import { feeFor, formatFee } from "@/lib/money";
+import { feeRefundNonce, fromTreasury, refundClosedTab, type Refund, type TabRefund } from "@/lib/refund";
 import { LOW_GAS, MIN_BUDGET, clientIp, json, limited, lowOnGas, reserveFor, revertReason, sendAndWait, signer } from "@/lib/server";
 
 export const runtime = "nodejs";
@@ -35,12 +36,13 @@ const inFlight = new Set<string>();
 type Req = { from: Address; to: Address; value: string; gas: string; nonce: string; deadline: number; data: Hex; signature: Hex };
 
 export async function POST(req: Request) {
-  let body: { request?: Req; fee?: SignedAuthorization };
+  let body: { request?: Req; fee?: SignedAuthorization; refund?: unknown };
   try {
     body = await req.json();
   } catch {
     return json({ error: "Send a signed request." }, 400);
   }
+  if (body.refund !== undefined) return retryRefund(req, body.refund);
   const r = body.request;
   if (!r || typeof r.data !== "string" || typeof r.signature !== "string" || !isAddress(r.from)) return json({ error: "Send a signed request." }, 400);
   let gas: bigint;
@@ -70,7 +72,7 @@ export async function POST(req: Request) {
   // Money going into a tab carries the client's 1% fee, signed as an AUSD transfer to the treasury.
   const amount = fn in FEE_ARG ? (args[FEE_ARG[fn]!] as bigint) : 0n;
   const owed = feeFor(amount);
-  let fee: { value: bigint; data: Hex; key: string } | null = null;
+  let fee: { value: bigint; data: Hex; key: string; nonce: Hex } | null = null;
   if (amount > 0n) {
     const f = body.fee;
     if (!f) return json({ error: "This page is out of date: Segundo now adds a 1% fee to budgets and top-ups. Reload the page and try again." }, 400);
@@ -79,7 +81,7 @@ export async function POST(req: Request) {
       if (f.from.toLowerCase() !== r.from.toLowerCase() || f.to.toLowerCase() !== TREASURY.toLowerCase()) throw new Error("parties");
       if (call.value < owed) return json({ error: `Segundo's 1% fee on this is ${formatFee(owed)}. Reload the page and try again.` }, 400);
       if (call.validBefore < BigInt(Math.floor(Date.now() / 1000)) + FEE_MIN_LIFE) return json({ error: "The fee signature has expired. Try again." }, 400);
-      fee = { value: call.value, data: call.data, key: `fee:${authorizationKey(f)}` };
+      fee = { value: call.value, data: call.data, key: `fee:${authorizationKey(f)}`, nonce: f.nonce };
     } catch {
       return json({ error: "The fee isn't signed properly. Reload the page and try again." }, 400);
     }
@@ -135,28 +137,90 @@ export async function POST(req: Request) {
   inFlight.add(key);
   if (fee) inFlight.add(fee.key);
   try {
+    // The fee goes first. Sent after the tab, the money for it could be moved away in between (another send, or a
+    // second open in another server instance) and the tab would stand unpaid for. A fee authorisation is
+    // single-use on chain, so it can pay for one open or top-up only.
+    let feePaid: { value: bigint; hash: Hex; block: number; ms: number } | null = null;
+    if (fee) {
+      const started = Date.now();
+      try {
+        const { logs: _logs, ...paid } = await sendAndWait(keeper, { to: DOLLAR, data: fee.data });
+        feePaid = { value: fee.value, ...paid, ms: Date.now() - started };
+      } catch (e) {
+        const why = revertReason(e);
+        if (why === LOW_GAS) return json({ error: why, lowGas: true }, 503);
+        console.warn(`fee not collected for ${fn} by ${r.from}: ${why}`);
+        return json({ error: "The fee didn't go through, so nothing was sent. Reload the page and try again." }, 400);
+      }
+    }
+
     const data = encodeFunctionData({ abi: forwarderAbi, functionName: "execute", args: [request] });
     let landed: { hash: Hex; block: number };
     try {
+      // Checked again now that the fee has moved: the tab or the wallet may have changed meanwhile.
+      if (feePaid) await publicClient.estimateGas({ account: FORWARDER, to: TILL, data: concat([r.data, r.from]) });
       const { logs: _logs, ...sent } = await sendAndWait(keeper, { to: FORWARDER, data, minGas: gas + OVERHEAD });
       landed = sent;
     } catch (e) {
-      return json({ error: revertReason(e) }, 502);
-    }
-    if (!fee) return json({ ...landed, fn });
-
-    // The tab is funded; now collect the fee. If that fails the tab still stands, so say so rather than fail.
-    const started = Date.now();
-    try {
-      const { logs: _logs, ...paid } = await sendAndWait(keeper, { to: DOLLAR, data: fee.data });
-      return json({ ...landed, fn, fee: fee.value, feeHash: paid.hash, feeBlock: paid.block, feeMs: Date.now() - started });
-    } catch (e) {
       const why = revertReason(e);
-      console.error(`!!! FEE NOT COLLECTED: ${fn} by ${r.from} landed in ${landed.hash}, but the ${fee.value} fee transfer failed: ${why}`);
-      return json({ ...landed, fn, fee: fee.value, feeError: "The tab is funded, but Segundo's fee didn't go through. Nothing more is needed from you.", feeMs: Date.now() - started });
+      if (!feePaid || !fee) return json({ error: why }, 502);
+      // The fee paid for something that didn't happen: it goes straight back.
+      console.error(`!!! ${fn} by ${r.from} failed after its ${fee.value} fee landed in ${feePaid.hash} (${why}); refunding the fee`);
+      const back = await refundFee(r.from, fee.value, fee.nonce);
+      const error = back.feeRefund
+        ? `The ${fn.startsWith("open") ? "tab couldn't be opened" : "top-up didn't go through"} (your wallet or the tab changed meanwhile), so Segundo's fee has been sent back. Nothing else moved.`
+        : `The ${fn.startsWith("open") ? "tab couldn't be opened" : "top-up didn't go through"}. ${back.feeRefundError}`;
+      return json({ error, reason: why, fee: fee.value, feeHash: feePaid.hash, ...back }, 502);
     }
+
+    const result: Record<string, unknown> = { ...landed, fn };
+    if (feePaid) Object.assign(result, { fee: feePaid.value, feeHash: feePaid.hash, feeBlock: feePaid.block, feeMs: feePaid.ms });
+    if (fn === "close") {
+      // Clients pay only for time worked: 1% of the unspent budget comes back from the treasury.
+      const started = Date.now();
+      const id = args[0] as bigint;
+      try {
+        const back: TabRefund = await refundClosedTab(id, true);
+        result.feeRefund = back.hash ? { value: back.value, hash: back.hash, block: back.block } : { value: 0n, note: back.note };
+      } catch (e) {
+        console.error(`!!! FEE REFUND FAILED for closed tab ${id} (close ${landed.hash}): ${revertReason(e)}`);
+        result.feeRefundError = "The tab is closed and the unspent budget is back in the client's wallet, but Segundo's fee refund didn't go through yet.";
+      }
+      // The refund's wait isn't part of the close's own time on the receipt.
+      result.feeMs = Date.now() - started;
+    }
+    return json(result);
   } finally {
     inFlight.delete(key);
     if (fee) inFlight.delete(fee.key);
+  }
+}
+
+/** Sends a whole fee back to the client; never throws, since the caller is already answering with an error. */
+async function refundFee(to: Address, value: bigint, clientNonce: Hex): Promise<{ feeRefund?: Refund; feeRefundError?: string }> {
+  try {
+    return { feeRefund: await fromTreasury(to, value, feeRefundNonce(clientNonce)) };
+  } catch (e) {
+    console.error(`!!! FEE REFUND FAILED: ${value} to ${to} for fee nonce ${clientNonce}: ${revertReason(e)}`);
+    return { feeRefundError: "Segundo's fee was taken but its refund didn't go through yet. It will be sent back." };
+  }
+}
+
+/** POST { refund: "<tab id>" } sends a closed tab's fee refund if it didn't go at close. Safe to repeat: AUSD refuses a second one. */
+async function retryRefund(req: Request, raw: unknown) {
+  if (typeof raw !== "string" || !/^\d{1,12}$/.test(raw)) return json({ error: "Which tab?" }, 400);
+  if (limited(`refund:${raw}`, 2, 60_000) || limited(`refund-ip:${clientIp(req)}`, 10, 60_000)) return json({ error: "Try again in a minute." }, 429);
+  const low = await lowOnGas("essential");
+  if (low) return json({ error: low, lowGas: true }, 503);
+  const key = `refund:${raw}`;
+  if (inFlight.has(key)) return json({ error: "That refund is already on its way." }, 409);
+  inFlight.add(key);
+  try {
+    const back = await refundClosedTab(BigInt(raw));
+    return json({ feeRefund: back.hash ? { value: back.value, hash: back.hash, block: back.block } : { value: 0n, note: back.note } });
+  } catch (e) {
+    return json({ feeRefundError: revertReason(e) }, 400);
+  } finally {
+    inFlight.delete(key);
   }
 }

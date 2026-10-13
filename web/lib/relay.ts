@@ -7,7 +7,9 @@ import { FORWARDER, TILL, DOLLAR, DOLLAR_DOMAIN, TREASURY, monadTestnet, publicC
 import { feeFor } from "./money";
 import type { Wallet } from "./wallet";
 
-export type Landed = { hash: Hex; block: number; ms: number; fee?: FeePaid };
+export type Landed = { hash: Hex; block: number; ms: number; fee?: FeePaid; refund?: FeeRefund };
+/** At close, 1% of the unspent budget back from the treasury (or the whole fee if an open/top-up failed after it). */
+export type FeeRefund = { value: bigint; hash?: Hex; block?: number; note?: string; error?: string };
 /** Segundo's 1% fee as it went: its own transaction, or why it didn't go (the tab is funded either way). */
 export type FeePaid = { value: bigint; hash?: Hex; block?: number; error?: string };
 /** A signed AUSD transfer of the fee to the treasury, sent alongside the forwarded open or top-up. */
@@ -93,7 +95,7 @@ export async function relay(wallet: Wallet, fn: string, args: readonly unknown[]
     message,
   });
   const started = performance.now();
-  const res = await post<{ hash: Hex; block: number; fee?: string; feeHash?: Hex; feeBlock?: number; feeError?: string; feeMs?: number }>(
+  const res = await post<{ hash: Hex; block: number; fee?: string; feeHash?: Hex; feeBlock?: number; feeError?: string; feeMs?: number; feeRefund?: { value: string; hash?: Hex; block?: number; note?: string }; feeRefundError?: string }>(
     "/api/relay",
     fee ? { request: { ...message, signature }, fee } : { request: { ...message, signature } },
   );
@@ -101,7 +103,12 @@ export async function relay(wallet: Wallet, fn: string, args: readonly unknown[]
   const ms = Math.max(0, Math.round(performance.now() - started - (res.feeMs ?? 0)));
   const paid: FeePaid | undefined =
     res.fee != null ? { value: BigInt(res.fee), hash: res.feeHash, block: res.feeBlock, error: res.feeError } : undefined;
-  return { hash: res.hash, block: res.block, ms, ...(paid ? { fee: paid } : {}) };
+  const refund: FeeRefund | undefined = res.feeRefund
+    ? { ...res.feeRefund, value: BigInt(res.feeRefund.value) }
+    : res.feeRefundError
+      ? { value: 0n, error: res.feeRefundError }
+      : undefined;
+  return { hash: res.hash, block: res.block, ms, ...(paid ? { fee: paid } : {}), ...(refund ? { refund } : {}) };
 }
 
 /** Segundo's 1% fee on a budget or top-up, signed as an AUSD transfer (EIP-3009) from the client to the treasury. */

@@ -12,10 +12,19 @@ import { privateKeyToAccount } from "viem/accounts";
 import { tillAbi } from "./abi";
 import { RPC_URL, TILL, monadTestnet, publicClient } from "./chain";
 
-/** The relayer pays gas for every signed request; the faucet hands out test AUSD. Keys live only in env vars. */
-export function signer(kind: "keeper" | "faucet") {
-  const key = (kind === "keeper" ? process.env.KEEPER_KEY : process.env.FAUCET_KEY) as Hex | undefined;
-  if (!key) throw new Error(`${kind === "keeper" ? "Relayer" : "Faucet"} is not configured on this deployment.`);
+const KEYS = {
+  keeper: { env: "KEEPER_KEY", who: "Relayer" },
+  faucet: { env: "FAUCET_KEY", who: "Faucet" },
+  treasury: { env: "TREASURY_KEY", who: "Treasury" },
+} as const;
+
+/**
+ * The relayer pays gas for every signed request; the faucet hands out test AUSD; the treasury holds Segundo's fees
+ * and only ever signs AUSD transfer authorisations (the relayer submits them, so it never needs MON). Keys live only in env vars.
+ */
+export function signer(kind: keyof typeof KEYS) {
+  const key = process.env[KEYS[kind].env]?.trim() as Hex | undefined;
+  if (!key) throw new Error(`${KEYS[kind].who} is not configured on this deployment.`);
   const account = privateKeyToAccount(key);
   return createWalletClient({ account, chain: monadTestnet, transport: http(RPC_URL) });
 }

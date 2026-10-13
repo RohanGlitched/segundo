@@ -46,6 +46,8 @@ export function Footer() {
         </div>
         <p className={styles.links}>
           <Link href="/business">How Segundo makes money</Link>
+          <Link href="/cashout">Cash out to local money</Link>
+          <Link href="/request">Ask a client for a tab</Link>
           <Link href="/network">Measured on Monad</Link>
           <Link href="/proof">Check an income statement</Link>
           <Link href="/deck">Pitch deck</Link>

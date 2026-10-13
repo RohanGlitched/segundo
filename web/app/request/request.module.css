@@ -1,0 +1,217 @@
+/* Request a tab: the open-a-tab form seen from the freelancer's side, with the link printed like a cheque stub. */
+.page {
+  padding-top: 40px;
+  padding-bottom: 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+}
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 44em;
+}
+.eyebrow {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--serial);
+}
+.h1 {
+  font-variation-settings: "wdth" 112;
+  font-size: clamp(34px, 5vw, 56px);
+  letter-spacing: -0.025em;
+  line-height: 1;
+}
+.lead {
+  font-size: 17.5px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  gap: 48px;
+  align-items: start;
+}
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  min-width: 0;
+}
+.pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.money {
+  position: relative;
+}
+.money span {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+.money input {
+  padding-left: 28px;
+  font-variation-settings: "wdth" 115;
+  font-weight: 600;
+  font-size: 18px;
+}
+.submit {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.why {
+  color: var(--serial);
+  font-size: 14.5px;
+}
+.small {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+/* The finished link: QR on the left, the link and the ways to send it on the right. */
+.share {
+  display: grid;
+  grid-template-columns: 148px minmax(0, 1fr);
+  gap: 18px;
+  padding: 18px;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--serial);
+  border-radius: 10px;
+}
+.qr {
+  width: 148px;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  background: #f4f7f2;
+  overflow: hidden;
+}
+.qr:empty {
+  background: color-mix(in srgb, var(--rule) 50%, transparent);
+}
+.qr svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.shareSide {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  font-size: 15px;
+}
+.linkField {
+  font-size: 13.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.shareButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.preview {
+  position: sticky;
+  top: 86px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.previewLabel {
+  font-weight: 600;
+  font-size: 14.5px;
+  color: var(--ink-soft);
+}
+/* The line the client sees above the form: who asked, and where the money goes. */
+.banner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--intaglio);
+  border-radius: var(--radius);
+  font-size: 14.5px;
+  overflow-wrap: anywhere;
+}
+.banner b {
+  font-size: 15.5px;
+  font-weight: 650;
+}
+
+.how {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 52em;
+  padding-top: 8px;
+}
+.h2 {
+  font-variation-settings: "wdth" 112;
+  font-size: clamp(24px, 3vw, 32px);
+  letter-spacing: -0.015em;
+}
+.steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+  border-top: 1.5px solid var(--ink);
+}
+.steps li {
+  counter-increment: step;
+  position: relative;
+  padding: 14px 0 14px 46px;
+  border-bottom: 1px solid var(--rule);
+  font-size: 15.5px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+.steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 14px;
+  font-variation-settings: "wdth" 125;
+  font-size: 24px;
+  font-weight: 300;
+  color: var(--serial);
+  line-height: 1.1;
+}
+.steps b {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+  }
+  .preview {
+    position: static;
+  }
+}
+@media (max-width: 560px) {
+  .pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .share {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .qr {
+    width: 168px;
+  }
+}
