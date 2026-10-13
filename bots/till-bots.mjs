@@ -20,11 +20,11 @@ const AGORA_FAUCET = "0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C";
 const TREASURY = process.env.TREASURY || "0xAdF0F9443EafD19916cBd8f7541ea5e19e69F62c"; // Segundo's treasury: the 1% client fee
 const keys = JSON.parse(fs.readFileSync(process.env.KEYS || "keys/wallets.json", "utf8"));
 const TICK_MS = Number(process.env.TICK_MS || 4000);
-const SETTLE_EVERY_MS = Number(process.env.SETTLE_EVERY_MS || 1_200_000);
+const SETTLE_EVERY_MS = Number(process.env.SETTLE_EVERY_MS || 300_000);
 // When run from cron each minute, exit before the next run starts (cron + flock restart it).
 const RUN_FOR_MS = Number(process.env.RUN_FOR_MS || 0);
 // MON is the scarce resource on testnet, so the seeded tabs run lean on transactions: large budgets,
-// two work blocks a day, and a settle every twenty minutes.
+// two work blocks a day, and a settle every five minutes.
 const usd = (n) => BigInt(Math.round(n * 1e6));
 /** Segundo's fee: 1% of a budget or top-up, rounded up to the next AUSD unit (same rule as web/lib/money.ts). */
 const feeFor = (amount) => (amount <= 0n ? 0n : (amount + 99n) / 100n);
