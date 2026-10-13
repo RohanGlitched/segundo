@@ -184,6 +184,9 @@ export function Header() {
           <Link href="/business" className={`${styles.link} ${styles.extra}`} aria-current={path?.startsWith("/business") ? "page" : undefined}>
             Business
           </Link>
+          <Link href="/network" className={`${styles.link} ${styles.extra}`} aria-current={path?.startsWith("/network") ? "page" : undefined}>
+            On Monad
+          </Link>
           <Link href="/app" className={styles.link} aria-current={path?.startsWith("/app") ? "page" : undefined}>
             Your tabs
           </Link>

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { FORWARDER, TILL, DOLLAR, explorerAddress } from "@/lib/chain";
 import { Mark } from "./Mark";
 import styles from "./Footer.module.css";
@@ -44,6 +45,11 @@ export function Footer() {
           <p className={styles.note}>Contracts deployed under Segundo&apos;s working name, Till.</p>
         </div>
         <p className={styles.links}>
+          <Link href="/business">How Segundo makes money</Link>
+          <Link href="/network">Measured on Monad</Link>
+          <Link href="/proof">Check an income statement</Link>
+          <Link href="/deck">Pitch deck</Link>
+          <a href="/segundo.apk">Android app</a>
           <a href="https://github.com/RohanGlitched/segundo" target="_blank" rel="noreferrer">
             Source on GitHub
           </a>

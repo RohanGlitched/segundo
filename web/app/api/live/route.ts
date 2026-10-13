@@ -1,6 +1,8 @@
 import { decodeEventLog } from "viem";
 import { tillAbi } from "@/lib/abi";
 import { TILL, publicClient } from "@/lib/chain";
+import { BENCH_TABS } from "@/lib/bench-addresses";
+import { DEMO_WALLETS } from "@/lib/demo";
 import { json } from "@/lib/server";
 import { earnedAt, readProfiles, readTabs } from "@/lib/tabs";
 
@@ -18,7 +20,8 @@ export async function GET() {
   if (cache && Date.now() - cache.at < 4000) return json(cache.body, 200, { "cache-control": "no-store" });
   try {
     const count = (await publicClient.readContract({ address: TILL, abi: tillAbi, functionName: "tabCount" })) as bigint;
-    const ids = Array.from({ length: Number(count) }, (_, i) => BigInt(i + 1));
+    // The load-test tabs (see /network) are closed and left out of the live numbers.
+    const ids = Array.from({ length: Number(count) }, (_, i) => BigInt(i + 1)).filter((id) => id < BigInt(BENCH_TABS.from) || id > BigInt(BENCH_TABS.to));
     const [tabs, block] = await Promise.all([readTabs(ids), publicClient.getBlock()]);
     const now = Number(block.timestamp);
     let paid = 0n;
@@ -74,7 +77,10 @@ export async function GET() {
     );
     const recent = found.flat().sort((a, b) => b.block - a.block).slice(0, 6);
 
-    const profiles = await readProfiles(open.flatMap((v) => [v.tab.payer, v.tab.payee]).concat(recent.map((r) => r.payee as `0x${string}`)));
+    // The home page is public: only names we wrote ourselves (the demo studios and freelancers) are shown there.
+    // Anyone else appears unnamed, so a visitor's free-text profile never lands on the landing page.
+    const named = await readProfiles(open.flatMap((v) => [v.tab.payer, v.tab.payee]).concat(recent.map((r) => r.payee as `0x${string}`)));
+    const profiles = Object.fromEntries(Object.entries(named).filter(([a]) => DEMO_WALLETS.has(a.toLowerCase())));
     const body = {
       tabs: tabs.length,
       running: running.length,

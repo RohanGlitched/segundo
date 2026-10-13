@@ -1,0 +1,309 @@
+{
+ "runAt": "2026-10-13T12:28:59.771Z",
+ "network": "Monad testnet",
+ "contract": "0xeb6c2c519c9bcc4495364c34ac116c20098113d1",
+ "senders": 16,
+ "tabs": 96,
+ "tabIds": {
+  "from": 26,
+  "to": 121
+ },
+ "txs": 480,
+ "landed": 480,
+ "succeeded": 461,
+ "failed": 19,
+ "refused": 0,
+ "paidOut": 402,
+ "durationS": 4.67,
+ "txPerS": 102.8,
+ "offeredPerS": 96,
+ "blocks": 14,
+ "blocksWithOurs": 8,
+ "firstBlock": 70681931,
+ "lastBlock": 70681944,
+ "perBlockMax": 96,
+ "fullestBlockPct": 8.1,
+ "p50ms": 917,
+ "p90ms": 1564,
+ "maxMs": 2181,
+ "waves": [
+  {
+   "wave": 0,
+   "txs": 96,
+   "blocks": [
+    70681931,
+    70681934,
+    70681935,
+    70681936
+   ],
+   "p50ms": 1875,
+   "sendMs": 1847
+  },
+  {
+   "wave": 1,
+   "txs": 96,
+   "blocks": [
+    70681934,
+    70681935,
+    70681936
+   ],
+   "p50ms": 986,
+   "sendMs": 959
+  },
+  {
+   "wave": 2,
+   "txs": 96,
+   "blocks": [
+    70681937,
+    70681938
+   ],
+   "p50ms": 968,
+   "sendMs": 416
+  },
+  {
+   "wave": 3,
+   "txs": 96,
+   "blocks": [
+    70681941
+   ],
+   "p50ms": 917,
+   "sendMs": 425
+  },
+  {
+   "wave": 4,
+   "txs": 96,
+   "blocks": [
+    70681944
+   ],
+   "p50ms": 770,
+   "sendMs": 418
+  }
+ ],
+ "perBlock": [
+  {
+   "number": 70681931,
+   "ours": 36,
+   "reverted": 0,
+   "others": 1,
+   "gasUsed": 4525416,
+   "gasLimit": 150000000,
+   "timestamp": 1791894540,
+   "seenMs": 808
+  },
+  {
+   "number": 70681932,
+   "ours": 0,
+   "reverted": 0,
+   "others": 4,
+   "gasUsed": 1657598,
+   "gasLimit": 150000000,
+   "timestamp": 1791894540,
+   "seenMs": 953
+  },
+  {
+   "number": 70681933,
+   "ours": 0,
+   "reverted": 0,
+   "others": 6,
+   "gasUsed": 1497924,
+   "gasLimit": 150000000,
+   "timestamp": 1791894540,
+   "seenMs": 1341
+  },
+  {
+   "number": 70681934,
+   "ours": 48,
+   "reverted": 2,
+   "others": 6,
+   "gasUsed": 8029792,
+   "gasLimit": 150000000,
+   "timestamp": 1791894541,
+   "seenMs": 1564
+  },
+  {
+   "number": 70681935,
+   "ours": 60,
+   "reverted": 0,
+   "others": 5,
+   "gasUsed": 11751381,
+   "gasLimit": 150000000,
+   "timestamp": 1791894541,
+   "seenMs": 1875
+  },
+  {
+   "number": 70681936,
+   "ours": 48,
+   "reverted": 2,
+   "others": 2,
+   "gasUsed": 7806298,
+   "gasLimit": 150000000,
+   "timestamp": 1791894541,
+   "seenMs": 2181
+  },
+  {
+   "number": 70681937,
+   "ours": 36,
+   "reverted": 2,
+   "others": 8,
+   "gasUsed": 5866349,
+   "gasLimit": 150000000,
+   "timestamp": 1791894542,
+   "seenMs": 2479
+  },
+  {
+   "number": 70681938,
+   "ours": 60,
+   "reverted": 3,
+   "others": 2,
+   "gasUsed": 7063087,
+   "gasLimit": 150000000,
+   "timestamp": 1791894542,
+   "seenMs": 2857
+  },
+  {
+   "number": 70681939,
+   "ours": 0,
+   "reverted": 0,
+   "others": 6,
+   "gasUsed": 3092484,
+   "gasLimit": 150000000,
+   "timestamp": 1791894542,
+   "seenMs": 3261
+  },
+  {
+   "number": 70681940,
+   "ours": 0,
+   "reverted": 0,
+   "others": 3,
+   "gasUsed": 2309246,
+   "gasLimit": 150000000,
+   "timestamp": 1791894542,
+   "seenMs": 3399
+  },
+  {
+   "number": 70681941,
+   "ours": 96,
+   "reverted": 5,
+   "others": 5,
+   "gasUsed": 9249103,
+   "gasLimit": 150000000,
+   "timestamp": 1791894543,
+   "seenMs": 3804
+  },
+  {
+   "number": 70681942,
+   "ours": 0,
+   "reverted": 0,
+   "others": 3,
+   "gasUsed": 4678100,
+   "gasLimit": 150000000,
+   "timestamp": 1791894543,
+   "seenMs": 4068
+  },
+  {
+   "number": 70681943,
+   "ours": 0,
+   "reverted": 0,
+   "others": 2,
+   "gasUsed": 451800,
+   "gasLimit": 150000000,
+   "timestamp": 1791894543,
+   "seenMs": 4396
+  },
+  {
+   "number": 70681944,
+   "ours": 96,
+   "reverted": 5,
+   "others": 4,
+   "gasUsed": 12105486,
+   "gasLimit": 150000000,
+   "timestamp": 1791894544,
+   "seenMs": 4668
+  }
+ ],
+ "pipelined": {
+  "txs": 48,
+  "landed": 48,
+  "reverted": 3,
+  "blocks": 1,
+  "block": 70681999,
+  "perBlockMax": 48,
+  "durationS": 0.91,
+  "p50ms": 914
+ },
+ "singleSender": {
+  "txs": 34,
+  "landed": 34,
+  "reverted": 1,
+  "durationS": 30.78,
+  "txPerS": 1.1,
+  "p50ms": 1038,
+  "p90ms": 1053,
+  "perBlockMax": 1
+ },
+ "blockTime": {
+  "blocks": 10000,
+  "from": 70672181,
+  "to": 70682181,
+  "avgMs": 305
+ },
+ "gasPerSettle": {
+  "firstPayout": 118591,
+  "steady": 84456,
+  "steadySomeTabs": 92488,
+  "nothingOwed": 31564,
+  "priceGwei": 102
+ },
+ "cost": {
+  "monSpent": 11.68,
+  "burstMon": 5.57,
+  "perSettleMon": 0.0093
+ },
+ "samples": [
+  {
+   "label": "First settle of the burst",
+   "hash": "0x17b4822eb39ab9a457c108fd6c10c36a9ee879c84437bdd01fc85639237984a2",
+   "block": 70681931,
+   "status": "success"
+  },
+  {
+   "label": "One of 96 settles in block 70,681,941",
+   "hash": "0x71ac4e4b0c8667b90a16c2de1d81eef4dcd1fb344267d5881ee486e6836836cb",
+   "block": 70681941,
+   "status": "success"
+  },
+  {
+   "label": "One of 96 settles in block 70,681,944",
+   "hash": "0x30d380257076e4f2cbfef1b75b4f45ac5a42f0f183ce1367a8a20256b56a509e",
+   "block": 70681944,
+   "status": "success"
+  },
+  {
+   "label": "One of 48 settles from a single key in block 70,681,999",
+   "hash": "0xcfa891a7eb63113bfe96faaf7ce3a6466ade71c19f567a5622cc1378b0ddfdb6",
+   "block": 70681999,
+   "status": "success"
+  },
+  {
+   "label": "A settle sent one at a time, the way the relayer works today",
+   "hash": "0x244500b3c9dfd949ad8fdb692cbdd9f82ad847c9d4862452641077e79be9c1b6",
+   "block": 70682015,
+   "status": "success"
+  },
+  {
+   "label": "One of the reverts (out of gas)",
+   "hash": "0x56e0d8d1ce716521d4cbf1e42bb0c5ec52034131224f26e2a91cad7a4ee96f8d",
+   "block": 70681934,
+   "status": "reverted"
+  }
+ ],
+ "notes": [
+  "Every transaction was a real settle(id) on Segundo's contract (deployed under its working name, Till), paying a freelancer what they had earned since the last one. 402 of the 461 that succeeded moved money; the rest landed in the same one-second block timestamp as that tab's previous settle, so there was nothing new to pay.",
+  "23 transactions reverted, all out of gas on the same 5 tabs: settling them costs 8,032 more gas than the rest (92,488 instead of 84,456; 129,434 instead of 118,591 for a first payout), and we gave every tab one limit taken from the others (plus 6% to 8%) to keep the bill down, because Monad charges the whole gas limit. The relayer in production estimates each call and adds 25%.",
+  "Latency for the bursts is from sending the transaction to this machine receiving the header of the block that holds it over WebSocket (newHeads). For the one-at-a-time run it is from sending to the receipt, polled every 150 ms as the relayer does.",
+  "The first wave took 1847 ms just to be accepted by the three public RPC endpoints (new connections); later waves took about 425 ms. The Monad Foundation endpoint allows 50 calls a second per client, so senders were spread over three endpoints.",
+  "This does not show parallel execution. Every settle changes the contract's AUSD balance, a single storage slot, so under Monad's optimistic parallel execution these transactions conflict and some are re-executed. What it does show is capacity and speed: the busiest block was 8.1% full.",
+  "One key is not the limit on Monad: 48 settles sent at once from a single fresh key with consecutive nonces all landed in one block. The bottleneck is Segundo's relayer today, which sends one transaction and waits for its receipt before the next (1.1 a second).",
+  "Test MON spent on the whole exercise (setting up 96 tabs, the runs, closing the tabs and sweeping funds back): 11.68 MON, of which 5.57 MON was the settles themselves."
+ ]
+}
