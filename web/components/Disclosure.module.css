@@ -1,0 +1,207 @@
+/* Selective disclosure on the income statement: tool panels in the house look, and the verified block that prints. */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px 24px;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--intaglio);
+  border-radius: 10px;
+}
+.panel h2 {
+  font-size: 22px;
+  font-variation-settings: "wdth" 112;
+  letter-spacing: -0.01em;
+}
+.panel h3 {
+  font-size: 16px;
+  font-weight: 650;
+}
+.kicker {
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--serial);
+  margin-bottom: -8px;
+}
+.lede {
+  font-size: 15px;
+  max-width: 44em;
+}
+.steps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 28px;
+}
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.copyRow {
+  display: flex;
+  gap: 8px;
+}
+.copyRow .input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13.5px;
+}
+.codeLine {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+.codeLine p {
+  font-size: 13px;
+  min-width: 0;
+}
+.code {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  margin-top: 4px;
+}
+.qr {
+  width: 112px;
+  height: 112px;
+  flex: none;
+  border-radius: 4px;
+}
+.area {
+  font: inherit;
+  resize: vertical;
+  min-height: 84px;
+  font-size: 13.5px;
+  overflow-wrap: anywhere;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.fine {
+  font-size: 13px;
+  color: var(--ink-soft);
+  max-width: 60em;
+}
+
+.shareClosed {
+  display: flex;
+  align-items: center;
+  gap: 8px 14px;
+  flex-wrap: wrap;
+  font-size: 14px;
+}
+.shareClosed p {
+  flex: 1 1 280px;
+}
+.shareForm {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  font-size: 15px;
+}
+.fields legend {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 8px;
+  padding: 0;
+}
+.fields label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+}
+.fields input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--intaglio);
+}
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--rule);
+}
+.sendVia {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  font-size: 14px;
+}
+
+/* On the sheet: reads like an attested block on a bank letter, in the statement's currency ink. */
+.verified {
+  padding: 14px 18px 14px;
+  border: 1.5px solid var(--c, var(--intaglio));
+  border-radius: 8px;
+  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--c, var(--intaglio)) 5%, transparent) 0 1px, transparent 1px 6px);
+}
+.verified h2 {
+  font-size: 17px;
+  font-weight: 650;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.verified h2::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent);
+}
+.verified dl {
+  margin: 0 0 10px;
+}
+.verified dl > div {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.verified dt {
+  font-weight: 600;
+  font-size: 14px;
+}
+.verified dd {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .steps {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .panel {
+    padding: 18px 16px;
+  }
+  .verified dl > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+}
+@media print {
+  .panel,
+  .shareClosed {
+    display: none !important;
+  }
+}

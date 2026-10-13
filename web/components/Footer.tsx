@@ -50,6 +50,7 @@ export function Footer() {
           <Link href="/proof">Check an income statement</Link>
           <Link href="/deck">Pitch deck</Link>
           <Link href="/privy">How we use Privy</Link>
+          <Link href="/keys">One passkey, many keys</Link>
           <a href="/segundo.apk">Android app</a>
           <a href="https://github.com/RohanGlitched/segundo" target="_blank" rel="noreferrer">
             Source on GitHub

@@ -1,4 +1,4 @@
-keys/
+/keys/
 .env*
 node_modules/
 contracts/out/

@@ -80,6 +80,11 @@ export function SignInChoices({ compact, onDone }: { compact?: boolean; onDone?:
   const wallet = useWallet();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<"up" | "in" | "any" | null>(null);
+  // Passkeys belong to one site: on a preview address (or any other host) say so before anyone makes one.
+  const [hostNote, setHostNote] = useState<string | null>(null);
+  useEffect(() => {
+    void import("@/lib/mera").then((m) => setHostNote(m.passkeyHostNote()));
+  }, []);
   const passkey = async (which: "up" | "in" | "any") => {
     setError(null);
     setBusy(which);
@@ -106,6 +111,7 @@ export function SignInChoices({ compact, onDone }: { compact?: boolean; onDone?:
         Your fingerprint, face or screen lock. No password, no seed phrase{meraSite ? ", no extension" : ""}. Some devices ask twice the first time.
         {meraSite ? " Same passkey, same account as segundo.world." : ""}
       </p>
+      {hostNote && <p className={styles.leadNote}>{hostNote}</p>}
       <button className={`btn ${styles.full}`} onClick={() => passkey("in")} disabled={off}>
         {busy === "in" ? waiting : "Sign back in with your passkey"}
       </button>

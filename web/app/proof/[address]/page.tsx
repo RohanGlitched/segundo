@@ -4,9 +4,11 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { getAddress, isAddress, type Address } from "viem";
+import { RequestNotice, ShareDetails, VerifiedDetails, VerifierPanel } from "@/components/Disclosure";
 import { Footer } from "@/components/Footer";
 import { nameOf, useHistoryFeed, useNames } from "@/components/PayHistory";
 import { DEMO_CLIENTS, DEMO_FREELANCERS } from "@/lib/demo";
+import type { VerifiedDisclosure } from "@/lib/disclose";
 import type { HistoryItem } from "@/lib/envio";
 import { TILL, explorerAddress, explorerTx } from "@/lib/chain";
 import { mulberry32, seedOf, wavePath } from "@/lib/guilloche";
@@ -59,17 +61,27 @@ function StatementFor({ address }: { address: Address }) {
   const [showAll, setShowAll] = useState(false);
   const [url, setUrl] = useState("");
   const [generated, setGenerated] = useState(0);
+  // A verifier asking for details (?request=1, or a reply link), and what their browser has opened (components/Disclosure.tsx).
+  const [asking, setAsking] = useState(false);
+  const [verified, setVerified] = useState<VerifiedDisclosure | null>(null);
 
   // The period lives in the link, so a printed QR code opens the same statement.
   useEffect(() => {
-    const p = new URLSearchParams(window.location.search).get("period") as Period | null;
+    const q = new URLSearchParams(window.location.search);
+    const p = q.get("period") as Period | null;
     if (p && PERIODS.some((x) => x.key === p)) setPeriod(p);
+    if (q.get("request") === "1" || /(^|[#&])reply=/.test(window.location.hash)) setAsking(true);
   }, []);
   useEffect(() => {
     const u = new URL(window.location.href);
+    const request = u.searchParams.get("request") === "1";
     u.search = period === "90d" ? "" : `?period=${period}`;
+    // The shared link and QR code never carry the request flag or a key; the address bar keeps the request flag.
+    const shared = new URL(u);
+    shared.hash = "";
+    if (request) u.searchParams.set("request", "1");
     window.history.replaceState(null, "", u);
-    setUrl(u.toString());
+    setUrl(shared.toString());
   }, [period]);
   useEffect(() => {
     if (data) setGenerated(Math.floor(Date.now() / 1000));
@@ -109,6 +121,8 @@ function StatementFor({ address }: { address: Address }) {
           </button>
         </div>
       </div>
+
+      {asking && <VerifierPanel address={address} onVerified={setVerified} />}
 
       <article className={styles.sheet} style={{ ["--cur" as string]: cur.ink, ["--cur-night" as string]: cur.inkNight }} aria-labelledby="statement-title">
         <Border seed={address} />
@@ -155,6 +169,8 @@ function StatementFor({ address }: { address: Address }) {
         </header>
 
         <Sealed address={address} owner={owner} wallet={wallet} />
+        {owner && canSeal(wallet) ? <ShareDetails address={address} wallet={wallet} block={data ? data.head : null} /> : <RequestNotice />}
+        {verified && <VerifiedDetails v={verified} />}
 
         <div className={styles.periods} role="radiogroup" aria-label="Period">
           {PERIODS.map((p) => (
@@ -560,6 +576,12 @@ function Sealed({ address, owner, wallet }: { address: Address; owner: boolean; 
     setDetails(null);
     setNote(null);
   }, [address, owner]);
+  // Unsealed details leave the page when the passkey session locks, as on the account page.
+  useEffect(() => {
+    const drop = () => setDetails(null);
+    window.addEventListener("segundo:lock", drop);
+    return () => window.removeEventListener("segundo:lock", drop);
+  }, []);
   if (!owner || !canSeal(wallet)) return null;
 
   if (details) {

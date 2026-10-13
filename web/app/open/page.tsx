@@ -11,6 +11,7 @@ import { explorerTx, publicClient } from "@/lib/chain";
 import { DEMO_FREELANCERS } from "@/lib/demo";
 import { useAutoDrip, useProfile, useDollarBalance } from "@/lib/hooks";
 import { inviteLink, saveInvite } from "@/lib/invite";
+import { hasPasskeyKeys, inviteKeysHeld, nextInviteKey } from "@/lib/keys";
 import { InviteBox } from "@/components/InviteBox";
 import { useLive } from "@/lib/live";
 import { currency, feeFor, formatDuration, formatFee, formatMoney, formatUsd, toUnits, toUsd } from "@/lib/money";
@@ -90,7 +91,9 @@ export default function OpenTab() {
       let inviteKey: Hex | null = null;
       let invite: Address = zeroAddress;
       if (who === "invite") {
-        inviteKey = generatePrivateKey();
+        // Passkey accounts: the invite key comes from the passkey and the tab's slot on chain, so the link can be
+        // rebuilt on any device (lib/keys.ts). Email and practice accounts have no passkey: a random key, kept here.
+        inviteKey = hasPasskeyKeys(wallet) ? (await nextInviteKey(wallet)).key : generatePrivateKey();
         invite = privateKeyToAccount(inviteKey).address;
       }
       const permit = await signPermit(wallet, budgetUnits);
@@ -284,6 +287,9 @@ export default function OpenTab() {
           {paused && !problem && <p className={styles.why}>The relayer is short of test MON right now, so opening a tab is paused. Try again in a little while; your wallet and balance are unchanged.</p>}
           <p className="soft">
             Your account signs three things in one step: permission to take the budget, the 1% fee, and the tab itself. No pop-ups, no gas.
+            {who === "invite" &&
+              hasPasskeyKeys(wallet) &&
+              ` The invite key comes from your passkey, so you can rebuild the link on any device${inviteKeysHeld(wallet) ? "" : "; your passkey asks once to make it"}.`}
           </p>
           <ErrorLine error={act.error ?? faucet.error} />
           <LandedLine landed={faucet.landed ?? drip.landed} />

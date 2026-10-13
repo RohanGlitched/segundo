@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { InviteBox } from "@/components/InviteBox";
+import { RebuildInvite } from "@/components/RebuildInvite";
 import { TabNote, personOf } from "@/components/TabNote";
 import { TimeCard } from "@/components/TimeCard";
 import { ErrorLine, LandedLine, busyLabel, useAction } from "@/components/ui";
@@ -257,7 +258,7 @@ export default function TabPage() {
           {iAmPayer && (
             <>
               <h2>{state === "closed" ? `You paid ${payee.name}` : `You're paying ${payee.name}`}</h2>
-              {state === "invited" && (invite ? <InviteBox link={invite} /> : <p className="notice">The invite link was made in another browser. Open it there, or close this tab to get the budget back.</p>)}
+              {state === "invited" && (invite ? <InviteBox link={invite} /> : <RebuildInvite id={id!} invite={t.invite} onRebuilt={setInvite} />)}
               {state === "idle" && lines != null && !everClockedIn && (
                 <p className={styles.waiting} role="status">
                   <i aria-hidden />

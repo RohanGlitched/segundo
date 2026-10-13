@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   EMPTY_DETAILS,
@@ -190,6 +191,13 @@ export function SealedDetails() {
           AES-256-GCM in this browser, with a key your passkey derives on its own salt, kept apart from the key that signs your payments. The sealed copy
           stays in this browser; the backup file is the same ciphertext, so keep it anywhere. Lose the passkey and the details can&rsquo;t be opened by
           anyone, including Segundo.
+        </p>
+      )}
+      {sealable && (
+        <p className={styles.fine}>
+          <b>Why not your wallet key?</b> The wallet key signs every payment and could be exported as a recovery phrase; the sealing key comes from a
+          different passkey salt and can&rsquo;t be worked out from it, so a leaked wallet key never opens your details.{" "}
+          <Link href="/keys">One passkey, many keys</Link>
         </p>
       )}
     </section>

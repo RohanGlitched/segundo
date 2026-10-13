@@ -13,8 +13,9 @@
  * key and the purpose string versions the format. The cost is a second prompt when you open your details, which is
  * the behaviour people are promised.
  *
- * Each seal uses a fresh 12-byte nonce; the account address is bound in as additional data, so a sealed file can't be
- * passed off as another account's.
+ * Each seal uses a fresh 12-byte nonce. The envelope's account, passkey (credential id), format version and seal time are
+ * bound in as additional data (version 2), so a sealed file can't be passed off as another account's or another
+ * passkey's, and its date can't be edited. Version 1 envelopes, which bound only the account, still open.
  */
 import type { Address } from "viem";
 import type { Wallet } from "./wallet";
@@ -36,7 +37,7 @@ export type SealedDetails = {
 
 export type SealedEnvelope = {
   format: "segundo.sealed-details";
-  version: 1;
+  version: 1 | 2;
   account: Address;
   credentialId: string;
   nonce: string;
@@ -58,7 +59,14 @@ export const EMPTY_DETAILS: SealedDetails = {
 const INFO = new TextEncoder().encode("segundo/seal/v1/aes-256-gcm");
 const FORMAT = "segundo.sealed-details";
 const storeKey = (address: string) => `segundo.sealed.v1.${address.toLowerCase()}`;
-const aad = (address: string) => new TextEncoder().encode(`${FORMAT}/v1/${address.toLowerCase()}`);
+/** What the cipher authenticates besides the details. Version 1 bound the account only; version 2 binds the whole header. */
+function aad(e: Pick<SealedEnvelope, "version" | "account" | "credentialId" | "sealedAt">) {
+  const text =
+    e.version === 1
+      ? `${FORMAT}/v1/${e.account.toLowerCase()}`
+      : `${FORMAT}/v2/${e.account.toLowerCase()}/${e.credentialId}/${e.sealedAt}`;
+  return new TextEncoder().encode(text);
+}
 
 function b64url(bytes: Uint8Array): string {
   let s = "";
@@ -99,7 +107,7 @@ function parseEnvelope(value: unknown): SealedEnvelope {
   if (
     !v ||
     v.format !== FORMAT ||
-    v.version !== 1 ||
+    (v.version !== 1 && v.version !== 2) ||
     typeof v.account !== "string" ||
     !/^0x[0-9a-fA-F]{40}$/.test(v.account) ||
     typeof v.credentialId !== "string" ||
@@ -111,7 +119,7 @@ function parseEnvelope(value: unknown): SealedEnvelope {
     throw new Error("That file isn't a Segundo sealed backup.");
   return {
     format: FORMAT,
-    version: 1,
+    version: v.version,
     account: v.account as Address,
     credentialId: v.credentialId,
     nonce: v.nonce,
@@ -147,14 +155,14 @@ export function forgetSealed(address: string) {
   } catch {}
 }
 
-async function open(wallet: Wallet, envelope: SealedEnvelope): Promise<SealedDetails> {
+async function open(wallet: Wallet, envelope: SealedEnvelope, withKey?: CryptoKey): Promise<SealedDetails> {
   if (!canSeal(wallet)) throw new Error("Sealed details open only with a passkey account.");
   if (envelope.account.toLowerCase() !== wallet.address!.toLowerCase())
     throw new Error(`These details belong to a different Segundo account (${envelope.account.slice(0, 6)}…${envelope.account.slice(-4)}).`);
-  const key = await wallet.mera!.sealingKey();
+  const key = withKey ?? (await wallet.mera!.sealingKey());
   let plain: ArrayBuffer;
   try {
-    plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64url(envelope.nonce), additionalData: aad(envelope.account) }, key, unb64url(envelope.ciphertext));
+    plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64url(envelope.nonce), additionalData: aad(envelope) }, key, unb64url(envelope.ciphertext));
   } catch {
     throw new Error("These details were sealed with a different passkey, or the file was changed. Sign in with the passkey that sealed them.");
   }
@@ -167,17 +175,15 @@ export async function sealDetails(wallet: Wallet, details: SealedDetails): Promi
   if (!canSeal(wallet)) throw new Error("Sealing needs a passkey account.");
   const key = await wallet.mera!.sealingKey();
   const nonce = crypto.getRandomValues(new Uint8Array(12));
-  const body = new TextEncoder().encode(JSON.stringify({ ...details, updatedAt: new Date().toISOString() }));
-  const sealed = await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce, additionalData: aad(wallet.address!) }, key, body);
+  const header = { version: 2 as const, account: wallet.address!, credentialId: wallet.mera!.credentialId, sealedAt: new Date().toISOString() };
+  const body = new TextEncoder().encode(JSON.stringify({ ...details, updatedAt: header.sealedAt }));
+  const sealed = await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce, additionalData: aad(header) }, key, body);
   body.fill(0);
   const envelope: SealedEnvelope = {
     format: FORMAT,
-    version: 1,
-    account: wallet.address!,
-    credentialId: wallet.mera!.credentialId,
+    ...header,
     nonce: b64url(nonce),
     ciphertext: b64url(new Uint8Array(sealed)),
-    sealedAt: new Date().toISOString(),
   };
   store(envelope);
   return envelope;
@@ -187,12 +193,14 @@ export async function sealDetails(wallet: Wallet, details: SealedDetails): Promi
  * For any page that prints your own details (invoices, your income statement): returns them, asking for the passkey
  * if it wasn't confirmed in the last few minutes. Null when the account can't seal (email or practice) or nothing is
  * sealed in this browser. Throws an Error with a plain-English message if the prompt is closed or the passkey differs.
+ * `withKey` is a sealing key the caller already derived (sharing with a verifier gets it in the same prompt as the
+ * disclosure key, lib/disclose.ts).
  */
-export async function unsealDetails(wallet: Wallet): Promise<SealedDetails | null> {
+export async function unsealDetails(wallet: Wallet, withKey?: CryptoKey): Promise<SealedDetails | null> {
   if (!canSeal(wallet)) return null;
   const envelope = readSealed(wallet.address);
   if (!envelope) return null;
-  return open(wallet, envelope);
+  return open(wallet, envelope, withKey);
 }
 
 /** The sealed copy as a file to keep anywhere. It's ciphertext: useless without the passkey. */
