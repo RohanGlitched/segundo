@@ -107,6 +107,7 @@ function AccountMenu() {
             {wallet.kind === "mera" ? "Signed in with your passkey" : wallet.kind === "privy" ? "Signed in with email" : "Practice wallet in this browser"}
             <span className="serial">{shortAddress(wallet.address)}</span>
           </p>
+          {wallet.note && <p className={styles.menuNote}>{wallet.note}</p>}
           <Link role="menuitem" href="/app" className={styles.item} onClick={() => setOpen(false)}>
             Your tabs
           </Link>
@@ -135,6 +136,18 @@ function AccountMenu() {
           <a role="menuitem" className={styles.item} href={explorerAddress(wallet.address)} target="_blank" rel="noreferrer">
             View wallet on MonadVision
           </a>
+          {wallet.exportKey && (
+            <button
+              role="menuitem"
+              className={styles.item}
+              onClick={() => {
+                void wallet.exportKey!();
+                setOpen(false);
+              }}
+            >
+              Take your key elsewhere
+            </button>
+          )}
           {wallet.kind === "mera" && wallet.unlocked && wallet.lock && (
             <button
               role="menuitem"

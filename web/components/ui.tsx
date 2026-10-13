@@ -73,7 +73,8 @@ export function ErrorLine({ error }: { error: string | null }) {
 
 /**
  * The ways in, in order: a passkey account (Mera, the main one), email (Privy), then a practice wallet.
- * Used by every sign-in panel and by the header's sign-in menu.
+ * Used by every sign-in panel and by the header's sign-in menu. On the passkey-only site (wallet.accounts "mera")
+ * and while the page is still deciding ("pending"), only the passkey choices show.
  */
 export function SignInChoices({ compact, onDone }: { compact?: boolean; onDone?: () => void }) {
   const wallet = useWallet();
@@ -94,12 +95,17 @@ export function SignInChoices({ compact, onDone }: { compact?: boolean; onDone?:
   };
   const off = !wallet.ready || !!busy;
   const waiting = "Waiting for your passkey…";
+  const others = wallet.accounts === "full";
+  const meraSite = wallet.accounts === "mera";
   return (
     <div className={`${styles.choices} ${compact ? styles.compact : ""}`}>
       <button className={`btn primary ${styles.lead}`} onClick={() => passkey("up")} disabled={off}>
         {busy === "up" ? waiting : "Create your account with a passkey"}
       </button>
-      <p className={styles.leadNote}>Your fingerprint, face or screen lock. No password, no seed phrase. Some devices ask twice the first time.</p>
+      <p className={styles.leadNote}>
+        Your fingerprint, face or screen lock. No password, no seed phrase{meraSite ? ", no extension" : ""}. Some devices ask twice the first time.
+        {meraSite ? " Same passkey, same account as segundo.world." : ""}
+      </p>
       <button className={`btn ${styles.full}`} onClick={() => passkey("in")} disabled={off}>
         {busy === "in" ? waiting : "Sign back in with your passkey"}
       </button>
@@ -113,40 +119,50 @@ export function SignInChoices({ compact, onDone }: { compact?: boolean; onDone?:
           {error}
         </p>
       )}
-      <p className={styles.or}>
-        <span>or</span>
-      </p>
-      <div className={styles.signinActions}>
-        {wallet.privyEnabled && (
-          <button
-            className="btn quiet"
-            onClick={() => {
-              wallet.signIn();
-              onDone?.();
-            }}
-            disabled={off}
-          >
-            Continue with email
-          </button>
-        )}
-        <button
-          className={wallet.privyEnabled ? styles.textBtn : "btn quiet"}
-          onClick={() => {
-            wallet.usePractice();
-            onDone?.();
-          }}
-          disabled={off}
-        >
-          Use a practice wallet instead
-        </button>
-      </div>
-      {!compact && (
-        <p className={styles.fine}>
-          Your passkey makes your Segundo account on this device; the key never leaves it and Segundo never sees it.
-          {wallet.privyEnabled ? " Email sign-in comes with a wallet held for you by Privy." : ""} A practice wallet lives only in this browser and
-          holds test AUSD. You never need MON or gas.
-        </p>
+      {others && (
+        <>
+          <p className={styles.or}>
+            <span>or</span>
+          </p>
+          <div className={styles.signinActions}>
+            {wallet.privyEnabled && (
+              <button
+                className="btn quiet"
+                onClick={() => {
+                  wallet.signIn();
+                  onDone?.();
+                }}
+                disabled={off}
+              >
+                Continue with email
+              </button>
+            )}
+            <button
+              className={wallet.privyEnabled ? styles.textBtn : "btn quiet"}
+              onClick={() => {
+                wallet.usePractice();
+                onDone?.();
+              }}
+              disabled={off}
+            >
+              Use a practice wallet instead
+            </button>
+          </div>
+        </>
       )}
+      {!compact &&
+        (others ? (
+          <p className={styles.fine}>
+            Your passkey makes your Segundo account on this device; the key never leaves it and Segundo never sees it.
+            {wallet.privyEnabled ? " Email sign-in comes with a wallet created and secured for you by Privy." : ""} A practice wallet lives only in
+            this browser and holds test AUSD. You never need MON or gas.
+          </p>
+        ) : meraSite ? (
+          <p className={styles.fine}>
+            Your passkey is your whole Segundo account: the key is worked out on this device each time you sign in, never leaves it, and no
+            server holds it. You never need MON or gas.
+          </p>
+        ) : null)}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
-import { PrivyProvider, useCreateWallet, usePrivy, useWallets } from "@privy-io/react-auth";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { PrivyProvider, useCreateWallet, useExportWallet, usePrivy, useWallets, type EIP1193Provider, type PrivyClientConfig } from "@privy-io/react-auth";
+import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createWalletClient, custom, type Address, type Hex, type TypedDataDefinition } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { monadTestnet } from "./chain";
@@ -12,6 +12,10 @@ import type { MeraUnlocked } from "./mera";
  * becomes the account key in this browser, no seed phrase, no server holding anything. Email through Privy (an
  * embedded wallet) stays as the second way in, and a practice wallet kept in this browser is the quick last option.
  * Segundo never asks any of them to pay gas: every action is a signature the relayer submits.
+ *
+ * The passkey-only build (NEXT_PUBLIC_ACCOUNTS=mera, or any page served from a mera.* host such as mera.segundo.world)
+ * offers Mera alone: Privy is never loaded and there is no practice wallet. The passkey's relying party is
+ * segundo.world, so the same passkey opens the same account on both sites.
  */
 export type Wallet = {
   ready: boolean;
@@ -20,7 +24,16 @@ export type Wallet = {
   label: string;
   /** How the person signed in: a passkey (Mera) or email (Privy). */
   method?: "passkey" | "email";
+  /**
+   * Which ways in this page offers: "full" (passkey, email, practice wallet), "mera" (passkey only), or "pending"
+   * while the page is still deciding (server render and first paint; treat it like "mera" but keep buttons disabled).
+   */
+  accounts: AccountsMode;
   privyEnabled: boolean;
+  /** One line about who holds the key, for the account menu (Privy: "Your wallet is created and secured by Privy…"). */
+  note?: string;
+  /** Privy only: opens Privy's own window for copying the embedded wallet's private key (Segundo never sees it). */
+  exportKey?: () => Promise<void>;
   /** Email sign-in through Privy. Without Privy configured, starts the practice wallet. */
   signIn: () => void;
   /** Mera: make a new passkey and its Segundo account. Throws an Error with a plain-English message. */
@@ -43,9 +56,27 @@ export type Wallet = {
   signMessage: (raw: Hex) => Promise<Hex>;
 };
 
+export type AccountsMode = "full" | "mera" | "pending";
+
 const WalletContext = createContext<Wallet | null>(null);
 const PRACTICE_KEY = "till.practice.v1";
 const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+const MERA_BUILD = process.env.NEXT_PUBLIC_ACCOUNTS === "mera";
+
+/** True on the passkey-only site (mera.segundo.world, or mera.localhost in development). */
+export const isMeraHost = (hostname: string) => hostname.startsWith("mera.");
+
+/**
+ * Decided after mount from the build flag or the hostname, so the server render and the first client render match.
+ * Until then it is "pending": no Privy, no practice wallet, sign-in buttons disabled.
+ */
+function useAccountsMode(): AccountsMode {
+  const [mode, setMode] = useState<AccountsMode>(MERA_BUILD ? "mera" : "pending");
+  useEffect(() => {
+    if (!MERA_BUILD) setMode(isMeraHost(window.location.hostname) ? "mera" : "full");
+  }, []);
+  return mode;
+}
 
 const SIGNED_OUT = "till.practice.signedOut";
 
@@ -355,9 +386,10 @@ function useMeraAccount(onSignedIn: () => void) {
 
 type MeraAccount = ReturnType<typeof useMeraAccount>;
 type Practice = ReturnType<typeof usePracticeWallet>;
+type Base = Pick<Wallet, "accounts" | "privyEnabled" | "signIn" | "usePractice">;
 
 /** The wallet when someone is signed in with a passkey; `alsoOut` signs out of anything else (Privy, practice). */
-function meraWallet(mera: MeraAccount, base: Pick<Wallet, "privyEnabled" | "signIn" | "usePractice">, alsoOut: () => void): Wallet {
+function meraWallet(mera: MeraAccount, base: Base, alsoOut: () => void): Wallet {
   return {
     ...base,
     ready: true,
@@ -381,50 +413,56 @@ function meraWallet(mera: MeraAccount, base: Pick<Wallet, "privyEnabled" | "sign
   };
 }
 
-/** Nobody signed in with a passkey or email: the practice wallet if it's on, otherwise signed out. */
-function practiceWallet(practice: Practice, mera: MeraAccount, base: Pick<Wallet, "privyEnabled" | "signIn" | "ready">): Wallet {
+const signInFirst = async (): Promise<never> => {
+  throw new Error("Sign in first.");
+};
+
+/** Nobody signed in with a passkey or email: the practice wallet if it's on (full mode only), otherwise signed out. */
+function signedOutWallet(practice: Practice | null, mera: MeraAccount, base: Base & { ready: boolean }): Wallet {
+  const account = practice?.account ?? null;
   return {
     ...base,
-    address: practice.account?.address,
-    kind: practice.account ? "practice" : null,
+    address: account?.address,
+    kind: account ? "practice" : null,
     label: "Practice wallet",
     passkeySignUp: mera.signUp,
     passkeySignIn: mera.signIn,
     hasPasskeyHere: mera.known,
     unlocked: true,
-    usePractice: practice.create,
-    signOut: practice.forget,
-    signTypedData: async (data) => {
-      if (!practice.account) throw new Error("Sign in first.");
-      return practice.account.signTypedData(data);
-    },
-    signMessage: async (raw) => {
-      if (!practice.account) throw new Error("Sign in first.");
-      return practice.account.signMessage({ message: { raw } });
-    },
+    signOut: practice?.forget ?? (() => {}),
+    signTypedData: account ? (data) => account.signTypedData(data) : signInFirst,
+    signMessage: account ? (raw) => account.signMessage({ message: { raw } }) : signInFirst,
   };
 }
 
-function PracticeOnly({ children }: { children: ReactNode }) {
-  const practice = usePracticeWallet();
-  const mera = useMeraAccount(practice.forget);
-  const value = useMemo<Wallet>(() => {
-    if (mera.signedIn) return meraWallet(mera, { privyEnabled: false, signIn: practice.create, usePractice: practice.create }, practice.forget);
-    return practiceWallet(practice, mera, { privyEnabled: false, signIn: practice.create, ready: practice.loaded && mera.loaded });
-  }, [practice, mera]);
-  return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
-}
+/* ---------- Privy (email) ---------- */
 
-function WithPrivy({ children }: { children: ReactNode }) {
+/** What the page needs to know about the Privy session: plain values, so changes are cheap to compare. */
+type PrivyState = { ready: boolean; authenticated: boolean; address?: Address; email?: string };
+/** The latest Privy actions, kept in a ref so the wallet always calls the current ones. */
+type PrivyCalls = { login: () => void; logout: () => Promise<void>; provider: () => Promise<EIP1193Provider>; exportKey: () => Promise<void> };
+
+// Kept outside the component: a new config object on every render would make Privy start over.
+const PRIVY_CONFIG: PrivyClientConfig = {
+  // Passkeys go through Mera (one passkey story); Privy is the email way in and its embedded wallet. Email is also
+  // how money reaches someone who isn't on Segundo yet: app/api/recipient makes their wallet ahead of time.
+  loginMethods: ["email"],
+  appearance: { theme: "light", accentColor: "#17332B", landingHeader: "Sign in to Segundo", showWalletLoginFirst: false },
+  embeddedWallets: { ethereum: { createOnLogin: "all-users" }, showWalletUIs: false },
+  defaultChain: monadTestnet,
+  supportedChains: [monadTestnet],
+};
+
+/** Reads the Privy session and reports it up; renders nothing. */
+function PrivyBridge({ onState, calls }: { onState: (s: PrivyState) => void; calls: RefObject<PrivyCalls | null> }) {
   const { ready, authenticated, login, logout, user } = usePrivy();
   const { wallets, ready: walletsReady } = useWallets();
-  const practice = usePracticeWallet();
-  const mera = useMeraAccount(practice.forget);
   const { createWallet } = useCreateWallet();
+  const { exportWallet } = useExportWallet();
   const creating = useRef(false);
   const embedded = wallets.find((w) => w.walletClientType === "privy");
 
-  // Make sure every email user has an embedded wallet.
+  // Make sure every email user has an embedded wallet (people sent money by email already have one, made in advance).
   useEffect(() => {
     if (!ready || !authenticated || !walletsReady || embedded || creating.current) return;
     creating.current = true;
@@ -434,67 +472,104 @@ function WithPrivy({ children }: { children: ReactNode }) {
         creating.current = false;
       });
   }, [ready, authenticated, walletsReady, embedded, createWallet]);
+
+  useEffect(() => {
+    calls.current = {
+      login,
+      logout,
+      provider: () => (embedded ? embedded.getEthereumProvider() : Promise.reject(new Error("Sign in first."))),
+      exportKey: () => (embedded ? exportWallet({ address: embedded.address }) : Promise.reject(new Error("Sign in first."))),
+    };
+  });
+
+  const address = embedded?.address as Address | undefined;
   const email = user?.email?.address ?? user?.google?.email;
+  useEffect(() => {
+    onState({ ready, authenticated, address, email });
+  }, [onState, ready, authenticated, address, email]);
+  return null;
+}
+
+/**
+ * Privy sits beside the page rather than around it, so it can be left out (passkey-only mode) or added once the mode
+ * is known without remounting the page. Its sign-in window is a fixed overlay, so its place in the tree doesn't matter.
+ */
+const PrivyMount = memo(function PrivyMount(props: { onState: (s: PrivyState) => void; calls: RefObject<PrivyCalls | null> }) {
+  return (
+    <PrivyProvider appId={PRIVY_APP_ID!} config={PRIVY_CONFIG}>
+      <PrivyBridge {...props} />
+    </PrivyProvider>
+  );
+});
+
+const PRIVY_NOTE = "Your wallet is created and secured by Privy; Segundo pays the gas.";
+
+export function WalletProvider({ children }: { children: ReactNode }) {
+  const accounts = useAccountsMode();
+  const full = accounts === "full";
+  const withPrivy = full && !!PRIVY_APP_ID;
+  const practice = usePracticeWallet();
+  const mera = useMeraAccount(practice.forget);
+  const [privy, setPrivy] = useState<PrivyState | null>(null);
+  const calls = useRef<PrivyCalls | null>(null);
 
   const value = useMemo<Wallet>(() => {
-    const base = { privyEnabled: true, signIn: login, usePractice: practice.create };
+    const base: Base = {
+      accounts,
+      privyEnabled: withPrivy,
+      signIn: withPrivy ? () => calls.current?.login() : full ? practice.create : () => {},
+      usePractice: full ? practice.create : () => {},
+    };
+    const privyOut = () => {
+      if (privy?.authenticated) void calls.current?.logout();
+    };
     if (mera.signedIn)
       return meraWallet(mera, base, () => {
         practice.forget();
-        if (authenticated) void logout();
+        privyOut();
       });
-    if (authenticated && embedded) {
-      const client = async () =>
-        createWalletClient({
-          account: embedded.address as Address,
-          chain: monadTestnet,
-          transport: custom(await embedded.getEthereumProvider()),
-        });
+    if (withPrivy && privy?.authenticated && privy.address) {
+      const address = privy.address;
+      const client = async () => {
+        const c = calls.current;
+        if (!c) throw new Error("Sign in first.");
+        return createWalletClient({ account: address, chain: monadTestnet, transport: custom(await c.provider()) });
+      };
       return {
         ...base,
         ready: true,
-        address: embedded.address as Address,
+        address,
         kind: "privy",
-        label: email ?? "Signed in",
+        label: privy.email ?? "Signed in",
         method: "email",
+        note: PRIVY_NOTE,
+        exportKey: async () => calls.current?.exportKey(),
         passkeySignUp: mera.signUp,
         passkeySignIn: mera.signIn,
         hasPasskeyHere: mera.known,
         unlocked: true,
         signOut: () => {
           practice.forget();
-          void logout();
+          privyOut();
         },
         signTypedData: async (data) => (await client()).signTypedData(data as never),
         signMessage: async (raw) => (await client()).signMessage({ message: { raw } }),
       };
     }
-    return practiceWallet(practice, mera, {
-      privyEnabled: true,
-      signIn: login,
-      ready: ready && practice.loaded && mera.loaded && (!authenticated || !!embedded),
-    });
-  }, [authenticated, embedded, email, login, logout, practice, ready, mera]);
+    if (full) {
+      // Signed in with email but the embedded wallet isn't there yet (it's being made): not ready, as before.
+      const privySettled = !withPrivy || (!!privy?.ready && (!privy.authenticated || !!privy.address));
+      return signedOutWallet(practice, mera, { ...base, ready: privySettled && practice.loaded && mera.loaded });
+    }
+    // Passkey only: never the practice wallet, even if this browser kept one from the full site.
+    return signedOutWallet(null, mera, { ...base, ready: accounts === "mera" && mera.loaded });
+  }, [accounts, full, withPrivy, privy, practice, mera]);
 
-  return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
-}
-
-export function WalletProvider({ children }: { children: ReactNode }) {
-  if (!PRIVY_APP_ID) return <PracticeOnly>{children}</PracticeOnly>;
   return (
-    <PrivyProvider
-      appId={PRIVY_APP_ID}
-      config={{
-        // Passkeys go through Mera (one passkey story); Privy is the email way in and its embedded wallet.
-        loginMethods: ["email"],
-        appearance: { theme: "light", accentColor: "#17332B", landingHeader: "Continue with email", showWalletLoginFirst: false },
-        embeddedWallets: { ethereum: { createOnLogin: "all-users" }, showWalletUIs: false },
-        defaultChain: monadTestnet,
-        supportedChains: [monadTestnet],
-      }}
-    >
-      <WithPrivy>{children}</WithPrivy>
-    </PrivyProvider>
+    <>
+      <WalletContext.Provider value={value}>{children}</WalletContext.Provider>
+      {withPrivy && <PrivyMount onState={setPrivy} calls={calls} />}
+    </>
   );
 }
 
