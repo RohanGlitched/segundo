@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "world.segundo.app",
+      "sha256_cert_fingerprints": ["E5:C8:BC:A6:50:4F:CA:5A:A3:F0:1C:12:9D:70:61:CB:0D:7D:20:17:5C:5B:14:18:97:53:64:64:34:8A:39:64"]
+    }
+  }
+]

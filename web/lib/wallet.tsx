@@ -139,6 +139,8 @@ function useMeraAccount(onSignedIn: () => void) {
   const sealKey = useRef<CryptoKey | null>(null);
   const sealPending = useRef<Promise<CryptoKey> | null>(null);
   const lastActive = useRef(0);
+  /** Bumped by every lock: a passkey prompt that finishes after a lock or sign-out must not sign anyone back in. */
+  const epoch = useRef(0);
   const signedInHook = useRef(onSignedIn);
   signedInHook.current = onSignedIn;
 
@@ -155,6 +157,7 @@ function useMeraAccount(onSignedIn: () => void) {
   }, []);
 
   const lock = useCallback(() => {
+    epoch.current++;
     live.current?.session.end();
     live.current = null;
     sealKey.current = null;
@@ -216,8 +219,13 @@ function useMeraAccount(onSignedIn: () => void) {
     if (!pending.current) {
       pending.current = (async () => {
         const m = meraModule ?? (await loadMera());
+        const started = epoch.current;
         try {
           const u = await m.unlockAccount({ credentialId: r.credentialId, transports: r.transports });
+          if (epoch.current !== started) {
+            u.session.end();
+            throw new Error("Signing was locked while the passkey prompt was open. Try again.");
+          }
           if (u.address.toLowerCase() !== r.address.toLowerCase()) {
             u.session.end();
             throw new Error("That passkey opens a different Segundo account. Sign out first, then sign in with it.");
@@ -246,8 +254,10 @@ function useMeraAccount(onSignedIn: () => void) {
       sealPending.current = (async () => {
         const m = meraModule ?? (await loadMera());
         const s = sealModule ?? (await loadSeal());
+        const started = epoch.current;
         try {
           const key = await s.deriveSealingKey(await m.sealPrfOutput({ credentialId: r.credentialId, transports: r.transports }));
+          if (epoch.current !== started) throw new Error("Signing was locked while the passkey prompt was open. Try again.");
           sealKey.current = key;
           lastActive.current = Date.now();
           return key;
@@ -324,8 +334,22 @@ function useMeraAccount(onSignedIn: () => void) {
     signOut,
     lock,
     sealingKey,
-    signTypedData: async (data: TypedDataDefinition) => (await ensure()).account.signTypedData(data as never),
-    signMessage: async (raw: Hex) => (await ensure()).account.signMessage({ message: { raw } }),
+    signTypedData: async (data: TypedDataDefinition) => {
+      const u = await ensure();
+      try {
+        return await u.account.signTypedData(data as never);
+      } catch (e) {
+        throw new Error((meraModule ?? (await loadMera())).meraMessage(e));
+      }
+    },
+    signMessage: async (raw: Hex) => {
+      const u = await ensure();
+      try {
+        return await u.account.signMessage({ message: { raw } });
+      } catch (e) {
+        throw new Error((meraModule ?? (await loadMera())).meraMessage(e));
+      }
+    },
   };
 }
 

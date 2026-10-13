@@ -11,10 +11,15 @@ android {
 
     defaultConfig {
         applicationId = "world.segundo.app"
-        minSdk = 23
+        minSdk = 24
         targetSdk = 36
         versionCode = 1
         versionName = "1.0.0"
+    }
+
+    // The library's few strings, in the languages of the corridors Segundo serves; keeps the APK small.
+    androidResources {
+        localeFilters += listOf("en", "es", "pt", "fil", "hi")
     }
 
     signingConfigs {

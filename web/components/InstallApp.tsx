@@ -59,6 +59,10 @@ export function useStandalone() {
 
 type Platform = "ios" | "android" | "desktop" | null;
 
+/** The Android app (a Trusted Web Activity around /app, built from till/android). */
+const APK = "/segundo.apk";
+const IPHONE = "On an iPhone, open Segundo in Safari, tap Share, then Add to Home Screen.";
+
 function usePlatform(): Platform {
   const [p, setP] = useState<Platform>(null);
   useEffect(() => {
@@ -99,8 +103,9 @@ function Qr({ text }: { text: string }) {
 }
 
 /**
- * "Install Segundo on your phone": the install button where Chrome offers one, the Share-sheet steps on iPhone and
- * iPad, and on a computer a QR code that opens this same page on a phone. Hidden once running from the home screen.
+ * "Install Segundo on your phone": the Android app download (plus Chrome's own install button where it offers one),
+ * the Share-sheet steps on iPhone and iPad, and on a computer a QR code that opens this same page on a phone. Hidden
+ * once running from the home screen or inside the Android app (both report display-mode standalone).
  */
 export function InstallApp({ id }: { id?: string }) {
   const platform = usePlatform();
@@ -156,21 +161,26 @@ export function InstallApp({ id }: { id?: string }) {
           </>
         ) : platform === "android" ? (
           <>
-            <p>Segundo works like an app from your home screen: full screen, one tap to your tabs.</p>
-            {prompt ? (
-              <button className="btn primary" onClick={install}>
-                Install Segundo
-              </button>
-            ) : (
-              <ol className={styles.steps}>
-                <li>
-                  Open your browser&rsquo;s menu <b aria-label="three dots">&#8942;</b>.
-                </li>
-                <li>
-                  Choose <b>Install app</b> or <b>Add to Home screen</b>.
-                </li>
-              </ol>
+            <p>Get the Segundo app for Android: full screen, one tap to your tabs.</p>
+            <div className={styles.actions}>
+              <a className="btn primary" href={APK} download>
+                Download the Android app
+              </a>
+              {prompt && (
+                <button className="btn quiet" onClick={install}>
+                  Install from the browser
+                </button>
+              )}
+            </div>
+            <p className={styles.fine}>
+              About 0.6 MB. Android asks once to allow installs from your browser. The app opens Segundo in Chrome, full screen.
+            </p>
+            {!prompt && (
+              <p className={styles.fine}>
+                Or add it from your browser&rsquo;s menu <b aria-label="three dots">&#8942;</b>: choose <b>Install app</b> or <b>Add to Home screen</b>.
+              </p>
             )}
+            <p className={styles.fine}>{IPHONE}</p>
           </>
         ) : (
           <>
@@ -180,11 +190,17 @@ export function InstallApp({ id }: { id?: string }) {
               already on a phone that uses the same Google or Apple account.
             </p>
             {local && <p className={styles.fine}>This address only opens on this computer. On the live site the code opens Segundo on your phone.</p>}
-            {prompt && (
-              <button className="btn small quiet" onClick={install}>
-                Install on this computer
-              </button>
-            )}
+            <div className={styles.actions}>
+              <a className="btn small" href={APK} download>
+                Download the Android app
+              </a>
+              {prompt && (
+                <button className="btn small quiet" onClick={install}>
+                  Install on this computer
+                </button>
+              )}
+            </div>
+            <p className={styles.fine}>{IPHONE}</p>
           </>
         )}
       </div>

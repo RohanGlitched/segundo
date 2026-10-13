@@ -23,6 +23,11 @@
   font-size: 13.5px;
   color: var(--ink-soft);
 }
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
 .steps {
   margin: 0;
   padding-left: 22px;

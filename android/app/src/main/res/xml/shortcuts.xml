@@ -8,9 +8,9 @@
         android:shortcutLongLabel="@string/shortcutTabs"
         android:shortcutShortLabel="@string/shortcutTabs">
         <intent
-            android:action="android.intent.action.MAIN"
+            android:action="android.intent.action.VIEW"
             android:data="https://segundo.world/app"
-            android:targetClass="com.google.androidbrowserhelper.trusted.LauncherActivity"
+            android:targetClass="com.google.androidbrowserhelper.trusted.ShortcutTrampolineActivity"
             android:targetPackage="world.segundo.app" />
     </shortcut>
     <shortcut
@@ -20,9 +20,9 @@
         android:shortcutLongLabel="@string/shortcutOpen"
         android:shortcutShortLabel="@string/shortcutOpen">
         <intent
-            android:action="android.intent.action.MAIN"
+            android:action="android.intent.action.VIEW"
             android:data="https://segundo.world/open"
-            android:targetClass="com.google.androidbrowserhelper.trusted.LauncherActivity"
+            android:targetClass="com.google.androidbrowserhelper.trusted.ShortcutTrampolineActivity"
             android:targetPackage="world.segundo.app" />
     </shortcut>
     <shortcut
@@ -32,9 +32,9 @@
         android:shortcutLongLabel="@string/shortcutSend"
         android:shortcutShortLabel="@string/shortcutSend">
         <intent
-            android:action="android.intent.action.MAIN"
+            android:action="android.intent.action.VIEW"
             android:data="https://segundo.world/app?send=1"
-            android:targetClass="com.google.androidbrowserhelper.trusted.LauncherActivity"
+            android:targetClass="com.google.androidbrowserhelper.trusted.ShortcutTrampolineActivity"
             android:targetPackage="world.segundo.app" />
     </shortcut>
 </shortcuts>

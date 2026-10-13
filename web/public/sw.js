@@ -1,7 +1,8 @@
 /* Segundo service worker: installable, quick to open, honest when offline.
    Pages: network first (money on screen must be live), the last good copy if the network is gone, then an offline
    page. Built assets: cache first (their names change with every build). /api/* is never cached or touched. */
-const VERSION = "segundo-v1";
+const VERSION = "segundo-v2";
+const MAX_PAGES = 30;
 const SHELL = `${VERSION}-shell`;
 const PAGES = `${VERSION}-pages`;
 const ASSETS = `${VERSION}-assets`;
@@ -42,6 +43,7 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith("/api/")) return;
+  if (url.pathname.endsWith(".apk") || url.pathname.startsWith("/.well-known/")) return;
 
   if (req.mode === "navigate") {
     event.respondWith(
@@ -49,7 +51,11 @@ self.addEventListener("fetch", (event) => {
         .then((res) => {
           if (res.ok && !url.search) {
             const copy = res.clone();
-            caches.open(PAGES).then((c) => c.put(req, copy));
+            caches.open(PAGES).then(async (c) => {
+              await c.put(req, copy);
+              const keys = await c.keys();
+              for (const k of keys.slice(0, Math.max(0, keys.length - MAX_PAGES))) await c.delete(k);
+            });
           }
           return res;
         })
