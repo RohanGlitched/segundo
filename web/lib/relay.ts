@@ -1,6 +1,7 @@
 "use client";
 
 import { concat, encodeFunctionData, hexToSignature, toHex, type Address, type Hex } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import { tillAbi, forwarderAbi } from "./abi";
 import { FORWARDER, TILL, DOLLAR, DOLLAR_DOMAIN, TREASURY, monadTestnet, publicClient, dollarAbi } from "./chain";
 import { feeFor } from "./money";
@@ -159,6 +160,34 @@ export async function sendDollars(wallet: Wallet, to: Address, value: bigint): P
   const started = performance.now();
   const res = await post<{ hash: Hex; block: number }>("/api/send", { from, to, value, validBefore, nonce, signature: sig });
   return { ...res, ms: Math.round(performance.now() - started) };
+}
+
+/**
+ * Moves everything a send-by-link key holds to `to`: the link's key signs an AUSD transfer authorisation (EIP-3009)
+ * and the relayer submits it, so the link's address never needs MON. Used to collect a link and to take one back.
+ */
+export async function sweepFromKey(key: Hex, to: Address): Promise<Landed & { value: bigint }> {
+  const account = privateKeyToAccount(key);
+  const from = account.address;
+  const value = (await publicClient.readContract({ address: DOLLAR, abi: dollarAbi, functionName: "balanceOf", args: [from] })) as bigint;
+  if (value === 0n) throw new Error("This link has already been collected, or the sender took the money back.");
+  const nonce = toHex(crypto.getRandomValues(new Uint8Array(32)));
+  const validBefore = BigInt(Math.floor(Date.now() / 1000) + 1800);
+  const signature = await account.signTypedData({
+    domain: { ...DOLLAR_DOMAIN, chainId: monadTestnet.id, verifyingContract: DOLLAR },
+    types: transferTypes,
+    primaryType: "TransferWithAuthorization",
+    message: { from, to, value, validAfter: 0n, validBefore, nonce },
+  });
+  const started = performance.now();
+  try {
+    const res = await post<{ hash: Hex; block: number }>("/api/send", { from, to, value, validBefore, nonce, signature });
+    return { ...res, ms: Math.round(performance.now() - started), value };
+  } catch (e) {
+    // Someone else collected it between the balance read and this transfer.
+    if (/Not enough AUSD/i.test(e instanceof Error ? e.message : "")) throw new Error("This link has already been collected, or the sender took the money back.");
+    throw e;
+  }
 }
 
 export async function requestTestDollars(address: Address): Promise<Landed> {

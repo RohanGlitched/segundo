@@ -2,18 +2,18 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { isAddress, type Address } from "viem";
 import { InstallApp } from "@/components/InstallApp";
 import { PayHistory } from "@/components/PayHistory";
 import { ProfileForm } from "@/components/ProfileForm";
 import { SealedDetails } from "@/components/SealedDetails";
+import { SendSheet, SentLinks } from "@/components/SendSheet";
 import { TabRow } from "@/components/TabRow";
 import { GettingStarted, Ledger, WalletNote } from "@/components/WalletPanel";
 import { ErrorLine, LandedLine, SignInPanel, busyLabel, useAction } from "@/components/ui";
 import { useAutoDrip, useMyTabIds, useProfile, useTabs, useDollarBalance } from "@/lib/hooks";
 import { useLive, useChainNow } from "@/lib/live";
-import { currency, formatMoney, formatUsd, toUnits, toUsd } from "@/lib/money";
-import { relay, requestTestDollars, sendDollars } from "@/lib/relay";
+import { currency, formatMoney, formatUsd, toUsd } from "@/lib/money";
+import { relay, requestTestDollars } from "@/lib/relay";
 import { stateOf, type TabView } from "@/lib/tabs";
 import { useWallet } from "@/lib/wallet";
 import styles from "./app.module.css";
@@ -120,11 +120,12 @@ export default function YourTabs() {
             <Link href="/open" className="btn primary">
               Open a tab
             </Link>
-            {((balance != null && balance > 0n) || sendOpen) && (
-              <button className="btn" onClick={() => setSendOpen((o) => !o)} aria-expanded={sendOpen}>
-                {sendOpen ? "Cancel" : "Send AUSD to someone"}
-              </button>
-            )}
+            <button className="btn" onClick={() => setSendOpen(true)} aria-haspopup="dialog" aria-expanded={sendOpen}>
+              <svg className={styles.sendIcon} viewBox="0 0 24 24" aria-hidden>
+                <path d="M4 12h15M13 6l6 6-6 6" />
+              </svg>
+              Send AUSD
+            </button>
             {lowBalance && hasStarted && (
               <button className="btn quiet" disabled={faucet.busy} onClick={getDollars}>
                 {faucet.busy ? "Sending test AUSD…" : "Get 25 test AUSD"}
@@ -144,8 +145,18 @@ export default function YourTabs() {
             <LandedLine landed={faucet.landed ?? drip.landed} />
           </div>
         </div>
-        {sendOpen && <SendForm max={balance ?? 0n} onDone={refreshBalance} onClose={() => setSendOpen(false)} />}
       </section>
+
+      <SendSheet
+        open={sendOpen}
+        onClose={() => setSendOpen(false)}
+        balance={balance}
+        fromName={mine?.name ?? ""}
+        onMoved={refreshBalance}
+        onFaucet={getDollars}
+        faucetBusy={faucet.busy || drip.sending}
+      />
+      <SentLinks me={me} onMoved={refreshBalance} />
 
       <section className={styles.profile} id="profile">
         <ProfileForm me={me} current={mine} onSaved={refresh} />
@@ -196,13 +207,7 @@ export default function YourTabs() {
 
       <InstallApp id="install" />
 
-      <AppDock
-        sendOpen={sendOpen}
-        onSend={() => {
-          setSendOpen(true);
-          requestAnimationFrame(() => document.getElementById("send")?.scrollIntoView({ block: "center" }));
-        }}
-      />
+      <AppDock sendOpen={sendOpen} onSend={() => setSendOpen(true)} />
     </main>
   );
 }
@@ -240,8 +245,8 @@ function PasskeyLock() {
 }
 
 /**
- * From the home screen (standalone), the main actions sit in a bar under your thumb, above the home indicator.
- * In a browser tab it's hidden: the same actions are in the page.
+ * On a phone (the home-screen app or a phone-width browser), the main actions sit in a bar under your thumb, above
+ * the home indicator. On wider screens it's hidden: the same actions are in the page.
  */
 function AppDock({ sendOpen, onSend }: { sendOpen: boolean; onSend: () => void }) {
   return (
@@ -259,7 +264,7 @@ function AppDock({ sendOpen, onSend }: { sendOpen: boolean; onSend: () => void }
         </svg>
         Open a tab
       </Link>
-      <button type="button" className={styles.dockItem} onClick={onSend} aria-expanded={sendOpen}>
+      <button type="button" className={styles.dockItem} onClick={onSend} aria-haspopup="dialog" aria-expanded={sendOpen}>
         <svg viewBox="0 0 24 24" aria-hidden>
           <path d="M4 12h15M13 6l6 6-6 6" />
         </svg>
@@ -276,69 +281,5 @@ function RowSkeletons() {
         <div key={i} className={`skeleton ${styles.rowSkel}`} />
       ))}
     </div>
-  );
-}
-
-function SendForm({ max, onDone, onClose }: { max: bigint; onDone: () => void; onClose: () => void }) {
-  const wallet = useWallet();
-  const [to, setTo] = useState("");
-  const [amount, setAmount] = useState("");
-  const act = useAction();
-  const value = Number(amount) > 0 ? toUnits(Number(amount)) : 0n;
-  const problem = !to
-    ? "Paste the wallet address you want to send to."
-    : !isAddress(to)
-      ? "That isn't a wallet address. It starts with 0x and has 42 characters."
-      : to.toLowerCase() === wallet.address?.toLowerCase()
-        ? "That's your own wallet."
-        : value <= 0n
-          ? "Enter an amount."
-          : value < 10_000n
-            ? "The smallest amount is $0.01."
-            : value > max
-              ? `You have ${formatUsd(toUsd(max))}.`
-              : null;
-  useEffect(() => {
-    if (act.phase === "done") onDone();
-  }, [act.phase, onDone]);
-  return (
-    <form
-      className={styles.send}
-      id="send"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (problem) return;
-        act.run(`Sent ${formatUsd(Number(amount))}`, async (sent) => {
-          const p = sendDollars(wallet, to as Address, value);
-          sent();
-          const r = await p;
-          // A sent form empties itself, so one more click can't send the money twice.
-          setTo("");
-          setAmount("");
-          return r;
-        });
-      }}
-    >
-      <div className="field">
-        <label htmlFor="to">Send to</label>
-        <input id="to" className="input" placeholder="0x…" value={to} onChange={(e) => setTo(e.target.value.trim())} autoComplete="off" />
-        <span className="hint">An exchange deposit address or any Monad wallet. You sign; Segundo pays the gas.</span>
-      </div>
-      <div className="field">
-        <label htmlFor="amt">Amount in AUSD</label>
-        <input id="amt" className="input" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" />
-      </div>
-      <div className={styles.sendFoot}>
-        <button className="btn primary" disabled={!!problem || act.busy}>
-          {busyLabel(act.phase, "Send AUSD")}
-        </button>
-        <button type="button" className="btn quiet" onClick={onClose} disabled={act.busy}>
-          {act.phase === "done" ? "Done" : "Cancel"}
-        </button>
-        {problem && to && <span className="soft">{problem}</span>}
-      </div>
-      <ErrorLine error={act.error} />
-      <LandedLine landed={act.landed} />
-    </form>
   );
 }

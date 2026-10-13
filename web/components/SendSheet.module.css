@@ -1,0 +1,378 @@
+/* The send sheet: a native modal dialog, centred on wide screens, rising from the bottom on a phone. */
+.sheet {
+  width: min(600px, calc(100vw - 32px));
+  max-width: none;
+  max-height: min(92dvh, 900px);
+  padding: 0;
+  border: 1.5px solid var(--ink);
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.sheet::backdrop {
+  background: color-mix(in srgb, #0b1512 48%, transparent);
+}
+.sheet[open] {
+  animation: rise 0.22s ease-out;
+}
+@keyframes rise {
+  from {
+    transform: translateY(14px);
+    opacity: 0.4;
+  }
+}
+.inner {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 22px 24px 24px;
+}
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.head h2 {
+  font-size: 26px;
+  font-variation-settings: "wdth" 112;
+  letter-spacing: -0.01em;
+}
+.close {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: -6px -10px -6px 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+}
+.close svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+.close:hover {
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+.close[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.modes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1.5px solid var(--ink);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.modes button {
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: 600 14.5px/1.15 var(--font-archivo), sans-serif;
+  cursor: pointer;
+}
+.modes button + button {
+  border-left: 1.5px solid var(--ink);
+}
+.modes button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--paper);
+}
+.modes button:focus-visible {
+  outline-offset: -4px;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 0 12px 14px;
+  border-left: 3px solid var(--warn);
+  font-size: 14.5px;
+}
+.empty b {
+  font-weight: 650;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.lede {
+  color: var(--ink-soft);
+  font-size: 15px;
+}
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 14px;
+}
+.money {
+  position: relative;
+}
+.money > span {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-weight: 600;
+  color: var(--ink-soft);
+  pointer-events: none;
+}
+.money input {
+  padding-left: 28px;
+  font-variation-settings: "wdth" 112;
+  font-size: 18px;
+}
+
+/* "They receive about ₱56.20": the receiver's amount, in their currency's ink. */
+.quote {
+  --q: var(--q-ink);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 16px;
+  background: var(--note-paper);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--q);
+  border-radius: 8px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .quote {
+    --q: var(--q-ink-night);
+  }
+}
+:root[data-theme="dark"] .quote {
+  --q: var(--q-ink-night);
+}
+.quoteLabel {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+.quoteAmount {
+  font-size: clamp(32px, 9vw, 44px);
+  line-height: 1.05;
+  font-weight: 560;
+  color: var(--q);
+  overflow-wrap: anywhere;
+}
+.quoteSub {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.foot > button:first-child {
+  min-width: 200px;
+}
+
+.made {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.madeLead {
+  font-size: 15.5px;
+}
+.madeLead b {
+  font-weight: 650;
+}
+
+.tell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  font-size: 14.5px;
+}
+.share {
+  display: grid;
+  grid-template-columns: 148px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+  padding: 16px;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--serial);
+  border-radius: 10px;
+}
+.qr {
+  width: 148px;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  background: #f4f7f2;
+  overflow: hidden;
+}
+.qr:empty {
+  background: color-mix(in srgb, var(--rule) 50%, transparent);
+}
+.qr svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.shareSide {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.linkField {
+  font-size: 13.5px;
+  min-height: 42px;
+  text-overflow: ellipsis;
+}
+.shareButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.fine {
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+/* Sent by link, on the wallet page. */
+.links h2 {
+  font-size: 22px;
+  font-variation-settings: "wdth" 112;
+  padding-bottom: 6px;
+}
+.links ul {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  border-top: 1px solid var(--rule);
+}
+.links li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px 16px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.linkMain {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.linkAmount {
+  font-size: 22px;
+  font-weight: 560;
+}
+.linkMeta {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+.linkMeta a {
+  text-decoration: none;
+}
+.status {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+.status[data-state="waiting"] {
+  color: var(--serial);
+}
+.status[data-state="done"] {
+  color: var(--ok);
+}
+.linkActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.linkActions:empty {
+  display: none;
+}
+.linkShare {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 720px) {
+  .sheet {
+    width: 100vw;
+    max-height: 94dvh;
+    margin: auto 0 0;
+    border-width: 1.5px 0 0;
+    border-radius: 16px 16px 0 0;
+  }
+  .sheet[open] {
+    animation-name: riseFull;
+  }
+  .inner {
+    padding: 16px 16px calc(20px + env(safe-area-inset-bottom));
+  }
+  .inner::before {
+    content: "";
+    align-self: center;
+    width: 44px;
+    height: 4px;
+    margin-bottom: -6px;
+    border-radius: 2px;
+    background: var(--rule);
+  }
+  .row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .modes button {
+    font-size: 13.5px;
+    padding: 6px 4px;
+  }
+  .foot > button:first-child {
+    flex: 1 1 100%;
+  }
+  .share {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+  }
+  .qr {
+    width: 168px;
+  }
+  .shareSide {
+    width: 100%;
+  }
+  .shareButtons > * {
+    flex: 1 1 calc(50% - 4px);
+  }
+  .links li {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .linkActions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+  .linkActions > * {
+    flex: 1 1 auto;
+  }
+}
+@keyframes riseFull {
+  from {
+    transform: translateY(40%);
+  }
+}
