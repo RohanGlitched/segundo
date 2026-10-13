@@ -27,6 +27,8 @@ async function shot(page, name) {
   }
   const client = await browser.newContext({ viewport: { width: W, height: 900 } });
   const page = await client.newPage();
+  // A dev server compiles each page on its first visit, which can take longer than Playwright's 30 s default.
+  client.setDefaultNavigationTimeout(180000);
   page.on("pageerror", (e) => console.log("PAGE ERROR", e.message));
   page.on("console", (m) => m.type() === "error" && console.log("CONSOLE", m.text()));
 
@@ -89,6 +91,7 @@ async function shot(page, name) {
   step(`invite link made: ${link.replace(/#k=.*/, "#k=…")}`);
 
   const free = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  free.setDefaultNavigationTimeout(180000);
   const fp = await free.newPage();
   fp.on("pageerror", (e) => console.log("FREELANCER PAGE ERROR", e.message));
   await fp.goto(link);
@@ -117,9 +120,11 @@ async function shot(page, name) {
       const amount = Number(raw || 0) / 1e6;
       if (amount < 0.01) continue;
       await p.getByRole("button", { name: "Send AUSD" }).first().click();
-      await p.getByLabel("Send to").fill(process.env.RETURN_TO);
-      await p.getByLabel("Amount in AUSD").fill(String(Math.floor(amount * 100) / 100));
-      await p.getByRole("button", { name: "Send AUSD", exact: true }).click();
+      // The send sheet opens on "By link"; a faucet return goes to a plain address.
+      await p.getByRole("button", { name: "To a wallet address" }).click();
+      await p.locator("#send").getByLabel("Send to").fill(process.env.RETURN_TO);
+      await p.locator("#send").getByLabel(/^Amount in/).fill(String(Math.floor(amount * 100) / 100));
+      await p.locator("#send").getByRole("button", { name: "Send AUSD", exact: true }).click();
       await expectOk(p, /Sent \$/);
       step(`${label} returned $${Math.floor(amount * 100) / 100} to the faucet`);
     }

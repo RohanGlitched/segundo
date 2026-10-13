@@ -242,12 +242,15 @@
   border: 1px solid var(--rule);
   border-radius: 10px;
 }
+/* The time card draws 210 px tall at any width (components/TimeCard.tsx), so its placeholder is that tall too. */
 .cardSkel > div {
   width: 100%;
-  min-height: 130px;
-  aspect-ratio: 1000 / 210;
+  height: 210px;
 }
 @media (max-width: 560px) {
+  .cardSkel {
+    padding: 14px 12px 54px;
+  }
   /* Tab number and date on one line, the copy button under it, whether or not the date has arrived yet. */
   .noteBar {
     flex-direction: column;

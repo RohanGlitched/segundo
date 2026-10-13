@@ -184,7 +184,8 @@ export default function RequestTab() {
             </li>
             <li>
               <b>Your client checks it and funds the tab.</b> The open-a-tab form arrives filled in, with a line saying you asked and your address in full.
-              They sign in with a passkey or email, change anything they like, and fund it with AUSD plus Segundo&apos;s 1%.
+              They sign in with {wallet.accounts === "mera" ? "a passkey" : "a passkey or email"}, change anything they like, and fund it with AUSD plus
+              Segundo&apos;s 1%.
             </li>
             <li>
               <b>You clock in and are paid by the second.</b> The tab shows up in <Link href="/app">your tabs</Link>. Every few seconds what you&apos;ve earned

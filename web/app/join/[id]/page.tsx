@@ -74,10 +74,15 @@ export default function Join() {
   if (t.closed && isZero(t.payee)) return <Shell>The client closed this tab before anyone joined.</Shell>;
   if (!isZero(t.payee))
     return (
-      <Shell>
-        {t.closed ? "This tab has already been worked and closed." : "Someone has already joined this tab."}{" "}
-        {wallet.address?.toLowerCase() === t.payee.toLowerCase() ? <Link href={`/tab/${id}`}>It&apos;s you: open it</Link> : t.closed ? <Link href={`/tab/${id}`}>See its pay stub</Link> : "Ask the client for a new link."}
-      </Shell>
+      <AlreadyJoined
+        id={id}
+        closed={t.closed}
+        rateUsd={toUsd(t.rate)}
+        payer={personOf(t.payer, profiles).name}
+        payee={personOf(t.payee, profiles).name}
+        isPayee={wallet.address?.toLowerCase() === t.payee.toLowerCase()}
+        isPayer={wallet.address?.toLowerCase() === t.payer.toLowerCase()}
+      />
     );
   if (!key) return <Shell>This link is missing its invite code. Copy the whole link again, including the part after #.</Shell>;
 
@@ -111,7 +116,7 @@ export default function Join() {
           </h1>
           <p className={styles.lede}>
             {formatUsd(toUsd(t.budget))} is already waiting in the Segundo contract on Monad, enough for {hoursCovered} of work. Clock in when you
-            start and your pay builds up every second. Cash out whenever you like.
+            start and your pay builds up every second, reaching your account every few seconds while you work.
           </p>
           <div className={styles.proof}>
             <p>
@@ -132,7 +137,7 @@ export default function Join() {
             </p>
             <ul>
               <li>Clock in when you start; pay builds up every second.</li>
-              <li>It reaches your wallet every few seconds while the tab is open, and you can cash out any time.</li>
+              <li>It reaches your account every few seconds while you work, and you can collect the rest yourself whenever you like.</li>
               <li>No gas, no wallet app, no bank details.</li>
             </ul>
           </div>
@@ -140,7 +145,11 @@ export default function Join() {
             <p className="notice">This is your own tab. Send the link to the freelancer and they join from their browser.</p>
           ) : !wallet.address ? (
             <SignInPanel title="Sign in to join">
-              <p>A passkey or your email is all you need. Segundo creates a wallet for you; you never need gas.</p>
+              <p>
+                {wallet.accounts === "mera"
+                  ? "A passkey is all you need. Segundo creates an account for you on this device; you never need gas."
+                  : "A passkey or your email is all you need. Segundo creates a wallet for you; you never need gas."}
+              </p>
             </SignInPanel>
           ) : (
             <form
@@ -152,11 +161,11 @@ export default function Join() {
             >
               <div className="field">
                 <label htmlFor="j-name">Your name</label>
-                <input id="j-name" className="input" maxLength={40} value={name} onChange={(e) => setName(e.target.value)} placeholder="Priya Nair" />
+                <input id="j-name" className="input" maxLength={40} value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" />
               </div>
               <div className="field">
                 <label htmlFor="j-place">Your city</label>
-                <input id="j-place" className="input" maxLength={40} value={place} onChange={(e) => setPlace(e.target.value)} placeholder="Pune" />
+                <input id="j-place" className="input" maxLength={40} value={place} onChange={(e) => setPlace(e.target.value)} placeholder="Your city" />
               </div>
               <div className="field">
                 <label htmlFor="j-cur">Show my pay in</label>
@@ -209,6 +218,59 @@ function Shell({ children, busy }: { children?: React.ReactNode; busy?: boolean 
           </p>
         </>
       )}
+    </main>
+  );
+}
+
+/** The invite has been used: say what happened and where to go, rather than a bare sentence. */
+function AlreadyJoined({
+  id,
+  closed,
+  rateUsd,
+  payer,
+  payee,
+  isPayee,
+  isPayer,
+}: {
+  id: bigint;
+  closed: boolean;
+  rateUsd: number;
+  payer: string;
+  payee: string;
+  isPayee: boolean;
+  isPayer: boolean;
+}) {
+  const serial = `№ ${id.toString().padStart(4, "0")}`;
+  const heading = isPayee ? "You've already joined this tab." : closed ? "This tab has been worked and closed." : "Someone has already joined this tab.";
+  return (
+    <main className={`wrap ${styles.page}`}>
+      <section className={styles.used} aria-labelledby="used-title">
+        <p className={`serial ${styles.usedSerial}`}>Tab {serial}</p>
+        <h1 id="used-title" className={styles.h1}>
+          {heading}
+        </h1>
+        <p className={styles.lede}>
+          {isPayee
+            ? `You joined from this link: ${payer} pays you ${formatUsd(rateUsd)} an hour, by the second. ${closed ? "The tab has since been closed; its pay stub lists every payout." : "Clock in from the tab whenever you start work."}`
+            : isPayer
+              ? `${payee} joined your tab with this link${closed ? ", and the tab has since been closed" : ""}. Each invite link works once.`
+              : `Each invite link works once, and ${payee} joined ${payer}'s tab with this one${closed ? "; the tab has since been closed" : ""}.`}
+        </p>
+        {!isPayee && !isPayer && (
+          <ul className={styles.usedList}>
+            <li>If that was you in another browser or on another device, sign in there with the same account and the tab is in your tabs.</li>
+            <li>If you were meant to be paid on it, ask {payer} for a new link. Opening another tab takes them a minute.</li>
+          </ul>
+        )}
+        <div className={styles.usedActions}>
+          <Link href={closed && !isPayee ? `/tab/${id}#paystub` : `/tab/${id}`} className="btn primary">
+            {isPayee || isPayer ? `Open tab ${serial}` : closed ? "See its pay stub" : "Watch the tab"}
+          </Link>
+          <Link href="/app" className="btn">
+            Your tabs
+          </Link>
+        </div>
+      </section>
     </main>
   );
 }

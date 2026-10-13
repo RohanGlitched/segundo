@@ -4,13 +4,19 @@
   background: var(--note-paper);
   border: 1px solid var(--rule);
   border-radius: 10px;
-  overflow-x: auto;
+  min-width: 0;
 }
+/* Drawn at the card's own width (TimeCard measures it), so it never overflows and its labels keep their size. */
 .svg {
   width: 100%;
-  min-width: 620px; /* on a phone the card scrolls sideways rather than shrinking its labels to nothing */
   height: auto;
   display: block;
+  overflow: visible;
+}
+@media (max-width: 560px) {
+  .card {
+    padding: 14px 12px 12px;
+  }
 }
 .lab {
   font-family: var(--font-archivo), sans-serif;

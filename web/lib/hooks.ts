@@ -5,7 +5,7 @@ import { decodeEventLog, type Address, type Hex } from "viem";
 import { tillAbi } from "./abi";
 import { TILL, DOLLAR, publicClient, dollarAbi } from "./chain";
 import { readProfiles, readTabs, type Profile, type TabView } from "./tabs";
-import { requestTestDollars, type Landed } from "./relay";
+import { plainError, requestTestDollars, type Landed } from "./relay";
 
 /** Fired by the profile form after a save lands, so every profile on the page re-reads at once. */
 export const PROFILE_SAVED = "till:profile";
@@ -173,16 +173,28 @@ export function dripOnce(address: Address): Promise<Landed> {
 
 /**
  * A wallet that arrives empty gets 25 test AUSD without asking (once per wallet per browser session),
- * so the first screen a judge sees already has money on it. Failures stay quiet; the manual button remains.
+ * so the first screen a judge sees already has money on it. Only the first balance read for a wallet counts: an
+ * account that spends down to zero later isn't topped up behind its back. A drip that fails says why in `error`
+ * (the faucet's own reason, e.g. its once-an-hour limit); the manual button remains.
  */
 export function useAutoDrip(address: Address | undefined, balance: bigint | null, onLanded?: () => void) {
   const [state, setState] = useState<"idle" | "sending" | "done" | "failed">("idle");
   const [landed, setLanded] = useState<(Landed & { what: string }) | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // The wallet whose first balance has been seen; later reads of the same wallet never start a drip.
+  const arrived = useRef<string | null>(null);
+  const lastAddress = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (!address || balance == null || balance > 0n || state !== "idle") return;
-    const key = `till.drip.${address.toLowerCase()}`;
+    // In the render where the wallet changes, `balance` is still the previous wallet's; wait for this one's own read.
+    const switched = lastAddress.current !== address;
+    lastAddress.current = address;
+    if (switched || !address || balance == null) return;
+    const k = address.toLowerCase();
+    if (arrived.current === k) return;
+    arrived.current = k;
+    if (balance > 0n) return setState("done");
     try {
-      if (sessionStorage.getItem(key)) return setState("done");
+      if (sessionStorage.getItem(`till.drip.${k}`)) return setState("done");
     } catch {}
     setState("sending");
     dripOnce(address)
@@ -191,12 +203,21 @@ export function useAutoDrip(address: Address | undefined, balance: bigint | null
         setState("done");
         onLanded?.();
       })
-      .catch(() => setState("failed"));
+      .catch((e) => {
+        setError(`Your first 25 test AUSD didn't arrive: ${plainError(e)}`);
+        setState("failed");
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [address, balance, state]);
-  useEffect(() => setState("idle"), [address]);
-  return { sending: state === "sending", landed };
+  }, [address, balance]);
+  useEffect(() => {
+    setState("idle");
+    setLanded(null);
+    setError(null);
+  }, [address]);
+  return { sending: state === "sending", landed, error };
 }
+
+const LAGGING = "history: block not indexed yet";
 
 export type StubLine = {
   block: number;
@@ -220,6 +241,7 @@ export function useHistory(id: bigint | null, lastBlock: bigint | undefined, max
   const walking = useRef(false);
   const queued = useRef<bigint | null>(null);
   const current = useRef("");
+  const retries = useRef(0);
   const [again, setAgain] = useState(0);
 
   useEffect(() => () => void (current.current = ""), []);
@@ -229,6 +251,7 @@ export function useHistory(id: bigint | null, lastBlock: bigint | undefined, max
     current.current = sid;
     if (seen.current.id !== sid) {
       seen.current = { id: sid, head: 0n, lines: [] };
+      retries.current = 0;
       setLines(null);
     }
     if (lastBlock === seen.current.head) return;
@@ -248,7 +271,7 @@ export function useHistory(id: bigint | null, lastBlock: bigint | undefined, max
           publicClient.getLogs({ address: TILL, fromBlock: block, toBlock: block }),
           publicClient.getBlock({ blockNumber: block }),
         ]);
-        let prev = 0n;
+        let prev: bigint | null = null;
         const inBlock: StubLine[] = [];
         for (const log of logs) {
           let ev;
@@ -293,6 +316,10 @@ export function useHistory(id: bigint | null, lastBlock: bigint | undefined, max
               break;
           }
         }
+        // Every block in the chain holds this tab's Activity link. Without it, the RPC node that answered is a block or
+        // two behind the one that served the tab (a public RPC is many nodes): read again shortly instead of ending the
+        // walk here, which would leave the newest lines (a close, its last payout) off the stub until a reload.
+        if (prev == null) throw new Error(LAGGING);
         fresh.push(...inBlock.reverse());
         block = prev;
         steps++;
@@ -300,6 +327,7 @@ export function useHistory(id: bigint | null, lastBlock: bigint | undefined, max
         if (!cancelled() && (steps <= 3 || steps % 4 === 0)) setLines([...fresh, ...seen.current.lines]);
       }
       if (cancelled()) return;
+      retries.current = 0;
       const merged = [...fresh, ...seen.current.lines].slice(0, 80);
       seen.current = { id: sid, head: lastBlock, lines: merged };
       setLines(merged);
@@ -307,8 +335,11 @@ export function useHistory(id: bigint | null, lastBlock: bigint | undefined, max
     })()
       .catch((e) => {
         if (cancelled()) return;
-        // Rate-limited: try the walk again after the cool-down rather than show an empty stub.
-        if (noteRpcError(e)) setTimeout(() => !cancelled() && setAgain((n) => n + 1), 4000);
+        // Rate-limited, a node behind, or a failed read: walk again shortly rather than keep a stub that stops short.
+        // A tab that has stopped changing (closed) gets no new head to trigger another walk, so this is its only retry.
+        const limited = noteRpcError(e);
+        const tries = ++retries.current;
+        if (limited || tries <= 6) setTimeout(() => !cancelled() && setAgain((n) => n + 1), limited ? 4000 : 1000 * tries);
         else setLines((l) => l ?? []);
       })
       .finally(() => {

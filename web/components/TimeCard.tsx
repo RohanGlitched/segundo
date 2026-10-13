@@ -1,10 +1,13 @@
 "use client";
 
+import { useLayoutEffect, useRef, useState } from "react";
 import type { StubLine } from "@/lib/hooks";
 import { formatUsd, toUsd } from "@/lib/money";
 import styles from "./TimeCard.module.css";
 
-const W = 1000;
+/** Drawn one SVG unit to one CSS pixel at the card's own width, so labels keep their size on a phone. */
+const W_DEFAULT = 1000;
+const W_MIN = 280;
 const H = 210;
 const L = 56;
 const R = 16;
@@ -21,10 +24,30 @@ const hhmm = (t: number) => new Date(t * 1000).toLocaleTimeString([], { hour: "2
  * pay stub, so every mark is a transaction on Monad.
  */
 export function TimeCard({ lines, now, earnedUsd, running, partial }: { lines: StubLine[]; now: number; earnedUsd: number; running: boolean; partial?: boolean }) {
+  // The card measures itself before paint and draws at that width: the chart fits inside it at any size, and text
+  // stays at its CSS size instead of shrinking with a fixed-width drawing.
+  const box = useRef<HTMLElement>(null);
+  const [W, setW] = useState(W_DEFAULT);
+  const drawn = lines.length >= 2;
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const measure = () => {
+      const cs = getComputedStyle(el);
+      const inner = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      if (inner > 0) setW(Math.max(W_MIN, Math.round(inner)));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [drawn]);
   const events = [...lines].sort((a, b) => a.time - b.time || a.block - b.block);
   if (events.length < 2) return null;
   const t0 = events[0]!.time;
-  const t1 = Math.max(now, events.at(-1)!.time + 1);
+  // A closed tab's card ends at the close; an open one runs to now.
+  const closed = events.some((e) => e.kind === "closed");
+  const t1 = closed ? Math.max(events.at(-1)!.time, t0 + 1) : Math.max(now, events.at(-1)!.time + 1);
   const x = (t: number) => L + ((t - t0) / (t1 - t0)) * (W - L - R);
 
   const work: [number, number][] = [];
@@ -43,7 +66,9 @@ export function TimeCard({ lines, now, earnedUsd, running, partial }: { lines: S
       heldAt = null;
     }
   }
-  if (inAt != null) work.push([inAt, running ? t1 : inAt]);
+  // A session with no end in the lines read so far: running, it reaches now; stopped, it lasted at least until the
+  // newest line (a payout or the close that ended it), never zero seconds.
+  if (inAt != null) work.push([inAt, running ? t1 : Math.max(inAt, events.at(-1)!.time)]);
   // A long shift can start before the stretch of history on screen: the clock is running, so it fills the card.
   else if (running) work.push([t0, t1]);
   if (heldAt != null) holds.push([heldAt, t1]);
@@ -66,7 +91,7 @@ export function TimeCard({ lines, now, earnedUsd, running, partial }: { lines: S
   const sessions = `${work.length} ${work.length === 1 ? "session" : "sessions"}`;
 
   return (
-    <figure className={styles.card}>
+    <figure className={styles.card} ref={box}>
       <svg viewBox={`0 0 ${W} ${H}`} className={styles.svg} role="img" aria-label={`Time card: ${workedText} on the clock across ${sessions}; ${formatUsd(cum, 4)} paid out.`}>
         <defs>
           <pattern id="tc-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">

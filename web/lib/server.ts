@@ -94,7 +94,9 @@ export function sendAndWait(client: Client, tx: { to: Address; data: Hex; minGas
             const msg = e instanceof Error ? e.message : String(e);
             // "already known" is this very transaction arriving twice (a retried request): it was sent.
             if (!/already known/i.test(msg)) {
-              if (/nonce too high|gap/i.test(msg)) lanes.delete(from);
+              // Monad answers a nonce another instance already used with "invalid parameters" (-32602):
+              // forget the lane so the next try reads the pending count afresh.
+              if (/nonce too high|gap|invalid param|missing or invalid/i.test(msg)) lanes.delete(from);
               else lanes.set(from, { next: /nonce|replacement|underpriced/i.test(msg) ? nonce + 1 : nonce, at: 0 });
               throw e;
             }
@@ -105,7 +107,7 @@ export function sendAndWait(client: Client, tx: { to: Address; data: Hex; minGas
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         // Nonce races, and the public RPC's per-second limit under a burst, are worth another go; reverts are not.
-        if (attempt < 4 && /nonce|replacement|underpriced|request limit|rate limit|too many requests/i.test(msg)) {
+        if (attempt < 4 && /nonce|replacement|underpriced|invalid param|missing or invalid|request limit|rate limit|too many requests/i.test(msg)) {
           await sleep((150 + Math.random() * 400) * (attempt + 1));
           continue;
         }
@@ -267,13 +269,13 @@ export const MIN_BUDGET = 500_000n;
 
 /**
  * How much test MON the relayer keeps back before it pays for each kind of action, so that when gas
- * runs low the actions that return money (clock-outs, closes, cash-outs) keep working longest.
- * Watch-payouts stop first, then new tabs and transfers, then clock-ins; closes run to the last drop.
+ * runs low the actions that return money keep working longest. Watch-payouts stop first, then new tabs and
+ * transfers, then clock-ins and cash-outs; clock-outs, holds and closes run to the last drop.
  */
 export const RESERVE = {
   settle: 400_000_000_000_000_000n, // 0.4 MON: watch-payouts pause
   open: 150_000_000_000_000_000n, // 0.15 MON: new tabs, top-ups, sends and profiles pause
-  clockIn: 50_000_000_000_000_000n, // 0.05 MON: clock-ins pause
+  clockIn: 50_000_000_000_000_000n, // 0.05 MON: clock-ins and cash-outs (sends to the payout partner) pause
   essential: 20_000_000_000_000_000n, // 0.02 MON, about one transaction: clock-outs, holds, closes and invite claims run until then
 } as const;
 

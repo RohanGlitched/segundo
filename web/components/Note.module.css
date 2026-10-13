@@ -82,6 +82,9 @@
   opacity: 0.55;
   letter-spacing: 0.04em;
 }
+.microShort {
+  display: none;
+}
 
 /* One orchestrated moment: on first show the engraving draws in, then only money moves. */
 .engrave .border path,
@@ -214,6 +217,16 @@
   }
   .who {
     font-size: 3.2cqw;
+    /* One line each, so a long name or city can't push the block line down onto the microprint and border. */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .microFull {
+    display: none;
+  }
+  .microShort {
+    display: inline;
   }
   .usd,
   .status {

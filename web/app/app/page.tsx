@@ -165,6 +165,7 @@ export default function YourTabs() {
           <div className={styles.walletNotes}>
             <ErrorLine error={faucet.error} />
             <LandedLine landed={faucet.landed ?? drip.landed} />
+            <ErrorLine error={drip.error ?? null} />
           </div>
         </div>
       </section>

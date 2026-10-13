@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import { bandPaths, bandsFor, seedOf } from "@/lib/guilloche";
 import { useChainNow, useLive } from "@/lib/live";
 import { currency, formatCents, formatMoney, formatUsd, toUsd } from "@/lib/money";
-import { STATE_WORDS, earnedAt, stateOf, type Profile, type TabView } from "@/lib/tabs";
+import { earnedAt, stateOf, stateWord, type Profile, type TabView } from "@/lib/tabs";
 import { Odometer } from "./Odometer";
 import { personOf } from "./TabNote";
 import styles from "./TabRow.module.css";
@@ -40,7 +40,8 @@ export function TabRow({
   const { rates } = useLive();
   const t = view.tab;
   const iAmPayee = t.payee.toLowerCase() === me.toLowerCase();
-  const other = personOf(iAmPayee ? t.payer : t.payee, profiles, iAmPayee ? "" : "invited by link");
+  // No city on their profile: just the name or address (the list can't tell how a freelancer joined).
+  const other = personOf(iAmPayee ? t.payer : t.payee, profiles);
   const payee = personOf(t.payee, profiles);
   const cur = currency(payee.currency);
   const earned = toUsd(earnedAt(t, now));
@@ -65,7 +66,7 @@ export function TabRow({
           </span>
           <span className={`${styles.state} ${state === "working" ? styles.working : ""}`}>
             {state === "working" && <i aria-hidden />}
-            {iAmPayee ? STATE_WORDS[state] : `${STATE_WORDS[state]}, ${Math.round((earned / Math.max(budget, 1e-9)) * 100)}% of budget used`}
+            {iAmPayee ? stateWord(t, state) : `${stateWord(t, state)}, ${Math.round((earned / Math.max(budget, 1e-9)) * 100)}% of budget used`}
           </span>
         </span>
       </Link>

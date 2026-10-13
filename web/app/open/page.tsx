@@ -139,7 +139,9 @@ export default function OpenTab() {
                   : null;
   const covers = rateN > 0 && budgetN > 0 ? formatDuration((budgetN / rateN) * 3600) : "—";
   const previewCur = currency(who === "demo" ? pick.currency : "USD");
-  const previewPayee = who === "demo" ? { name: pick.name, place: pick.place } : { name: "Your freelancer", place: "anywhere" };
+  // From a request link, the note carries the name the freelancer gave, while the address is still the one they sent.
+  const askedName = asked?.from && who === "address" && addr.toLowerCase() === asked.to.toLowerCase() ? asked.from : "";
+  const previewPayee = who === "demo" ? { name: pick.name, place: pick.place } : { name: askedName || "Your freelancer", place: "anywhere" };
   const myName = myProfile?.name || "You";
 
   const submit = () =>
@@ -357,6 +359,7 @@ export default function OpenTab() {
           </p>
           <ErrorLine error={act.error ?? faucet.error} />
           <LandedLine landed={faucet.landed ?? drip.landed} />
+          <ErrorLine error={drip.error ?? null} />
         </form>
 
         <aside className={styles.preview} aria-label="What the freelancer will see">

@@ -16,7 +16,8 @@ export type NoteProps = {
   rateUsd: number; // per hour
   hours: number; // hours worked so far (drives the bands)
   live: boolean; // clock running
-  status: string; // one plain line, e.g. "On the clock for 41 min"
+  status: string; // one plain line, e.g. "This shift: $12.40 (41 min)"
+  span?: string; // what the big amount covers, in place of "in AUSD", e.g. "since the tab opened"
   serialLine?: string; // e.g. "block 67,912,113, paid 2 seconds ago"
   engrave?: boolean; // engrave the lines in once on first show
   lines?: { main: React.ReactNode; extra?: React.ReactNode; sub?: React.ReactNode }; // replaces the "Paid to / by" lines
@@ -28,6 +29,8 @@ const CX = 292;
 const CY = 250;
 const SIZE = 196;
 const BAND_MINUTES = [2, 5, 10, 20, 40, 60, 120];
+/** Where the text column starts on a narrow note (41% of the width, see Note.module.css). */
+const NARROW_TEXT_X = W * 0.41;
 
 const initials = (name: string) =>
   name
@@ -97,7 +100,7 @@ export function Note(p: NoteProps) {
     <figure
       className={`${styles.note} ${p.engrave ? styles.engrave : ""} ${p.live ? styles.isLive : ""}`}
       style={{ ["--note-ink" as string]: cur.ink, ["--note-ink-night" as string]: cur.inkNight }}
-      aria-label={`Tab ${serial}: ${parts ? `${parts.symbol}${parts.whole}.${parts.frac}` : formatUsd(p.usd)} earned by ${p.payee.name}. ${p.status}.`}
+      aria-label={`Tab ${serial}: ${parts ? `${parts.symbol}${parts.whole}.${parts.frac}` : formatUsd(p.usd)} earned by ${p.payee.name}${p.span ? ` ${p.span}` : ""}. ${p.status}.`}
     >
       <svg className={styles.art} viewBox={`0 0 ${W} ${H}`} aria-hidden>
         <defs>
@@ -146,8 +149,15 @@ export function Note(p: NoteProps) {
         <text x={CX} y={CY + 15} textAnchor="middle" className={styles.monogram}>
           {initials(p.payee.name)}
         </text>
-        <text x="58" y={H - 54} className={styles.micro}>
+        <text x="58" y={H - 54} className={`${styles.micro} ${styles.microFull}`}>
           {microprint.slice(0, 260)}
+        </text>
+        {/* On a narrow note the text column reaches the bottom edge, so the microprint stays under the rosette. */}
+        <clipPath id={`micro-${seed}`}>
+          <rect x="0" y="0" width={NARROW_TEXT_X - 24} height={H} />
+        </clipPath>
+        <text x="58" y={H - 54} className={`${styles.micro} ${styles.microShort}`} clipPath={`url(#micro-${seed})`}>
+          {microprint.slice(0, 120)}
         </text>
       </svg>
 
@@ -170,7 +180,7 @@ export function Note(p: NoteProps) {
               <span className={styles.symbol}>—</span>
             )}
           </span>
-          <span className={styles.usd}>{p.lines?.sub ?? `${formatUsd(p.usd, 4)} in AUSD`}</span>
+          <span className={styles.usd}>{p.lines?.sub ?? (p.span ? `${formatUsd(p.usd, 4)} ${p.span}` : `${formatUsd(p.usd, 4)} in AUSD`)}</span>
           <span className={styles.who}>
             {p.lines ? (
               p.lines.main

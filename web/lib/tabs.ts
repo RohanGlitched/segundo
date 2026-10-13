@@ -52,6 +52,15 @@ export const STATE_WORDS: Record<TabState, string> = {
   closed: "Closed",
 };
 
+/**
+ * STATE_WORDS for one tab: a freelancer who has joined but never clocked in hasn't "clocked out" of anything. Nothing
+ * banked and nothing paid means no session has ended yet (a session banks what it earned when it stops).
+ */
+export function stateWord(t: Tab, state: TabState): string {
+  if (state === "idle" && t.banked === 0n && t.paid === 0n) return "Ready to clock in";
+  return STATE_WORDS[state];
+}
+
 export async function readTabs(ids: bigint[]): Promise<TabView[]> {
   if (!ids.length) return [];
   const out: TabView[] = [];

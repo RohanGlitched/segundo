@@ -27,7 +27,10 @@ const when = (iso: string) => (iso ? new Date(iso).toLocaleDateString("en-GB", {
  */
 export function SealedDetails() {
   const wallet = useWallet();
-  const [envelope, setEnvelope] = useState<SealedEnvelope | null>(null);
+  // Read on the first render, not after it: the box then draws once at its final size (locked rows or the
+  // "Add your details" offer) instead of growing by the redacted rows a moment after the page has settled.
+  // Safe without a server render to match: this only renders for a signed-in wallet, which exists only in the browser.
+  const [envelope, setEnvelope] = useState<SealedEnvelope | null>(() => readSealed(wallet.address));
   const [open, setOpen] = useState<Details | null>(null);
   const [draft, setDraft] = useState<Details | null>(null);
   const [busy, setBusy] = useState<"unseal" | "seal" | "restore" | null>(null);

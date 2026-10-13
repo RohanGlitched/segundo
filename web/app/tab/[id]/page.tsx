@@ -31,7 +31,7 @@ function payEvery(secondsOpen: number) {
 const PACE_WORDS: Record<number, string> = {
   6_000: "Paying out every few seconds while this page is open.",
   20_000: "Paying out every 20 seconds while this page stays open.",
-  60_000: "Paying out once a minute while this page stays open. Cash out any time for the rest.",
+  60_000: "Paying out once a minute while this page stays open. Collect the rest whenever you like.",
 };
 
 export default function TabPage() {
@@ -130,7 +130,10 @@ export default function TabPage() {
   if (!views) return <Loading />;
   if (!exists || !t) return <Missing text={`There's no tab № ${id.toString().padStart(4, "0")} yet.`} />;
 
-  const payee = personOf(t.payee, profiles, "invited by link");
+  // "invited by link" only for a freelancer the history shows joining from an invite (the contract clears the invite
+  // key on claim); otherwise a freelancer without a city is just their name or address.
+  const invited = !!lines?.some((l) => l.kind === "claimed");
+  const payee = personOf(t.payee, profiles, invited ? "invited by link" : "");
   const payer = personOf(t.payer, profiles);
   const cur = currency(payee.currency);
   const iAmPayee = me === t.payee.toLowerCase();
@@ -206,7 +209,7 @@ export default function TabPage() {
   return (
     <main className={`wrap ${styles.page}`}>
       <div className={styles.noteWrap}>
-        <TabNote view={view!} profiles={profiles} lastPaidAt={lastPaid?.time} engrave />
+        <TabNote view={view!} profiles={profiles} lastPaidAt={lastPaid?.time} invited={invited} engrave />
         <div className={styles.noteBar}>
           <h1 className={styles.noteTitle}>
             Tab <span className="serial">№ {view!.id.toString().padStart(4, "0")}</span>
@@ -245,7 +248,7 @@ export default function TabPage() {
                     className="btn"
                     disabled={act.busy}
                     onClick={() =>
-                      act.run(`Cashed out ${formatCents(toUsd(owed))}`, async (sent) => {
+                      act.run(`Collected ${formatCents(toUsd(owed))}`, async (sent) => {
                         sent();
                         const r = await settleNow(view!.id);
                         refresh();
@@ -253,7 +256,7 @@ export default function TabPage() {
                       })
                     }
                   >
-                    {act.busy && act.which?.startsWith("Cashed out") ? busyLabel(act.phase, "Cash out") : `Cash out ${formatUsd(toUsd(owed), 2)} now`}
+                    {act.busy && act.which?.startsWith("Collected") ? busyLabel(act.phase, "Collect") : `Collect ${formatUsd(toUsd(owed), 2)} now`}
                   </button>
                 )}
                 {state !== "closed" && closeButton("Close tab")}
