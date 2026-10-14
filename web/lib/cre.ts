@@ -111,6 +111,8 @@ export type Cre = {
   /** RatesPosted logs this server has looked at and ignored (wrong sender or future-dated). */
   ignoredReports: number;
   source: "envio-hyperrpc" | "rpc";
+  /** Why HyperRPC wasn't used, when it is configured (the method and the error, never the URL). */
+  fallback?: string;
   updatedAt: number;
 };
 
@@ -128,17 +130,27 @@ const envioUrl = () => {
   return token ? `https://monad-testnet.rpc.hypersync.xyz/${token}` : null;
 };
 
-/** One JSON-RPC call with a hard timeout. Errors carry the method, never the URL (the HyperRPC URL holds a token). */
+/**
+ * One JSON-RPC call with a hard timeout. Errors carry the method, never the URL (the HyperRPC URL holds a token).
+ * HyperRPC answers 429 after a handful of calls in quick succession, and the ledger (lib/envio.ts) shares its token,
+ * so a 429 is tried once more after a short pause.
+ */
 async function call<T>(url: string, method: string, params: unknown[], ms: number): Promise<T> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-    signal: AbortSignal.timeout(ms),
-    cache: "no-store",
-  }).catch(() => {
-    throw new Error(`${method}: unreachable`);
-  });
+  const send = () =>
+    fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+      signal: AbortSignal.timeout(ms),
+      cache: "no-store",
+    }).catch(() => {
+      throw new Error(`${method}: unreachable`);
+    });
+  let res = await send();
+  if (res.status === 429) {
+    await new Promise((r) => setTimeout(r, 700));
+    res = await send();
+  }
   if (!res.ok) throw new Error(`${method}: HTTP ${res.status}`);
   const body = (await res.json()) as { result?: T; error?: { message?: string } };
   if (body.error) throw new Error(`${method}: ${body.error.message ?? "error"}`);
@@ -190,7 +202,13 @@ async function judge(candidates: Posted[]) {
 /** Every Kept and RatesPosted since the last read, kept per server instance so later reads only ask for new blocks. */
 const seen = { to: KEEPER_DEPLOY_BLOCK - 1n, tabs: 0, keys: new Set<string>(), pending: [] as Posted[] };
 
-async function readLogsEnvio(url: string, head: bigint) {
+/**
+ * Reads the new keeper logs up to HyperRPC's own head (as lib/envio.ts does). The public RPC's head is usually a
+ * little ahead of what HyperRPC has indexed: a range past HyperRPC's head can be refused, and blocks it hasn't
+ * indexed yet would be marked as read and their reports skipped for good on this instance.
+ */
+async function readLogsEnvio(url: string) {
+  const head = BigInt(await call<Hex>(url, "eth_blockNumber", [], 4_000));
   if (head > seen.to) {
     const logs = await call<RawLog[]>(url, "eth_getLogs", [{ address: KEEPER, topics: [TOPICS], fromBlock: hex(seen.to + 1n), toBlock: hex(head) }], 9_000);
     for (const l of logs) {
@@ -248,14 +266,17 @@ async function read(): Promise<Cre> {
 
   let source: Cre["source"] = "rpc";
   let tabs: number | null = null;
+  let fallback: string | undefined;
   const url = envioUrl();
   if (url) {
     try {
-      await readLogsEnvio(url, head);
+      await readLogsEnvio(url);
       source = "envio-hyperrpc";
       tabs = seen.tabs;
-    } catch {
+    } catch (e) {
       // Fall through to the public RPC below.
+      fallback = e instanceof Error ? e.message : "failed";
+      console.warn(`cre: HyperRPC: ${fallback}`);
     }
   }
   const lastReport = Number(lastReportAt);
@@ -283,6 +304,7 @@ async function read(): Promise<Cre> {
     reporters: CRE_REPORTERS,
     ignoredReports: ignored,
     source,
+    ...(fallback ? { fallback } : {}),
     updatedAt: Date.now(),
   };
 }

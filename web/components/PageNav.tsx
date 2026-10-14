@@ -37,9 +37,12 @@ export function PageNav() {
   const [progress, setProgress] = useState(0);
   const [shown, setShown] = useState(false);
   const [covering, setCovering] = useState(false);
+  // The footer has its own links and serials: the rail and the dock step away once it scrolls into view.
+  const [atFoot, setAtFoot] = useState(false);
   const [open, setOpen] = useState(false);
   const listRef = useRef<HTMLUListElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
+  const dockRef = useRef<HTMLDivElement>(null);
 
   // Find the sections after each navigation, and again as the page's live parts fill in.
   useEffect(() => {
@@ -84,14 +87,18 @@ export function PageNav() {
       // At the very bottom the last section is the one being read, however short it is.
       if (max > 0 && window.scrollY >= max - 4) at = sections.length - 1;
       setActive(at);
-      // On a phone the dock steps aside while it would sit on top of one of the page's own buttons.
-      if (window.innerWidth < 720) {
+      const foot = document.querySelector("[data-site-footer]")?.getBoundingClientRect();
+      setAtFoot(!!foot && foot.top < window.innerHeight - 40);
+      // Below the rail's breakpoint the dock steps aside while it would sit on top of anything on the page you can
+      // tap: a button, a link, a field.
+      if (window.innerWidth < 1320) {
         const top = window.innerHeight - 84;
-        const left = window.innerWidth - 340;
+        const dock = dockRef.current?.getBoundingClientRect();
+        const left = dock && dock.width > 0 ? dock.left - 8 : window.innerWidth - 340;
         let over = false;
-        for (const b of document.querySelectorAll<HTMLElement>("main .btn")) {
+        for (const b of document.querySelectorAll<HTMLElement>("main a, main button, main input, main select, main textarea, main summary")) {
           const r = b.getBoundingClientRect();
-          if (r.bottom > top && r.top < window.innerHeight && r.right > left) {
+          if (r.width && r.bottom > top && r.top < window.innerHeight && r.right > left) {
             over = true;
             break;
           }
@@ -163,10 +170,12 @@ export function PageNav() {
   const C = 2 * Math.PI * R;
   const deg = progress * 360;
   const current = sections[active]?.label ?? "";
+  // An open list stays put while you pick from it.
+  const visible = shown && ((!covering && !atFoot) || open);
 
   return (
     <>
-      <nav className={`${styles.rail} ${shown ? styles.on : ""}`} aria-label="Sections on this page">
+      <nav className={`${styles.rail} ${shown && !atFoot ? styles.on : ""}`} aria-label="Sections on this page">
         <ol style={{ ["--fill" as string]: sections.length > 1 ? active / (sections.length - 1) : 0 }}>
           {sections.map((s, i) => (
             <li key={`${i}-${s.label}`}>
@@ -179,7 +188,7 @@ export function PageNav() {
         </ol>
       </nav>
 
-      <div className={`${styles.dock} ${shown && !covering ? styles.on : ""}`}>
+      <div ref={dockRef} className={`${styles.dock} ${visible ? styles.on : ""}`}>
         {open && (
           <ul ref={listRef} className={styles.list} id="page-sections">
             {sections.map((s, i) => (
@@ -201,7 +210,7 @@ export function PageNav() {
           aria-expanded={open}
           aria-controls="page-sections"
           onClick={() => setOpen((o) => !o)}
-          tabIndex={shown && !covering ? 0 : -1}
+          tabIndex={visible ? 0 : -1}
         >
           <span className="visually-hidden">Sections, now reading: </span>
           <span className={styles.whereText}>{current}</span>
@@ -212,7 +221,7 @@ export function PageNav() {
             <path d="M2.5 7.5 6 4l3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
-        <button type="button" className={styles.dial} onClick={top} aria-label="Back to top" title="Back to top" tabIndex={shown && !covering ? 0 : -1}>
+        <button type="button" className={styles.dial} onClick={top} aria-label="Back to top" title="Back to top" tabIndex={visible ? 0 : -1}>
           <svg viewBox="0 0 48 48" width="48" height="48" aria-hidden>
             <circle cx="24" cy="24" r="23" className={styles.face} />
             {Array.from({ length: 12 }, (_, i) => {

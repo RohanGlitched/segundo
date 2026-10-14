@@ -721,14 +721,20 @@
 }
 
 /* Footnote marks: a small serial-red number that links to the source itself. */
+/* Footnote marks: small type, but a 24 px target (WCAG 2.5.8). */
 .ref {
-  display: inline-block;
-  min-width: 1.5em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 24px;
+  min-height: 24px;
   margin-left: 2px;
-  padding: 0 3px;
+  padding: 0 5px;
+  border-radius: 6px;
   font-size: 0.68em;
-  line-height: 1.4;
-  vertical-align: super;
+  line-height: 1;
+  vertical-align: 0.2em;
   text-align: center;
   font-variation-settings: var(--semi);
   font-weight: 650;
@@ -738,6 +744,130 @@
 }
 .ref:hover {
   background: color-mix(in srgb, var(--serial) 12%, transparent);
+}
+
+/* ---------------------------------------------------------------- what the client gets, under the lede */
+.why {
+  margin-top: 4px;
+  padding: 14px 18px 16px;
+  border-left: 3px solid var(--serial);
+  background: var(--sheet);
+  max-width: 64ch;
+}
+.whyHead {
+  margin: 0 0 6px;
+  font-weight: 650;
+  font-size: 15px;
+}
+.why ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+.why li {
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+.why li b {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+/* ---------------------------------------------------------------- the raise, under the founder */
+.ask {
+  margin: 24px 0 0;
+  padding: 16px 20px;
+  border: 1.5px solid var(--ink);
+  border-radius: 10px;
+  background: var(--sheet);
+  max-width: 920px;
+  font-size: 16px;
+  line-height: 1.55;
+}
+.ask b {
+  color: var(--serial);
+}
+
+/* ---------------------------------------------------------------- a long section folded behind its heading */
+.fold {
+  margin-top: 8px;
+  border: 1.5px solid var(--ink);
+  border-radius: 10px;
+  background: var(--sheet);
+}
+.fold > summary {
+  cursor: pointer;
+  list-style: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 16px;
+  padding: 16px 22px;
+  border-radius: 10px;
+}
+.fold > summary::-webkit-details-marker {
+  display: none;
+}
+.fold > summary::after {
+  content: "+";
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  font-size: 30px;
+  font-weight: 300;
+  line-height: 1;
+  color: var(--serial);
+  transition: transform 0.2s;
+}
+.fold[open] > summary::after {
+  transform: rotate(45deg);
+}
+.fold > summary:hover {
+  background: color-mix(in srgb, var(--serial) 5%, transparent);
+}
+.fold > summary:focus-visible {
+  outline: 2px solid var(--intaglio);
+  outline-offset: 2px;
+}
+.foldHead {
+  font-weight: 650;
+  font-size: 17px;
+}
+.foldSub {
+  grid-column: 1;
+  font-size: 14.5px;
+  color: var(--ink-soft);
+}
+.foldBody {
+  padding: 4px 22px 26px;
+  animation: foldOpen 0.25s ease-out;
+}
+.foldBody > :first-child {
+  margin-top: 0;
+}
+@keyframes foldOpen {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .foldBody {
+    animation: none;
+  }
+  .fold > summary::after {
+    transition: none;
+  }
+}
+@media (max-width: 640px) {
+  .fold > summary {
+    padding: 14px 16px;
+  }
+  .foldBody {
+    padding: 2px 14px 20px;
+  }
 }
 
 /* ---------------------------------------------------------------- the contract as a public good */
@@ -1035,6 +1165,9 @@
     overflow-x: auto;
     scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
+    /* A fade at the right edge says the row scrolls. */
+    -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 40px), transparent 100%);
+    mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 40px), transparent 100%);
   }
   .contents::-webkit-scrollbar {
     display: none;

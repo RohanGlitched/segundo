@@ -10,8 +10,13 @@ import { Money } from "@/components/home/Money";
 import { NoteAnatomy } from "@/components/home/NoteAnatomy";
 import { UnderLoad } from "@/components/home/UnderLoad";
 import { WorldClock } from "@/components/home/WorldClock";
+import { headroom } from "@/components/business/economics";
 import { NetworkProvider } from "@/lib/network";
+import bench from "@/public/bench.json";
 import styles from "./page.module.css";
+
+/** Gas room in the busiest block of the recorded load test (public/bench.json), the same figure /network prints. */
+const room = headroom(bench.perBlock, bench.blockTime.avgMs);
 
 const STEPS = [
   {
@@ -27,7 +32,7 @@ const STEPS = [
   {
     who: "Both",
     title: "Paid as you go",
-    body: "Earned pay lands in the freelancer's wallet every few seconds while the tab is on screen, every few minutes otherwise. Close the tab and the unspent budget, with its share of the fee, goes straight back.",
+    body: "Earned pay lands in the freelancer's wallet as they work: every few seconds at first while the tab is on screen, easing to once a minute, and every 5 minutes otherwise. On mainnet: every 10 seconds, batched. Close the tab and the unspent budget, with its share of the fee, goes straight back.",
   },
 ];
 
@@ -144,12 +149,35 @@ export default function Home() {
         <section className={`wrap ${styles.section} ${styles.monad}`} aria-labelledby="monad" data-nav="Why Monad">
           <div className={styles.sectionHead}>
             <h2 id="monad" className={styles.h2}>
-              Why this needs Monad
+              Why Monad, and not Base or Solana
             </h2>
             <p className={styles.sub}>
-              Paying by the second means a payout every few seconds for everyone on the clock. That needs blocks fast enough to watch, and room for
-              everyone&apos;s payday at once. We measured both on Segundo&apos;s own contract.
+              Any fast chain can show a number counting up. Paying it out, many times a minute, to everyone on the clock at once, is the part that needs
+              room. We measured it on Segundo&apos;s own contract.
             </p>
+          </div>
+          <div className={styles.points}>
+            <div>
+              <h3>Counting seconds is free anywhere</h3>
+              <p>
+                Pay is counted from timestamps, so the clock runs on any chain, and Base, Solana and Arbitrum all have blocks fast enough to watch. We
+                don&apos;t claim the clock needs Monad.
+              </p>
+            </div>
+            <div>
+              <h3>Paying them out is the hard part</h3>
+              <p>
+                Every payout is a real AUSD transaction. In our test {room.payouts} payouts used {room.pct}% of one Monad block: room for about{" "}
+                <b>{room.perBlock.toLocaleString("en-US")} payouts a block</b>, at a fraction of a cent each.
+              </p>
+            </div>
+            <div>
+              <h3>Built for how Monad charges</h3>
+              <p>
+                Monad charges the gas limit, not the gas used, so the relayer estimates every call and caps what it asks for. Payouts go out from a pool
+                of keys, so one address is never the queue.
+              </p>
+            </div>
           </div>
           <BlockTape show="tape" />
           <UnderLoad reasons />

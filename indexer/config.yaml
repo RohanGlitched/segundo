@@ -5,9 +5,10 @@ description: >-
   exchange rates Segundo's Chainlink CRE workflow posts on chain. Read through Envio HyperSync.
 # Addresses are stored and matched in lower case, so the web app can query by `address.toLowerCase()`.
 address_format: lowercase
-# Every handler records the transaction hash (block number and time come with every event).
+# Every handler records the transaction hash (block number and time come with every event). The sender (`from`)
+# tells Segundo's own CRE reports from anyone else's call to the open MockKeystoneForwarder (src/handlers/SegundoKeeper.ts).
 field_selection:
-  transaction_fields: [hash]
+  transaction_fields: [hash, from]
 
 contracts:
   # The tab contract, deployed under Segundo's working name, Till.

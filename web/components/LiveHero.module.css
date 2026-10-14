@@ -13,6 +13,12 @@
   font-size: 14px;
   color: var(--ink-soft);
 }
+.pending {
+  color: var(--intaglio);
+  opacity: 0.55;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .specimen {
   position: relative;
 }

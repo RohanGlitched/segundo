@@ -62,16 +62,16 @@ export function UnderLoad({ className, reasons }: { className?: string; reasons?
               <dt>Payout transactions a second</dt>
               <dd className="denom">{n(bench.txPerS, 1)}</dd>
               <dd className={styles.loadSub}>
-                {n(bench.txs)} in {n(bench.durationS, 2)} s from {n(bench.senders)} senders{bench.succeeded != null ? `; ${n(bench.succeeded)} succeeded, ${n(bench.txs! - bench.succeeded)} ran out of gas` : ""}
+                {n(bench.txs)} in {n(bench.durationS, 2)} s from {n(bench.senders)} senders: the load we sent, not Monad&apos;s limit{bench.succeeded != null ? `; ${n(bench.succeeded)} succeeded, ${n(bench.txs! - bench.succeeded)} ran out of gas` : ""}
               </dd>
-              {reasons && <dd className={styles.loadWhy}>So one relayer can pay a whole payroll.</dd>}
+              {reasons && <dd className={styles.loadWhy}>So a pool of relayer keys can pay a whole payroll.</dd>}
             </div>
             <div>
               <dt>Most in one block</dt>
               <dd className="denom">{n(bench.perBlockMax)}</dd>
               <dd className={styles.loadSub}>
                 {bench.fullestBlockPct != null
-                  ? `that block was ${n(bench.fullestBlockPct, 1)}% full, so it had room for many times more`
+                  ? `that block was ${n(bench.fullestBlockPct, 1)}% full: room for about ${n(Math.floor(bench.perBlockMax! / (bench.fullestBlockPct / 100) / 100) * 100)} payouts a block`
                   : bench.pipelined?.perBlockMax != null
                     ? `${n(bench.pipelined.perBlockMax)} from a single key`
                     : "payouts in a single block"}
@@ -81,7 +81,9 @@ export function UnderLoad({ className, reasons }: { className?: string; reasons?
             <div>
               <dt>Send to block</dt>
               <dd className="denom">{secs(bench.p50ms)}</dd>
-              <dd className={styles.loadSub}>median, from sending to the block holding it; {secs(bench.p90ms)} for nine in ten</dd>
+              <dd className={styles.loadSub}>
+                median, from sending to the first block header holding it (not yet finalized); {secs(bench.p90ms)} for nine in ten
+              </dd>
               {reasons && <dd className={styles.loadWhy}>So a payout lands while you&apos;re still looking.</dd>}
             </div>
             <div>

@@ -6,7 +6,7 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { TREASURY, monadTestnet } from "./chain";
 import type { MeraUnlocked } from "./mera";
 import type { PrivyCalls, PrivyMountProps, PrivyState } from "./privy-bridge";
-import { FRESH_MS, PROMPT_FREE_UNITS } from "./mera-policy";
+import { FRESH_MS, needsFreshPasskey, type PasskeySession } from "./mera-policy";
 import { formatUsd, toUsd } from "./money";
 
 /**
@@ -51,6 +51,11 @@ export type Wallet = {
   /** Mera only: ask for the passkey now, so the next signatures don't have to. */
   unlock?: () => Promise<void>;
   /**
+   * Mera only: what this signing session has sent, opened or topped up since the last passkey prompt. Past the rolling
+   * budget (SESSION_BUDGET_UNITS) the next send asks again; `asksForPasskey` and `passkeyHint` read it.
+   */
+  session?: PasskeySession;
+  /**
    * Passkey accounts: ask for the passkey again before a sensitive action, even inside an unlocked session (see
    * PROMPT_FREE_UNITS). Resolves at once for email and practice wallets. `reason` ("Sending $120.00") names the
    * action if the prompt is closed. Call it first in a tap handler: Safari only shows a passkey prompt shortly after a tap.
@@ -73,25 +78,26 @@ export type AccountsMode = "full" | "mera" | "pending";
 
 /**
  * The policy (lib/mera-policy.ts) is enforced here, in the signer: Mera's signTypedData below reads what is being
- * signed, so every page follows it. Over $50, an AUSD transfer or permit needs a fresh passkey check. Segundo's 1% fee
- * is exempt: it signs with the open or top-up whose permit already asked. A passkey prompt finished in the last minute
- * (signing in, unlocking, an invite key) counts once, so nothing asks twice in a row. Email (Privy) and practice
- * wallets are unchanged.
+ * signed, so every page follows it. Every AUSD transfer or permit counts against a rolling $50 budget: one over $50,
+ * or one that takes what has moved since the last passkey prompt past $50, needs a fresh passkey check, and that
+ * check starts the budget over. Segundo's 1% fee is exempt: it signs with the open or top-up whose permit already
+ * counted. A passkey prompt finished in the last minute (signing in, unlocking, an invite key) counts once, and only
+ * while nothing has been spent on it, so nothing asks twice in a row. Email (Privy) and practice wallets are unchanged.
  */
-export { PROMPT_FREE_LABEL, PROMPT_FREE_UNITS, asksForPasskey } from "./mera-policy";
+export { PROMPT_FREE_LABEL, PROMPT_FREE_UNITS, SESSION_BUDGET_LABEL, SESSION_BUDGET_UNITS, asksForPasskey, budgetLeft, passkeyHint } from "./mera-policy";
 
 const usdOf = (units: bigint) => formatUsd(toUsd(units));
 
-/** The action a typed-data signature stands for, if it needs a fresh passkey check; null when the session covers it. */
-function sensitiveReason(data: TypedDataDefinition): string | null {
+/** What a typed-data signature moves out of the account (a send, or a permit for an open or top-up); null for the rest. */
+function spendOf(data: TypedDataDefinition): { units: bigint; reason: string } | null {
   const m = data.message as Record<string, unknown> | undefined;
   const value = typeof m?.value === "bigint" ? m.value : null;
-  if (value == null || value <= PROMPT_FREE_UNITS) return null;
+  if (value == null || value <= 0n) return null;
   if (data.primaryType === "TransferWithAuthorization") {
     const to = typeof m?.to === "string" ? m.to.toLowerCase() : "";
-    return to === TREASURY.toLowerCase() ? null : `Sending ${usdOf(value)}`;
+    return to === TREASURY.toLowerCase() ? null : { units: value, reason: `Sending ${usdOf(value)}` };
   }
-  if (data.primaryType === "Permit") return `Putting ${usdOf(value)} into a tab`;
+  if (data.primaryType === "Permit") return { units: value, reason: `Putting ${usdOf(value)} into a tab` };
   return null;
 }
 
@@ -211,6 +217,13 @@ function useMeraAccount(onSignedIn: () => void) {
   const spentAssertion = useRef(0);
   /** Set by confirmWithPasskey: the next sensitive signature within a minute uses that check instead of asking again. */
   const grant = useRef(0);
+  /** AUSD units sent, opened or topped up since the last passkey prompt: the rolling budget (SESSION_BUDGET_UNITS). */
+  const spent = useRef(0n);
+  const [spentNow, setSpentNow] = useState(0n);
+  const setSpent = useCallback((v: bigint) => {
+    spent.current = v;
+    setSpentNow(v);
+  }, []);
   /** Bumped by every lock: a passkey prompt that finishes after a lock or sign-out must not sign anyone back in. */
   const epoch = useRef(0);
   const signedInHook = useRef(onSignedIn);
@@ -234,15 +247,18 @@ function useMeraAccount(onSignedIn: () => void) {
     live.current = null;
     sealKey.current = null;
     grant.current = 0;
+    setSpent(0n);
     setUnlocked(false);
     // Anything showing unsealed details (components/SealedDetails.tsx) clears itself on this.
     window.dispatchEvent(new Event("segundo:lock"));
-  }, []);
+  }, [setSpent]);
 
+  /** Every passkey prompt that opens the account lands here, and starts the session's budget over. */
   const adopt = useCallback((u: MeraUnlocked) => {
     if (live.current && live.current !== u) live.current.session.end();
     live.current = u;
     lastActive.current = Date.now();
+    setSpent(0n);
     const r: MeraRecord = {
       credentialId: u.credential.credentialId,
       ...(u.credential.transports ? { transports: [...u.credential.transports] } : {}),
@@ -254,7 +270,7 @@ function useMeraAccount(onSignedIn: () => void) {
     setRecord(r);
     setUnlocked(true);
     signedInHook.current();
-  }, []);
+  }, [setSpent]);
 
   const signUp = useCallback(async () => {
     const m = meraModule ?? (await loadMera());
@@ -317,9 +333,9 @@ function useMeraAccount(onSignedIn: () => void) {
 
   /**
    * A fresh passkey check for one sensitive action. A prompt this passkey finished in the last minute that no other
-   * sensitive action has used counts (signing in, then sending $80, is one prompt). Otherwise it asks: the assertion
-   * re-derives the account, must give the same address, and replaces the signing session, so a locked session is
-   * unlocked by the same prompt.
+   * sensitive action has used counts (signing in, then sending $80, is one prompt), as long as the session hasn't
+   * spent anything since it. Otherwise it asks: the assertion re-derives the account, must give the same address, and
+   * replaces the signing session, so a locked session is unlocked by the same prompt.
    */
   const check = useCallback(
     async (reason: string): Promise<void> => {
@@ -327,7 +343,7 @@ function useMeraAccount(onSignedIn: () => void) {
       if (!r?.signedIn) throw new Error("Sign in first.");
       const m = meraModule ?? (await loadMera());
       const at = m.lastAssertion(r.credentialId);
-      if (at > spentAssertion.current && Date.now() - at < FRESH_MS) {
+      if (at > spentAssertion.current && Date.now() - at < FRESH_MS && spent.current === 0n) {
         spentAssertion.current = at;
         return;
       }
@@ -453,19 +469,26 @@ function useMeraAccount(onSignedIn: () => void) {
     lock,
     sealingKey,
     confirmWithPasskey,
+    session: { spent: spentNow },
     signTypedData: async (data: TypedDataDefinition) => {
-      // Above $50 the session alone isn't enough: one fresh passkey check per transfer or permit (see PROMPT_FREE_UNITS).
-      const reason = sensitiveReason(data);
-      if (reason) {
+      // Over $50 at once, or past the rolling $50 since the last prompt, the session alone isn't enough: a fresh
+      // passkey check covers this one and starts the budget over (lib/mera-policy.ts).
+      const spend = spendOf(data);
+      let covered = false;
+      if (spend && needsFreshPasskey(spent.current, spend.units)) {
         if (grant.current > Date.now()) grant.current = 0;
-        else await check(reason);
+        else await check(spend.reason);
+        covered = true;
       }
       const u = await ensure();
+      let sig: Hex;
       try {
-        return await u.account.signTypedData(data as never);
+        sig = await u.account.signTypedData(data as never);
       } catch (e) {
         throw new Error((meraModule ?? (await loadMera())).meraMessage(e));
       }
+      if (spend) setSpent(covered ? 0n : spent.current + spend.units);
+      return sig;
     },
     signMessage: async (raw: Hex) => {
       const u = await ensure();
@@ -497,6 +520,7 @@ function meraWallet(mera: MeraAccount, base: Base, alsoOut: () => void): Wallet 
     unlocked: mera.unlocked,
     lock: mera.lock,
     unlock: mera.unlock,
+    session: mera.session,
     mera: { credentialId: mera.credentialId!, sealingKey: mera.sealingKey },
     confirmWithPasskey: mera.confirmWithPasskey,
     signOut: () => {

@@ -32,7 +32,7 @@ const f2 = (n: number) => Math.round(n * 100) / 100;
  * A 24-hour dial: night is the dark half, the working day is the red arc, the hand is local time.
  * Drawn per city so the strip reads like a row of world clocks in a newsroom.
  */
-function Dial({ h, m, ink, working }: { h: number; m: number; ink: string; working: boolean }) {
+function Dial({ h, m, working }: { h: number; m: number; working: boolean }) {
   const angle = ((h + m / 60) / 24) * Math.PI * 2 - Math.PI / 2;
   const arc = (from: number, to: number, r: number) => {
     const a0 = (from / 24) * Math.PI * 2 - Math.PI / 2;
@@ -50,8 +50,8 @@ function Dial({ h, m, ink, working }: { h: number; m: number; ink: string; worki
         const r0 = i % 6 === 0 ? 30 : 33;
         return <line key={i} x1={f2(50 + r0 * Math.cos(a))} y1={f2(50 + r0 * Math.sin(a))} x2={f2(50 + 35 * Math.cos(a))} y2={f2(50 + 35 * Math.sin(a))} stroke="var(--ink-soft)" strokeWidth={i % 6 === 0 ? 1.4 : 0.7} />;
       })}
-      <line x1="50" y1="50" x2={f2(50 + 40 * Math.cos(angle))} y2={f2(50 + 40 * Math.sin(angle))} stroke={ink} strokeWidth="2.4" strokeLinecap="round" />
-      <circle cx="50" cy="50" r="3.2" fill={ink} />
+      <line x1="50" y1="50" x2={f2(50 + 40 * Math.cos(angle))} y2={f2(50 + 40 * Math.sin(angle))} stroke="var(--c)" strokeWidth="2.4" strokeLinecap="round" />
+      <circle cx="50" cy="50" r="3.2" fill="var(--c)" />
     </svg>
   );
 }
@@ -93,7 +93,7 @@ function Clocks({ listRef }: { listRef: RefObject<HTMLUListElement | null> }) {
         const status = working ? "On the clock" : t.h >= 9 && t.h < 18 ? "Between sessions" : "Off for the day";
         const body = (
           <>
-            <Dial h={t.h} m={t.m} ink={cur.ink} working={working} />
+            <Dial h={t.h} m={t.m} working={working} />
             <span className={styles.city}>
               {f.place} <span className="soft">{t.label}</span>
             </span>
@@ -101,7 +101,7 @@ function Clocks({ listRef }: { listRef: RefObject<HTMLUListElement | null> }) {
               {f.name}
               {payer ? `, for ${payer.name}` : ""}
             </span>
-            <span className={`denom ${styles.cityAmount}`} style={{ color: cur.ink }}>
+            <span className={`denom ${styles.cityAmount}`}>
               {tab && rates ? <Odometer value={formatMoney(usd, cur, rates)} /> : "—"}
             </span>
             <span className={`${styles.cityState} ${working ? styles.on : ""}`}>
@@ -111,7 +111,8 @@ function Clocks({ listRef }: { listRef: RefObject<HTMLUListElement | null> }) {
           </>
         );
         return (
-          <li key={f.address} className={styles.cityItem}>
+          // Each city prints in its currency's ink; the night ink takes over in dark mode (home.module.css).
+          <li key={f.address} className={styles.cityItem} style={{ ["--c-day" as string]: cur.ink, ["--c-night" as string]: cur.inkNight }}>
             {tab ? (
               <Link href={`/tab/${tab.id}`} className={styles.cityLink}>
                 {body}

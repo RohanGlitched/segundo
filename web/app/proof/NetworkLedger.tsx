@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { formatDuration, formatUsd, toUsd } from "@/lib/money";
 import styles from "./lookup.module.css";
 
+/** Only until /api/envio answers: the reply names the endpoint it read (lib/hyperindex.ts HYPERINDEX_URL). */
 const ENDPOINT = "https://indexer.dev.hyperindex.xyz/bd7a257/v1/graphql";
 const SOURCE = "https://github.com/RohanGlitched/segundo/tree/main/indexer";
 
@@ -11,6 +12,7 @@ type Day = { day: string; paid: string; payouts: number; tabs: number; seconds: 
 /** What /api/envio answers (lib/hyperindex.ts, or the HyperRPC ledger in lib/envio.ts as a fallback). */
 type Reply = {
   from: "envio-hyperindex" | "envio-hyperrpc";
+  endpoint?: string;
   lagging?: boolean;
   reason?: string | null;
   asOf?: string;
@@ -162,7 +164,7 @@ export function NetworkLedger() {
           </>
         )}{" "}
         ·{" "}
-        <a href={ENDPOINT} target="_blank" rel="noreferrer">
+        <a href={data.endpoint ?? ENDPOINT} target="_blank" rel="noreferrer">
           GraphQL
         </a>{" "}
         ·{" "}

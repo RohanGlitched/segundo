@@ -24,7 +24,7 @@
 
 **Main contract:** Segundo's escrow is deployed under its working name, **Till** ([`Till.sol`](contracts/src/Till.sol)): [`0xeb6c2c519c9bcc4495364c34ac116c20098113d1`](https://testnet.monadvision.com/address/0xeb6c2c519c9bcc4495364c34ac116c20098113d1) on Monad testnet (chain 10143), Sourcify exact match, no owner, no admin key, no upgrade path. Wherever this repo says "Till", it means that contract.
 
-**Monad, measured** ([/network](https://segundo.world/network), [`bench.json`](web/public/bench.json)): **480 payouts in 4.67 s (102.8 a second)** from 16 keys · **96 in one block**, which was only 8.1% full · send to block **0.92 s** median · **0.305 s** average block time over 10,000 blocks.
+**Monad, measured** ([/network](https://segundo.world/network), [`bench.json`](web/public/bench.json)): **480 payouts in 4.67 s (102.8 a second)** from 16 keys, the load our generator sent, not Monad's limit · **96 in one block**, which was only 8.1% full · send to the first block header **0.92 s** median · **0.305 s** average block time over 10,000 blocks.
 
 | Bounty | What we built | Where to look | Proof |
 |---|---|---|---|
@@ -32,7 +32,7 @@
 | **Privy**: beyond authentication | Embedded wallet signs every EIP-712 request; pregenerated wallets for email recipients over the REST API; key export | [Privy section](#privy-beyond-authentication), [`privy-server.ts`](web/lib/privy-server.ts), [`api/recipient`](web/app/api/recipient/route.ts) | [/privy](https://segundo.world/privy) · [video](https://youtu.be/p4O6ybALmYk) |
 | **Mera**: one passkey, many keys (PRF) | Four keys from four PRF salts: wallet, sealing, invite links rebuilt from chain, selective disclosure to a verifier | [Mera section](#mera-one-passkey-many-keys), [`keys.ts`](web/lib/keys.ts), [`disclose.ts`](web/lib/disclose.ts) | [/keys](https://segundo.world/keys) · [fee paid by a fresh Mera account](https://testnet.monadvision.com/tx/0xe1b850e8d7c93a155af39ee6e7173b77e42fdd2709cb823d047c936cb2888e31) |
 | **Mera**: passkey onboarding | One tap to an account, 15-minute signing sessions, claim a send link with a fingerprint, a passkey-only site | [Onboarding section](#mera-passkey-onboarding-people-dont-notice), [`mera.ts`](web/lib/mera.ts) | [mera.segundo.world](https://mera.segundo.world) · [demo video](https://youtu.be/U6be6-HecJI) |
-| **Envio** | HyperRPC drives stats, history, income statements and refund fallback; a HyperIndex project deployed and synced | [Envio section](#envio-hyperrpc-drives-the-history-statements-and-revenue), [`envio.ts`](web/lib/envio.ts), [`indexer/`](indexer) | [Income statement](https://segundo.world/proof/0x6dbb63ef35dF64E9423776bBf7a4c0a64565A160) · [GraphQL](https://indexer.dev.hyperindex.xyz/bd7a257/v1/graphql) |
+| **Envio** | A hosted HyperIndex project feeds each income statement's lifetime record and the network ledger on /proof; HyperRPC drives stats, history, statement lines and the refund fallback | [Envio section](#envio-hyperindex-and-hyperrpc-behind-the-statements-history-and-revenue), [`envio.ts`](web/lib/envio.ts), [`indexer/`](indexer) | [Income statement](https://segundo.world/proof/0x6dbb63ef35dF64E9423776bBf7a4c0a64565A160) · [GraphQL](https://indexer.dev.hyperindex.xyz/bd7a257/v1/graphql) |
 | **Chainlink CRE** | A keeper and FX workflow (EVM read, HTTP, consensus, report, write), run with `cre workflow simulate --broadcast` on Monad testnet every 2 hours; not yet on a live DON | [CRE section](#chainlink-cre-a-keeper-and-an-fx-oracle-simulated-with---broadcast), [`workflow.ts`](cre/segundo-keeper/workflow.ts), [`SegundoKeeper.sol`](cre/contracts/src/SegundoKeeper.sol) | [Report tx](https://testnet.monadvision.com/tx/0x02b79463789b20c0d609387ceb8789a1c7e446daa5c32871bf634e42d5ef1418) · [SIMULATION.md](cre/SIMULATION.md) · [video](https://youtu.be/j2xxcSlUxtk) |
 
 **Why not Sablier or Superfluid?** Streams pay continuously too. Segundo is built around how hourly work runs: the freelancer clocks in and out, so pay accrues only while they are working, against a budget the client can pause, top up or close at any second with the unspent part refunded in the same block. On top of that come passkey sign-up with no gas, a 1% client fee (freelancers pay nothing), amounts in the freelancer's own currency, and income statements a landlord or bank can check.
@@ -61,7 +61,7 @@
 | **Privy in Segundo** | [segundo.world/privy](https://segundo.world/privy) |
 | **Cash out** | [segundo.world/cashout](https://segundo.world/cashout): five corridors, simulated on testnet |
 | **Request a tab** | [segundo.world/request](https://segundo.world/request): a freelancer's link that fills in the client's form |
-| **Income statement** | [A demo freelancer's statement](https://segundo.world/proof/0x6dbb63ef35dF64E9423776bBf7a4c0a64565A160) (Ana Reyes, Manila), rebuilt from Monad through Envio HyperRPC |
+| **Income statement** | [A demo freelancer's statement](https://segundo.world/proof/0x6dbb63ef35dF64E9423776bBf7a4c0a64565A160) (Ana Reyes, Manila), rebuilt from Monad through Envio (HyperIndex record, HyperRPC lines) |
 | **Check it** | [VERIFY.md](VERIFY.md) (every action, the fee and its refunds on chain) · [SECURITY.md](SECURITY.md) · [cre/SIMULATION.md](cre/SIMULATION.md) |
 
 ## Contents
@@ -74,7 +74,7 @@ Freelancers outside the US and Europe wait for their money and pay to receive it
 
 | | |
 |---|---|
-| **6.36%** | average cost of sending money across borders ([World Bank, Remittance Prices Worldwide, Q3 2025](https://remittanceprices.worldbank.org/sites/default/files/2026-04/RPW_main_report_and_annex_Q325.pdf)) |
+| **6.36%** | the World Bank's average for sending $200 across borders (Q3 2025), a consumer transfer ([Remittance Prices Worldwide](https://remittanceprices.worldbank.org/sites/default/files/2026-04/RPW_main_report_and_annex_Q325.pdf)) |
 | **10 days** | before hourly marketplace pay is released after the work week ([Upwork Help Center](https://support.upwork.com/hc/en-us/articles/211063668-How-payments-for-hourly-contracts-work)) |
 | **up to 435M** | online gig workers worldwide, 154M to 435M ([World Bank, 2023](https://openknowledge.worldbank.org/entities/publication/ebc4a7e2-85c6-467b-8713-e2d77e954c6c)) |
 
@@ -82,7 +82,7 @@ And if a client disappears, the freelancer chases an invoice for work already do
 
 ## How it works
 
-A client opens a **tab**: an hourly rate and a budget in **AUSD**, Agora's digital dollar. The budget waits in a contract on Monad that can only pay the freelancer for time on the clock or send it back to the client. While the freelancer is **clocked in**, pay builds up every second; while the tab is open on screen it lands in their wallet every few seconds. Either side can stop the clock at any moment, the client can pause pay or top up, and closing the tab returns every unspent cent in the same block.
+A client opens a **tab**: an hourly rate and a budget in **AUSD**, Agora's digital dollar. The budget waits in a contract on Monad that can only pay the freelancer for time on the clock or send it back to the client. While the freelancer is **clocked in**, pay builds up every second. On testnet, while the tab is open on screen, it lands in their wallet every 6 seconds for the first two minutes, then every 20 seconds, then once a minute; otherwise the keeper pays it every 5 minutes. On mainnet the plan is every 10 seconds on screen, batched. Either side can stop the clock at any moment, the client can pause pay or top up, and closing the tab returns every unspent cent in the same block.
 
 Everyone signs in with a **passkey** (or email), nobody needs gas, and the app installs on a phone. Money moves on in three more ways: **send AUSD** by link, to an email address or to a wallet; **cash out** to a local corridor (simulated on testnet); and a freelancer can **request a tab** with one link.
 
@@ -101,7 +101,7 @@ sequenceDiagram
     Note over R,Y: if the open fails, the treasury sends the whole fee back
     F->>R: sign "clock in"
     R->>T: clockIn
-    loop every few seconds while the tab is open
+    loop while the tab is open: every 6 s, easing to once a minute
         R->>T: settle(id)
         T-->>F: AUSD earned so far
     end
@@ -122,7 +122,7 @@ sequenceDiagram
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screens/tab-live.png" alt="A tab paying out live" /><br/><sub><b>A live tab.</b> Payouts every few seconds while the page is open, each with how long it took to land.</sub></td>
+    <td width="50%"><img src="docs/screens/tab-live.png" alt="A tab paying out live" /><br/><sub><b>A live tab.</b> Payouts every 6 s at first while the page is open, easing to once a minute, each with how long it took to land.</sub></td>
     <td width="50%"><img src="docs/screens/network.png" alt="Segundo on Monad, measured" /><br/><sub><b>Monad, measured.</b> 480 payouts from 16 keys in 4.67 s, 96 in one block, every transaction linked.</sub></td>
   </tr>
   <tr>
@@ -134,7 +134,7 @@ sequenceDiagram
     <td><img src="docs/screens/open-request.png" alt="The client's form, filled from a request link" /><br/><sub><b>The client's side.</b> The link fills the form and shows the address in groups of four to check before funding.</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/screens/business-live.png" alt="Revenue, live from the chain" /><br/><sub><b>Revenue, live from the chain.</b> Fees matched to funding, net of refunds, split into our demo studios and everyone else.</sub></td>
+    <td><img src="docs/screens/business-live.png" alt="Revenue, live from the chain" /><br/><sub><b>Revenue, live from the chain.</b> Fees matched to funding, net of refunds, split into outside wallets, the team's test wallets and our demo studios.</sub></td>
     <td><img src="docs/screens/income-statement.png" alt="Income statement" /><br/><sub><b>Income statement.</b> Every payout a freelancer received, in their currency, each line a Monad transaction.</sub></td>
   </tr>
 </table>
@@ -150,22 +150,24 @@ sequenceDiagram
 
 **Clients pay a 1% fee on top of every budget and top-up. Freelancers pay nothing.** A $1,000 budget costs the client $1,010 and the whole $1,000 stays available to the freelancer. When the tab closes, the unspent budget goes back to the client and so does 1% of it, so the client pays 1% of what was actually worked. The fee also pays for everyone's gas.
 
+For the 1% the client pays only for seconds worked and can pause at any second, processes no invoices (each tab's statement from the chain is the invoice), pays no outgoing wire fees, and pays freelancers in five countries from one balance. Contractor-management seats such as Deel ($49) and Remote (from $29 a month) do a different job, contracts and tax forms; Segundo is the pay rail. Turning pay into local money costs a cash-out partner's spread (assumed 1% on [/cashout](https://segundo.world/cashout)), and Segundo's share comes out of that spread, never on top.
+
 It is **live on testnet** ([`web/app/api/relay/route.ts`](web/app/api/relay/route.ts), [`web/lib/refund.ts`](web/lib/refund.ts)):
 
 - **Fee first.** The client signs an AUSD transfer authorisation (EIP-3009) of the fee to the treasury in the same step as the open or top-up. The relayer checks it, simulates it, sends it, and only then sends the open. Collected first, the fee can't be dodged by moving the money away in between.
 - **Failed open, whole fee back.** If the open or top-up then fails, the treasury sends the whole fee back at once.
 - **1% of the unspent budget back at close.** The treasury signs an EIP-3009 transfer, the relayer submits it (the treasury never needs MON), and its nonce is derived from the tab id, so AUSD itself refuses a second refund for the same tab.
 
-The full cycle is on chain in [VERIFY.md](VERIFY.md#the-1-fee-on-chain): fee → open → close → refund of 17,200 units (1% of the 1,720,000 returned), and a forced failure whose fee came straight back. The demo studios pay the fee too.
+The full cycle is on chain in [VERIFY.md](VERIFY.md#the-1-fee-on-chain): fee → open → close → refund of 17,200 units (1% of the 1,720,000 returned), and a forced failure whose fee came straight back. Tabs opened since the fee went live (block 70,674,000, Oct 13) pay it, the demo studios' new ones included; the demo studios' older tabs don't.
 
 | Revenue line | Status |
 |---|---|
 | 1% client fee on every budget and top-up, net of the close-time refund | **Live on testnet** |
-| A share of the reserve yield on budgets waiting in tabs (Agora shares AUSD treasury yield with partners: [LayerZero x Agora](https://layerzero.network/blog/agora-and-layerzero-bring-ausd-to-5-blockchains)) | Next, with mainnet |
+| A share of the reserve yield on budgets waiting in tabs, part of it passed back to the client (Agora shares AUSD treasury yield with partners: [LayerZero x Agora](https://layerzero.network/blog/agora-and-layerzero-bring-ausd-to-5-blockchains)) | Next, with mainnet |
 | A share of the spread on cash-outs through licensed local payout partners ([/cashout](https://segundo.world/cashout)) | Simulated on testnet; no partner signed |
 | Advances against verified on-chain income (the income statement is the underwriting record) | Later |
 
-The [business page](https://segundo.world/business) shows the treasury live: fees counted only when matched to an open or top-up, net of refunds, with any unmatched opens listed; tabs and pay split into **our demo studios** and **everyone else**; gas per action averaged from the relayer's own receipts (a payout 97,673 gas, a forwarded open 512,162, a fee or refund transfer 113,517); and a calculator that gives the MON price at which gas would eat the whole fee.
+The [business page](https://segundo.world/business) shows the treasury live: fees counted only when matched to an open or top-up, net of refunds, with any unmatched opens listed; tabs and pay split into **outside wallets**, **the team's own test wallets** (public in VERIFY.md) and **our demo studios**; gas per action averaged from the relayer's own receipts (a payout 97,673 gas, a forwarded open 512,162, a fee or refund transfer 113,517); and a calculator that gives the MON price at which gas would eat the whole fee.
 
 ## Bounties
 
@@ -179,7 +181,7 @@ The [business page](https://segundo.world/business) shows the treasury live: fee
 | **Get paid** | Tabs pay by the second in AUSD (EIP-2612 permits to fund, EIP-3009 for fees, refunds and sends). A freelancer can [request a tab](https://segundo.world/request) with a link that fills in the client's form ([`lib/request.ts`](web/lib/request.ts)). |
 | **Cash out** | [/cashout](https://segundo.world/cashout) ([`app/cashout`](web/app/cashout/page.tsx), [`corridors.ts`](web/app/cashout/corridors.ts)): Philippines (InstaPay), Nigeria (NIP), Kenya (M-Pesa), India (UPI/IMPS), Brazil (Pix), with today's rate, the partner's assumed spread and sources. On testnet it sends test AUSD to a demo partner wallet, [`0x0921…77e6`](https://testnet.monadvision.com/address/0x092178787c772cbF67c2560B38D9F4f3454677e6); a $1.00 cash-out: [`0xb983cf55…`](https://testnet.monadvision.com/tx/0xb983cf55afa085dec092a40238b6ac197934e476d7ea03f6644602ca0aafa351). |
 | **Agora Instant Settlement** | On testnet, the partner's local-currency payout is mocked through Agora's Instant Settlement contract. The partner, approved once through Agora's testnet Whitelister, swaps each cash-out's AUSD (up to 100) for Agora's test token CTK on the AUSD/CTK pair [`0x1Aa8…b0ae`](https://testnet.monadvision.com/address/0x1Aa8958Aa34cEC8096EF4381cb335effe977b0ae) ([`lib/settlement.ts`](web/lib/settlement.ts)). The /cashout receipt links both transactions. An example cash-out: transfer [`0x42b38185…`](https://testnet.monadvision.com/tx/0x42b38185411d6fcc960ae2d556b1e6b766d1581d842e310a2155ab53185f8924) and settlement [`0x9b4ba904…`](https://testnet.monadvision.com/tx/0x9b4ba904b09c9772dd314df841d9357b4e9d1741dec398d7cc4aaeee247a04ee). On mainnet, a licensed partner pays out in local money. See [VERIFY.md](VERIFY.md#agora-instant-settlement). |
-| **Instant settlement** | A payout lands about a second after it is sent; Monad's blocks average 0.305 s (measured over 10,000 blocks). See [Monad integration](#monad-integration). |
+| **Settlement speed** | A payout reaches its first block header about a second after it is sent (0.92 s median in our load test); Monad's blocks average 0.305 s (measured over 10,000 blocks). See [Monad integration](#monad-integration). |
 
 **Send by link, in detail.** The sender's browser makes a fresh key, moves the AUSD to its address and puts the key after the `#` of a link (`/claim#k=…&a=…&c=…&f=…`), which browsers never send to a server. The receiver opens it, sees the amount in their own currency, makes an account with a passkey, and the link's key signs one transfer of its whole balance to them; someone who arrives signed out gets it with one passkey tap. Until then the sender can share it again or **take it back** from "Sent by link", which is the same transfer signed back to them. The page reads the link's balance from Monad, never from the link.
 
@@ -217,7 +219,7 @@ One passkey stands behind four keys. Each comes from its own WebAuthn PRF salt, 
 - **A passkey-only site.** [mera.segundo.world](https://mera.segundo.world) never loads Privy and offers no practice wallet (`isMeraHost` in `wallet.tsx`, or `NEXT_PUBLIC_ACCOUNTS=mera`).
 - **Plain errors.** Mera's error codes become one sentence each (`meraMessage` in `mera.ts`); authenticators without PRF are pointed to email sign-in; preview hosts say accounts made there open only there.
 
-### Envio: HyperRPC drives the history, statements and revenue
+### Envio: HyperIndex and HyperRPC behind the statements, history and revenue
 
 [`web/lib/envio.ts`](web/lib/envio.ts) · [`web/app/api/stats`](web/app/api/stats/route.ts) · [`web/app/api/history`](web/app/api/history/route.ts) · [`web/app/proof/[address]`](web/app/proof/%5Baddress%5D/page.tsx)
 
@@ -228,7 +230,9 @@ Monad's public RPC caps `eth_getLogs` at 100 blocks. HyperRPC answers a log quer
 - **Income statements** at `/proof/<address>`, the record the disclosure flow above binds to.
 - **Fee refunds at close** (`web/lib/refund.ts`) fall back to the ledger for long tabs whose history is too long to walk block by block.
 
-If HyperRPC is unreachable the routes fall back to a short public-RPC window and say `source: "rpc"`. [`indexer/`](indexer) is an Envio HyperIndex project for the same ledger (tabs, people, payouts, shifts, fees, fee refunds, daily stats and the CRE workflow's rates; 5 tests), **deployed on Envio's hosted service and synced over HyperSync** (2,800+ events): GraphQL at https://indexer.dev.hyperindex.xyz/bd7a257/v1/graphql — example queries in [`indexer/QUERIES.md`](indexer/QUERIES.md). The live site reads HyperRPC.
+If HyperRPC is unreachable the routes fall back to a short public-RPC window and say `source: "rpc"`. [`indexer/`](indexer) is an Envio HyperIndex project for the same ledger (tabs, people, payouts, shifts, fees, fee refunds, daily stats and the CRE workflow's rates; 5 tests), **deployed on Envio's hosted service and synced over HyperSync**; the live event count and indexed block are at [segundo.world/api/envio](https://segundo.world/api/envio). GraphQL at https://indexer.dev.hyperindex.xyz/bd7a257/v1/graphql, with example queries in [`indexer/QUERIES.md`](indexer/QUERIES.md).
+
+The live site reads both: /proof opens with the HyperIndex record ([`web/lib/hyperindex.ts`](web/lib/hyperindex.ts), `/api/envio`), cross-checked at the same block against the HyperRPC read behind the statement's lines, and falls back to HyperRPC when the indexer is slow or behind. The indexer trusts rate reports only from Segundo's CRE or keeper key (others are kept and marked untrusted), stores on each payout the CRE rate in force when it landed, and /proof prices each statement line at that rate.
 
 ### Chainlink CRE: a keeper and an FX oracle, simulated with --broadcast
 
@@ -245,17 +249,17 @@ A CRE workflow reads Till's running tabs on Monad, picks the ones owing at least
 | Measured on Monad testnet, Oct 13 2026 | |
 |---|---|
 | Average block time over 10,000 blocks | **0.305 s** |
-| 480 payouts from 16 sender keys | **4.67 s, 102.8 a second**, all 480 landed (461 succeeded; 19 ran out of a deliberately tight gas limit) |
+| 480 payouts from 16 sender keys | **4.67 s, 102.8 a second**, all 480 landed (461 succeeded; 19 ran out of a deliberately tight gas limit). That is the load our generator offered (96 a second), not Monad's limit: no block went past 8.1% of its gas |
 | Most payouts in one block | **96**; the busiest block used 8.1% of its gas limit |
-| Send to block, median / 90th percentile | **0.92 s / 1.56 s** |
+| Send to the first block header holding it, median / 90th percentile | **0.92 s / 1.56 s** (the proposed block; time to the finalized stage was not measured) |
 | One key, 48 consecutive nonces sent at once | **all 48 in one block**, 0.91 s |
 | One key, one at a time (the old relayer loop) | 1.1 a second |
 
 Method, scripts and every transaction: [/network](https://segundo.world/network), [`scripts/bench`](scripts/bench/README.md), [`web/public/bench.json`](web/public/bench.json). Benchmark tabs are left out of every other figure on the site.
 
 - **The relayer follows the measurement.** One key is not Monad's limit, so [`sendAndWait`](web/lib/server.ts) only serialises picking the nonce and handing the transaction to the node; the wait for the block runs alongside others, and one receipt watcher per server instance reads each new block's receipts once (`eth_getBlockReceipts`). [`web/lib/pool.ts`](web/lib/pool.ts) adds a pool of relayer keys (`KEEPER_KEY` plus `RELAYER_KEYS`): payouts go to a key chosen by tab id and sends by the sender's address, so one person's actions keep their order while others run alongside, and the richest key takes over when one runs low.
-- **Pay you can watch arrive.** The tab page settles every few seconds while open and shows how long each payout took; the last seconds of pay are sent the moment a clock stops.
-- **Built for parallel execution.** Pay accrues from timestamps, so nothing is written while the clock runs, and each tab's state is its own. The shared slots are few and known: `tabCount` on open, and the escrow balance inside AUSD on every payout, which Monad's optimistic execution re-runs when two land in one block. `settleMany` pays many tabs in one transaction.
+- **Pay you can watch arrive.** The tab page settles every 6 s for its first two minutes open, then every 20 s, then once a minute, and shows how long each payout took; the last seconds of pay are sent the moment a clock stops. `block.timestamp` moves in whole seconds while blocks come every 0.3 s, so settling more than once a second pays nothing new (59 of the load test's settles landed in the same second as the one before); `/api/settle` allows one payout per tab every six blocks.
+- **Conflict-light state, not yet parallel.** Pay accrues from timestamps, so nothing is written while the clock runs, and each tab's state is its own. The shared writes are few and known: `tabCount` on open, and the escrow's AUSD balance on every payout. Payouts in one block conflict on that slot and Monad re-executes them, so the load test shows capacity rather than parallel speed-up (96 settles in one block, all correct). A vault per tab, on the roadmap, removes the shared slot. `settleMany` pays many tabs in one transaction.
 - **Gas limit, not gas used.** Monad charges the limit, so every transaction uses Monad's own estimate plus a small margin, and the relayer refuses forwarded requests asking for more than 1.5× its own estimate. Gas per action, from the relayer's receipts, is on the [business page](https://segundo.world/business).
 - **The 100-block log cap.** Each tab links its changes block to block (`Activity(id, prevBlock)`), so a pay stub is read with one exact-block query per step; the long view comes from Envio HyperRPC.
 - **Live from the chain.** The site follows Monad's `newHeads` subscription; the landing page's numbers, world clocks and receipt come from contract state and exact-block log reads.
@@ -331,13 +335,14 @@ Till has no owner, no admin key, no upgrade path and no fee switch: earned pay c
 | Till on a Monad fork with Agora's real AUSD | fork | `forge test --match-contract Fork --fork-url monad_testnet` |
 | SegundoKeeper (Foundry) | 9 + 2 fork | `cd cre/contracts && forge test` (fork: `--mt test_fork --fork-url https://testnet-rpc.monad.xyz`) |
 | CRE workflow (SDK test runtime, EVM and HTTP mocks) | 6 | `cd cre/segundo-keeper && bun test` |
-| HyperIndex handlers | 5 | `cd indexer && pnpm test` |
+| HyperIndex handlers | 7 | `cd indexer && pnpm test` |
+| Web: relay, fee pairing and refunds, settlement, sealed details, CRE trust filter (Vitest on a fake chain, no network) | 42 | `cd web && npm test` |
 | End to end, practice wallet: faucet, profile, open, payouts, pause, close, invite on a phone | script | `node scripts/e2e.cjs <baseUrl>` |
 | End to end, passkey: Mera account, open with the 1% fee, a payout, close with the fee refund, seal details | script | `node scripts/e2e-mera.cjs <baseUrl>` |
 | End to end, send by link: two passkey accounts, collect $1.00 exactly, take a second link back | script | `node scripts/e2e-sendlink.cjs <baseUrl>` |
 | End to end, many keys: invite rebuilt after clearing the browser, joined from another browser, details disclosed to a verifier | script | `node scripts/e2e-keys.cjs <baseUrl>` |
 
-The end-to-end scripts drive the real UI with Playwright; the passkey ones use a Chrome virtual authenticator with PRF in place of a fingerprint. Contract claims and the test that proves each are listed in [VERIFY.md](VERIFY.md#tests). CI runs, on every push: the Till Foundry suite, the SegundoKeeper Foundry suite, the CRE workflow's Bun tests and typecheck, and a typecheck and build of the web app. The two fork rehearsals run in their own job, which can't fail the build because it depends on Monad's public RPC. The HyperIndex tests run locally.
+The end-to-end scripts drive the real UI with Playwright; the passkey ones use a Chrome virtual authenticator with PRF in place of a fingerprint. Contract claims and the test that proves each are listed in [VERIFY.md](VERIFY.md#tests). CI runs, on every push: the Till Foundry suite, the SegundoKeeper Foundry suite, the CRE workflow's Bun tests and typecheck, and the web app's Vitest suite, typecheck and build. The two fork rehearsals run in their own job, which can't fail the build because it depends on Monad's public RPC. The HyperIndex tests run locally.
 
 ## Run it locally
 
@@ -374,5 +379,16 @@ The treasury address is a constant (`TREASURY` in `web/lib/chain.ts`). Passkeys 
 ## Built during Monad Metropolis
 
 Pre-existing code: none. All code in this repository was written during the hackathon (October 2026); no earlier project code is reused.
+
+The build, by commit date (IST, from `git log`). Work was committed in batches, so some commits are large:
+
+| Date | What landed | Commits |
+|---|---|---|
+| Oct 4 | The Till contract and its Foundry tests, deploy to Monad testnet and Vercel, CI, demo bots, the on-chain proof run and VERIFY.md, the home and app pages, the move to Agora AUSD with passkey onboarding, a hardening pass with 34 more tests | 19, `e9a9a1e` to `fe5fc88` |
+| Oct 11 | Relayer reserve tiers, the health endpoint and low-gas notice, adversarial tests, bot fixes | 3, `b982aa6` to `8e80df9` |
+| Oct 13 | The Segundo rebrand, the live 1% client fee with refunds, Mera passkeys and sealed details, Envio HyperRPC data and income statements, the business page and deck, the Android app, the Monad load test and /network, the Chainlink CRE keeper and its broadcast run, Privy sends to an email, send by link, one passkey with many keys, /cashout and /request, the relayer key pool, the HyperIndex indexer, /send and the CRE report loop | 20, `8be5ca1` to `829337f` |
+| Oct 13, late | The CRE gas limit; a shorter homepage, the section navigator, Agora Instant Settlement on cash-out, CRE reports trusted only from Segundo's keys, HyperIndex on /proof, sealed details on any device | 2, `609eda0` and `c16557c` |
+
+Later commits are listed in `git log`.
 
 MIT licence.

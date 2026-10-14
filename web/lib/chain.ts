@@ -28,7 +28,7 @@ export const TREASURY: Address = "0xAdF0F9443EafD19916cBd8f7541ea5e19e69F62c";
 
 export const publicClient = createPublicClient({
   chain: monadTestnet,
-  transport: http(RPC_URL, { batch: { wait: 16 } }),
+  transport: http(RPC_URL, { batch: { wait: 16 }, timeout: 4_000, retryDelay: 100 }),
 });
 
 export const explorerTx = (hash: string) => `${monadTestnet.blockExplorers.default.url}/tx/${hash}`;

@@ -254,6 +254,18 @@ export function useAutoDrip(address: Address | undefined, balance: bigint | null
 
 const LAGGING = "history: block not indexed yet";
 
+/** The same line can arrive twice when a walk is redone from the head: keep the first of each. */
+const lineKey = (l: StubLine) => `${l.hash}:${l.kind}:${l.amount ?? ""}`;
+function dedupe(lines: StubLine[]): StubLine[] {
+  const seen = new Set<string>();
+  return lines.filter((l) => {
+    const k = lineKey(l);
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
 export type StubLine = {
   block: number;
   time: number;
@@ -362,11 +374,11 @@ export function useHistory(id: bigint | null, lastBlock: bigint | undefined, max
         block = prev;
         steps++;
         // Show the stub as it is read, newest first, rather than after the whole walk.
-        if (!cancelled() && (steps <= 3 || steps % 4 === 0)) setLines([...fresh, ...seen.current.lines]);
+        if (!cancelled() && (steps <= 3 || steps % 4 === 0)) setLines(dedupe([...fresh, ...seen.current.lines]));
       }
       if (cancelled()) return;
       retries.current = 0;
-      const merged = [...fresh, ...seen.current.lines].slice(0, 80);
+      const merged = dedupe([...fresh, ...seen.current.lines]).slice(0, 80);
       seen.current = { id: sid, head: lastBlock, lines: merged };
       setLines(merged);
       // A walk from a newer head down to the last one read leaves the older end as it was: still short if it was.
@@ -395,5 +407,16 @@ export function useHistory(id: bigint | null, lastBlock: bigint | undefined, max
       });
   }, [id, lastBlock, max, again]);
 
-  return { lines, more, loading };
+  /**
+   * Reads the newest stretch again from the tab's head, keeping what is already on screen: for a change the last walk
+   * missed (a node a block behind when another window closed the tab, say), with no new head to trigger a walk.
+   */
+  const reload = useCallback(() => {
+    if (walking.current || !seen.current.id) return;
+    seen.current = { ...seen.current, head: 0n };
+    retries.current = 0;
+    setAgain((n) => n + 1);
+  }, []);
+
+  return { lines, more, loading, reload };
 }

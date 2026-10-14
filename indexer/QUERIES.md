@@ -42,6 +42,11 @@ query IncomeStatement($address: String!) {
       tx
       tab { id memo }
       payer { id name }
+      # The trusted CRE rate in force when this payout landed, and the amount at it (unset before the first report).
+      currency
+      rateE6
+      rateAt
+      localE6
     }
   }
   # Today's rate for the person's currency, posted on chain by Segundo's Chainlink CRE workflow.
@@ -130,20 +135,29 @@ query Rates {
     at
     updates
   }
-  RateSnapshot(order_by: { at: desc }, limit: 5) {
+  RateSnapshot(where: { trusted: { _eq: true } }, order_by: { at: desc }, limit: 5) {
     at
     currencies
     ratesE6
+    from
     tx
   }
-  KeeperRun(order_by: { timestamp: desc }, limit: 10) {
+  KeeperRun(where: { trusted: { _eq: true } }, order_by: { timestamp: desc }, limit: 10) {
     tabs
     paid
     skipped
     timestamp
     tx
   }
+  untrusted: RateSnapshot(where: { trusted: { _eq: false } }, order_by: { at: desc }, limit: 5) {
+    from
+    ratesE6
+    tx
+  }
 }
 ```
+
+Only reports sent by Segundo's CRE loop key or keeper key are `trusted`; anyone can call the testnet
+MockKeystoneForwarder, so other senders' reports are kept, marked, and left out of `CurrencyRate` and the totals.
 
 `rateE6` is units of the currency per 1 USD, times 1e6: `57250000` for PHP means 57.25 pesos to the dollar.

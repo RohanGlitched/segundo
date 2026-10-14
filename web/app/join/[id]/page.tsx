@@ -16,6 +16,9 @@ import { CURRENCIES, currency, formatDuration, formatUsd, toUsd } from "@/lib/mo
 import { relay } from "@/lib/relay";
 import { codeToBytes3, isZero } from "@/lib/tabs";
 import { useWallet } from "@/lib/wallet";
+import { StatePage } from "@/components/StatePage";
+import { TornNote } from "@/components/StateArt";
+import { GrandRosette } from "@/components/home/Art";
 import styles from "./join.module.css";
 
 /** A freelancer opens the link a client sent, signs in, says how they want to appear, and joins. */
@@ -84,7 +87,7 @@ export default function Join() {
         isPayer={wallet.address?.toLowerCase() === t.payer.toLowerCase()}
       />
     );
-  if (!key) return <Shell>This link is missing its invite code. Copy the whole link again, including the part after #.</Shell>;
+  if (!key) return <Shell torn>This link is missing its invite code. Copy the whole link again, including the part after #.</Shell>;
 
   const payer = personOf(t.payer, profiles);
   const rateUsd = toUsd(t.rate);
@@ -205,19 +208,38 @@ export default function Join() {
   );
 }
 
-function Shell({ children, busy }: { children?: React.ReactNode; busy?: boolean }) {
+function Shell({ children, busy, torn }: { children?: React.ReactNode; busy?: boolean; torn?: boolean }) {
+  if (busy)
+    return (
+      <main className={`wrap ${styles.page}`} aria-busy>
+        <div className={styles.layout}>
+          <div className={styles.copy}>
+            <div className={`skeleton ${styles.skelLine}`} />
+            <div className={`skeleton ${styles.skelLine}`} />
+            <div className={`skeleton ${styles.skelBlock}`} />
+          </div>
+          <div className={`skeleton ${styles.skel}`} />
+        </div>
+      </main>
+    );
   return (
-    <main className={`wrap ${styles.page}`} aria-busy={busy}>
-      {busy ? (
-        <div className={`skeleton ${styles.skel}`} />
-      ) : (
-        <>
-          <h1 className={styles.h1}>{children}</h1>
-          <p className="soft">
-            <Link href="/">Home</Link> · <Link href="/app">Your tabs</Link> · <Link href="/open">Open a tab</Link>
-          </p>
-        </>
-      )}
+    <main>
+      <StatePage
+        eyebrow="An invite to a Segundo tab"
+        title={children}
+        lede="An invite link opens one tab: a client's budget waiting on Monad that pays the freelancer by the second. The person who sent it can make a new link in a minute."
+        art={torn ? <TornNote /> : <GrandRosette />}
+        actions={
+          <>
+            <Link href="/" className="btn primary">
+              What Segundo is
+            </Link>
+            <Link href="/app" className="btn">
+              Your tabs
+            </Link>
+          </>
+        }
+      />
     </main>
   );
 }
@@ -242,35 +264,55 @@ function AlreadyJoined({
 }) {
   const serial = `№ ${id.toString().padStart(4, "0")}`;
   const heading = isPayee ? "You've already joined this tab." : closed ? "This tab has been worked and closed." : "Someone has already joined this tab.";
+  // The tab's own note, printed in grey: this invite has done its job.
+  const art = (
+    <div className={styles.spent}>
+      <Note
+        id={id}
+        usd={0}
+        cur={currency("USD")}
+        rates={null}
+        payee={{ name: payee, place: "" }}
+        payer={{ name: payer, place: "" }}
+        rateUsd={rateUsd}
+        hours={0.5}
+        live={false}
+        status={closed ? "Closed" : "Invite used"}
+      />
+    </div>
+  );
   return (
-    <main className={`wrap ${styles.page}`}>
-      <section className={styles.used} aria-labelledby="used-title">
-        <p className={`serial ${styles.usedSerial}`}>Tab {serial}</p>
-        <h1 id="used-title" className={styles.h1}>
-          {heading}
-        </h1>
-        <p className={styles.lede}>
-          {isPayee
+    <main>
+      <StatePage
+        titleId="used-title"
+        eyebrow={<span className="serial">Tab {serial}</span>}
+        title={heading}
+        art={art}
+        lede={
+          isPayee
             ? `You joined from this link: ${payer} pays you ${formatUsd(rateUsd)} an hour, by the second. ${closed ? "The tab has since been closed; its pay stub lists every payout." : "Clock in from the tab whenever you start work."}`
             : isPayer
               ? `${payee} joined your tab with this link${closed ? ", and the tab has since been closed" : ""}. Each invite link works once.`
-              : `Each invite link works once, and ${payee} joined ${payer}'s tab with this one${closed ? "; the tab has since been closed" : ""}.`}
-        </p>
+              : `Each invite link works once, and ${payee} joined ${payer}'s tab with this one${closed ? "; the tab has since been closed" : ""}.`
+        }
+        actions={
+          <>
+            <Link href={closed && !isPayee ? `/tab/${id}#paystub` : `/tab/${id}`} className="btn primary">
+              {isPayee || isPayer ? `Open tab ${serial}` : closed ? "See its pay stub" : "Watch the tab"}
+            </Link>
+            <Link href="/app" className="btn">
+              Your tabs
+            </Link>
+          </>
+        }
+      >
         {!isPayee && !isPayer && (
-          <ul className={styles.usedList}>
+          <ul>
             <li>If that was you in another browser or on another device, sign in there with the same account and the tab is in your tabs.</li>
             <li>If you were meant to be paid on it, ask {payer} for a new link. Opening another tab takes them a minute.</li>
           </ul>
         )}
-        <div className={styles.usedActions}>
-          <Link href={closed && !isPayee ? `/tab/${id}#paystub` : `/tab/${id}`} className="btn primary">
-            {isPayee || isPayer ? `Open tab ${serial}` : closed ? "See its pay stub" : "Watch the tab"}
-          </Link>
-          <Link href="/app" className="btn">
-            Your tabs
-          </Link>
-        </div>
-      </section>
+      </StatePage>
     </main>
   );
 }

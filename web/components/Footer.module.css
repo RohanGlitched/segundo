@@ -17,17 +17,18 @@
 }
 .brand {
   display: flex;
-  gap: 16px;
+  flex-direction: column;
   align-items: flex-start;
-}
-.brand > svg {
-  flex: none;
-  color: var(--ink);
+  gap: 6px;
 }
 .brand p {
   margin: 0;
 }
+/* The mark sits inline with the wordmark, so the lines under it share one left edge. */
 .word {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   color: var(--ink);
   font-variation-settings: var(--wide);
   font-weight: 750;
@@ -35,13 +36,17 @@
   line-height: 1.15;
   letter-spacing: -0.02em;
 }
+.word svg {
+  flex: none;
+}
 .tag {
   margin-top: 4px !important;
-  color: var(--ink-soft);
+  color: var(--ink);
+  font-weight: 550;
   font-size: 15px;
 }
 .where {
-  margin-top: 14px !important;
+  margin-top: 6px !important;
   max-width: 32ch;
   font-size: 14px;
   color: var(--ink-soft);
@@ -110,10 +115,35 @@
 }
 .serials dd {
   margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
   font-size: 13.5px;
   white-space: nowrap;
+}
+.serials dd a {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.copy {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.copy:hover {
+  color: var(--ink);
+  border-color: var(--rule);
 }
 .serials a {
   text-decoration: none;
@@ -121,12 +151,13 @@
 .serials a:hover {
   text-decoration: underline;
 }
-.short {
-  display: none;
-}
 
+.micro::before {
+  content: attr(data-micro);
+}
 .micro {
   margin: 0;
+  height: 7px;
   max-width: none;
   overflow: hidden;
   white-space: nowrap;
@@ -136,6 +167,9 @@
   font-variation-settings: var(--semi);
   color: color-mix(in srgb, var(--ink) 38%, transparent);
   user-select: none;
+  /* The line fades out at both ends instead of stopping mid-word. */
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
 }
 
 .base {
@@ -153,37 +187,127 @@
 .base a {
   color: inherit;
 }
-
-/* Full addresses only where a column is wide enough to hold one. */
-@media (max-width: 1180px) {
-  .full {
-    display: none;
-  }
-  .short {
-    display: inline;
-  }
+.live {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 0;
 }
+.live > i {
+  width: 7px;
+  height: 7px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--rule);
+  flex: none;
+}
+.live > i.liveDot {
+  background: var(--ok);
+}
+.live > span + span::before {
+  content: "·";
+  margin: 0 8px;
+  color: var(--ink-soft);
+}
+
 @media (max-width: 900px) {
   .top {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+/* Phones: two link columns ("Check it" under "Learn"), one line per serial, and nothing said twice. */
 @media (max-width: 620px) {
   .foot {
-    padding-top: 36px;
+    margin-top: 72px;
+    padding-top: 30px;
+  }
+  .inner {
+    gap: 24px;
+  }
+  .top {
+    gap: 24px;
+  }
+  .where {
+    display: none;
+  }
+  /* The issuer on one line: mark, name and the line under them side by side. */
+  .brand {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 12px;
+  }
+  .word {
+    font-size: 20px;
+    gap: 8px;
+  }
+  .word svg {
+    width: 28px;
+    height: 28px;
+  }
+  .tag {
+    margin-top: 0 !important;
+    font-size: 14px;
   }
   .cols {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px 20px;
   }
-  .cols > div:last-child {
-    grid-column: 1 / -1;
+  .cols > div:first-child {
+    grid-row: span 2;
+  }
+  .colHead {
+    padding-bottom: 6px;
+    margin-bottom: 4px;
+  }
+  .cols ul {
+    gap: 0;
+  }
+  .cols a {
+    display: inline-block;
+    padding: 4px 0;
+    font-size: 14px;
+    line-height: 1.3;
   }
   .serials {
     grid-template-columns: minmax(0, 1fr);
   }
+  .serials > div,
   .serials > div + div {
-    padding-left: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 0;
     border-left: 0;
+  }
+  .serials > div + div {
     border-top: 1px solid var(--rule);
+  }
+  .serials dt {
+    margin: 0;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .serials dd {
+    font-size: 13px;
+  }
+  .base {
+    font-size: 13px;
+  }
+}
+
+/* Your tabs on a phone has its own action bar along the bottom: the footer ends above it. In the installed app the
+   bar is the navigation, and the website's footer stays out of it. */
+@media (max-width: 720px) {
+  body:has([data-bottom-dock]) .foot {
+    padding-bottom: calc(100px + env(safe-area-inset-bottom));
+  }
+}
+@media (display-mode: standalone) {
+  body:has([data-bottom-dock]) .foot {
+    display: none;
   }
 }

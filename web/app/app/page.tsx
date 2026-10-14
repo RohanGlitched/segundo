@@ -11,6 +11,7 @@ import { SendSheet, SentLinks } from "@/components/SendSheet";
 import { TabRow } from "@/components/TabRow";
 import { GettingStarted, Ledger, WalletNote } from "@/components/WalletPanel";
 import { ErrorLine, LandedLine, busyLabel, useAction } from "@/components/ui";
+import { PageHead } from "@/components/PageHead";
 import { SignInGate } from "@/components/SignInGate";
 import { dripOnce, useAutoDrip, useMyTabIds, useProfile, useTabs, useDollarBalance } from "@/lib/hooks";
 import { useLive, useChainNow } from "@/lib/live";
@@ -55,7 +56,15 @@ export default function YourTabs() {
   if (!me)
     return (
       <main className={`wrap ${styles.page}`}>
+        <PageHead
+          compact
+          className={styles.head}
+          eyebrow="Your account"
+          title="Your tabs"
+          lede="Every tab you pay into as a client and every tab that pays you, each ticking up by the second while its clock runs."
+        />
         <SignInGate
+          level={2}
           title="Sign in to see your tabs"
           steps={[
             {
@@ -133,6 +142,7 @@ export default function YourTabs() {
           <WalletNote address={me} balance={balance} profile={mine} paidTabs={paid} />
         </div>
         <div className={styles.walletSide}>
+          <p className={styles.eyebrow}>Your account</p>
           <h1 className={styles.h1}>{mine?.name ? `${mine.name.split(" ")[0]}'s tabs` : "Your tabs"}</h1>
           <p className={styles.addr}>
             {wallet.kind === "mera"

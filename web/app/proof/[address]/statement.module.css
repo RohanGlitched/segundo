@@ -92,7 +92,10 @@
   border-top: 1.5px solid var(--ink);
 }
 .who > div,
-.sealed > div {
+.sealedList {
+  margin: 0;
+}
+.sealedList > div {
   display: grid;
   grid-template-columns: 132px minmax(0, 1fr);
   gap: 12px;
@@ -487,6 +490,18 @@
   color: var(--c);
   line-height: 1.1;
 }
+.recordWide dd.usd {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--ink-soft);
+  overflow-wrap: normal;
+}
+.atToday {
+  margin-left: 2px;
+  color: var(--ink-soft);
+}
 .checkOk,
 .checkOff {
   font-size: 13.5px;
@@ -531,7 +546,7 @@
 }
 @media (max-width: 560px) {
   .who > div,
-  .sealed > div {
+  .sealedList > div {
     grid-template-columns: 104px minmax(0, 1fr);
   }
   .bars {

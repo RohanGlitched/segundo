@@ -1,9 +1,10 @@
 import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 import { Footer } from "@/components/Footer";
+import { PageHead } from "@/components/PageHead";
 import { TILL, explorerAddress, monadTestnet } from "@/lib/chain";
 import { DEMO_FREELANCERS } from "@/lib/demo";
-import { PROMPT_FREE_LABEL } from "@/lib/mera-policy";
+import { PROMPT_FREE_LABEL, SESSION_BUDGET_LABEL } from "@/lib/mera-policy";
 import { bandPaths, bandsFor, ringPath, ringsFor, seedOf } from "@/lib/guilloche";
 import styles from "./keys.module.css";
 
@@ -43,7 +44,7 @@ const FAMILIES: Family[] = [
         wallet understands; nothing else should share that exposure, so nothing else is made from it.
       </>
     ),
-    prompt: `When you sign in, after 15 minutes idle, and again for any send, open or top-up over ${PROMPT_FREE_LABEL}`,
+    prompt: `When you sign in, after 15 minutes idle, and again for any send, open or top-up over ${PROMPT_FREE_LABEL}, or once ${SESSION_BUDGET_LABEL} has moved since the last prompt`,
     kept: "Page memory, while you're signed in",
   },
   {
@@ -124,7 +125,7 @@ const ASKS: Record<Rule["asks"], string> = {
   none: "Nothing to export",
 };
 
-/** What asks for the passkey inside an unlocked signing session. Mirrors lib/wallet.tsx (PROMPT_FREE_UNITS) and lib/seal.ts. */
+/** What asks for the passkey inside an unlocked signing session. Mirrors lib/mera-policy.ts (the $50 budget), lib/wallet.tsx and lib/seal.ts. */
 const RULES: Rule[] = [
   {
     action: "Clock in, clock out, pause pay, change the rate",
@@ -142,9 +143,14 @@ const RULES: Rule[] = [
     why: "Public on Monad anyway, and you can change it back at any time.",
   },
   {
-    action: `Send, open a tab or top one up, up to ${PROMPT_FREE_LABEL}`,
+    action: `Send, open a tab or top one up, up to ${SESSION_BUDGET_LABEL} in all between fingerprints`,
     asks: "free",
-    why: "Everyday amounts. The signing session covers them so paying feels like tapping a card.",
+    why: `Everyday amounts. The signing session covers them so paying feels like tapping a card, up to ${SESSION_BUDGET_LABEL} between fingerprints.`,
+  },
+  {
+    action: `The send, open or top-up that takes the session past ${SESSION_BUDGET_LABEL} since your last fingerprint`,
+    asks: "again",
+    why: "A budget, not a per-payment limit: ten $49 sends can't slip through one unlock. The fingerprint starts the budget over.",
   },
   {
     action: `Send over ${PROMPT_FREE_LABEL}: to an address, an email, a link or a cash-out`,
@@ -218,10 +224,13 @@ export default function Keys() {
     <>
       <main>
         {/* ------------------------------------------------------------ hero */}
-        <section className={`wrap ${styles.top}`}>
-          <div className={styles.topText}>
-            <p className={styles.kicker}>Passkeys on Segundo, with Mera</p>
-            <h1 className={styles.h1}>One passkey, many keys.</h1>
+        <section className="wrap" data-nav="skip">
+          <PageHead
+            className={styles.head}
+            eyebrow="Passkeys on Segundo, with Mera"
+            title="One passkey, many keys."
+            art={<Rosette />}
+          >
             <p className={styles.model}>
               Your Segundo passkey makes <b>four keys</b>, each with one job, none of them worked out from another.
             </p>
@@ -239,12 +248,11 @@ export default function Keys() {
                 See the four keys
               </a>
             </div>
-          </div>
-          <Rosette />
+          </PageHead>
         </section>
 
         {/* ------------------------------------------------------------ the tree */}
-        <section className={`wrap ${styles.section}`} id="tree" aria-labelledby="tree-h">
+        <section className={`wrap ${styles.section}`} id="tree" aria-labelledby="tree-h" data-nav="Four keys">
           <div className={styles.sectionHead}>
             <h2 id="tree-h" className={styles.h2}>
               One passkey → four keys
@@ -289,7 +297,7 @@ export default function Keys() {
         </section>
 
         {/* ------------------------------------------------------------ at a glance */}
-        <section className={`wrap ${styles.section}`} aria-labelledby="glance">
+        <section className={`wrap ${styles.section}`} aria-labelledby="glance" data-nav="At a glance">
           <div className={styles.sectionHead}>
             <h2 id="glance" className={styles.h2}>
               At a glance
@@ -323,7 +331,7 @@ export default function Keys() {
         </section>
 
         {/* ------------------------------------------------------------ prompts */}
-        <section className={`wrap ${styles.section}`} id="prompts" aria-labelledby="prompts-h">
+        <section className={`wrap ${styles.section}`} id="prompts" aria-labelledby="prompts-h" data-nav="Passkey prompts">
           <div className={styles.sectionHead}>
             <p className={styles.kicker}>Signing sessions</p>
             <h2 id="prompts-h" className={styles.h2}>
@@ -359,15 +367,16 @@ export default function Keys() {
             </tbody>
           </table>
           <p className={styles.small}>
-            The amount rule lives in the signer, not on the buttons: before Mera signs an AUSD transfer or permit, Segundo reads its amount, and over{" "}
-            {PROMPT_FREE_LABEL} it asks the passkey for a fresh assertion that must re-derive the same account. Segundo&apos;s 1% fee rides with the open
-            or top-up it belongs to. A prompt you finished in the last minute (signing in, unlocking, making an invite key) counts once, so nothing asks
-            twice in a row. Email and practice wallets have no passkey and work as before.
+            The amount rule lives in the signer, not on the buttons: before Mera signs an AUSD transfer or permit, Segundo reads its amount and adds it to
+            what the session has moved since your last passkey prompt. Over {PROMPT_FREE_LABEL} at once, or past {SESSION_BUDGET_LABEL} in all, it asks the
+            passkey for a fresh assertion that must re-derive the same account, and that prompt starts the budget over. Segundo&apos;s 1% fee rides with
+            the open or top-up it belongs to. A prompt you finished in the last minute (signing in, unlocking, making an invite key) counts once, before
+            anything is spent on it, so nothing asks twice in a row. Email and practice wallets have no passkey and work as before.
           </p>
         </section>
 
         {/* ------------------------------------------------------------ invites */}
-        <section className={`wrap ${styles.section}`} aria-labelledby="invite-h">
+        <section className={`wrap ${styles.section}`} aria-labelledby="invite-h" data-nav="Invites">
           <div className={styles.sectionHead}>
             <p className={styles.kicker}>Invite keys</p>
             <h2 id="invite-h" className={styles.h2}>
@@ -428,7 +437,7 @@ export default function Keys() {
         </section>
 
         {/* ------------------------------------------------------------ disclosure */}
-        <section className={`wrap ${styles.section}`} aria-labelledby="disclose-h">
+        <section className={`wrap ${styles.section}`} aria-labelledby="disclose-h" data-nav="Sharing details">
           <div className={styles.sectionHead}>
             <p className={styles.kicker}>Disclosure key</p>
             <h2 id="disclose-h" className={styles.h2}>
@@ -491,7 +500,7 @@ export default function Keys() {
         </section>
 
         {/* ------------------------------------------------------------ principles */}
-        <section className={`wrap ${styles.section}`} aria-labelledby="why-h">
+        <section className={`wrap ${styles.section}`} aria-labelledby="why-h" data-nav="Why separate">
           <div className={styles.sectionHead}>
             <h2 id="why-h" className={styles.h2}>
               Why separate keys
@@ -532,7 +541,7 @@ export default function Keys() {
         </section>
 
         {/* ------------------------------------------------------------ who holds what */}
-        <section className={`wrap ${styles.section}`} aria-labelledby="holds-h">
+        <section className={`wrap ${styles.section}`} aria-labelledby="holds-h" data-nav="Who holds what">
           <div className={styles.sectionHead}>
             <h2 id="holds-h" className={styles.h2}>
               Who holds what
@@ -572,7 +581,7 @@ export default function Keys() {
           </p>
         </section>
 
-        <section className={`wrap ${styles.closing}`} aria-labelledby="close">
+        <section className={`wrap ${styles.closing}`} aria-labelledby="close" data-nav="Start">
           <h2 id="close" className={styles.closingH}>
             One fingerprint. Every key you need, and none you have to keep.
           </h2>

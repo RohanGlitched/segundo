@@ -28,7 +28,7 @@ async function gql<T>(query: string, variables: Record<string, unknown> = {}, tt
   const key = JSON.stringify([query, variables]);
   const held = memo.get(key);
   if (held && Date.now() - held.at < ttl) return held.value as Promise<T>;
-  const value = (async () => {
+  const once = async (): Promise<T> => {
     let res: Response;
     try {
       res = await fetch(HYPERINDEX_URL, {
@@ -42,10 +42,21 @@ async function gql<T>(query: string, variables: Record<string, unknown> = {}, tt
       throw new Error(e instanceof Error && e.name === "TimeoutError" ? "HyperIndex timed out" : "HyperIndex unreachable");
     }
     if (!res.ok) throw new Error(`HyperIndex HTTP ${res.status}`);
-    const body = (await res.json()) as { data?: T; errors?: { message?: string }[] };
-    if (body.errors?.length || !body.data) throw new Error(`HyperIndex: ${body.errors?.[0]?.message ?? "no data"}`);
+    const body = (await res.json()) as { data?: T; errors?: { message?: string; extensions?: { code?: string } }[] };
+    if (body.errors?.length || !body.data) {
+      const err = new Error(`HyperIndex: ${body.errors?.[0]?.message ?? "no data"}`);
+      // A query the schema doesn't know (an older deployment) fails the same way every time: no retry.
+      if (body.errors?.some((x) => x.extensions?.code === "validation-failed")) (err as Error & { final?: boolean }).final = true;
+      throw err;
+    }
     return body.data;
-  })();
+  };
+  // One quick second try: the hosted indexer now and then answers "database query error" to a query that works a moment later.
+  const value = once().catch(async (e: Error & { final?: boolean }) => {
+    if (e.final) throw e;
+    await new Promise((r) => setTimeout(r, 250));
+    return once();
+  });
   memo.set(key, { at: Date.now(), value });
   value.catch(() => memo.delete(key));
   if (memo.size > 200) for (const [k, v] of memo) if (Date.now() - v.at > BENCH_TTL_MS) memo.delete(k);
@@ -119,6 +130,14 @@ export type IndexedPerson = {
   rate: { code: string; rateE6: string; at: number } | null;
 };
 
+/** One person's record plus the rate each payout was made at, when the deployment stores it (null otherwise). */
+export type IndexedPersonWithRates = IndexedPerson & { atPayout: PayoutRates | null; atPayoutReason: string | null };
+
+export async function indexedPersonWithRates(address: string): Promise<IndexedPersonWithRates> {
+  const [p, r] = await Promise.all([indexedPerson(address), indexedPayoutRates(address).then((x) => ({ x, why: null }), (e: unknown) => ({ x: null, why: e instanceof Error ? e.message : "no payout rates" }))]);
+  return { ...p, atPayout: r.x, atPayoutReason: r.why };
+}
+
 const RECENT = 200;
 
 const PERSON = `
@@ -156,6 +175,81 @@ export async function indexedPerson(address: string): Promise<IndexedPerson> {
     recent: d.recent.map((r) => ({ block: Number(r.block), amount: String(r.amount) })),
     rate: rate ? { code: rate.id, rateE6: String(rate.rateE6), at: rate.at } : null,
   };
+}
+
+// ---------------------------------------------------------------- each payout at the rate of its day
+
+/**
+ * One stretch of a person's payouts priced at the same CRE report: every payout from block `from` to `to` was paid in
+ * `currency` while `rateE6` (units per 1 USD, times 1e6, posted at DON time `at`) was the trusted rate in force.
+ */
+export type RateSpan = { currency: string; rateE6: string; at: number; from: number; to: number; payouts: number; units: string };
+export type PayoutRates = {
+  spans: RateSpan[];
+  /** Payouts in a block shared by two spans (a report landed mid-block), by transaction hash: index into `spans`. */
+  exact: Record<string, number>;
+  /** Payouts that carry a rate, and their AUSD units. The others (before the first CRE report) have none. */
+  payouts: number;
+  units: string;
+};
+
+/** Rows per page, and the most pages read (the load benchmark's busiest wallets stay well inside this). */
+const RATE_PAGE = 1_000;
+const RATE_PAGES = 20;
+const RATES_TTL_MS = 60_000;
+
+const PAYOUT_RATES = `
+query PayoutRates($id: String!, $offset: Int!) {
+  Payout(where: { payee_id: { _eq: $id }, rateE6: { _is_null: false } }, order_by: [{ block: asc }, { id: asc }], limit: ${RATE_PAGE}, offset: $offset) {
+    block tx amount currency rateE6 rateAt
+  }
+}`;
+
+type RateRow = { block: number; tx: string; amount: string | number; currency: string | null; rateE6: string | number; rateAt: number | null };
+
+/**
+ * The CRE rate in force at each of a person's payouts, as the indexer stored it on the Payout (`rateE6`, `rateAt`),
+ * folded into spans so a statement can price every line at the rate of its day. Indexer deployments from before these
+ * fields existed reject the query; callers then fall back to today's rate.
+ */
+export async function indexedPayoutRates(address: string): Promise<PayoutRates> {
+  const id = address.toLowerCase();
+  const rows: RateRow[] = [];
+  for (let page = 0; page < RATE_PAGES; page++) {
+    const d = await gql<{ Payout: RateRow[] }>(PAYOUT_RATES, { id, offset: page * RATE_PAGE }, RATES_TTL_MS);
+    rows.push(...d.Payout);
+    if (d.Payout.length < RATE_PAGE) break;
+  }
+  // A rate is in force for one stretch of chain time, so one span per (currency, rate, report).
+  const spans: RateSpan[] = [];
+  const keyed = new Map<string, number>();
+  const blockSpans = new Map<number, Map<string, number>>();
+  let units = 0n;
+  for (const r of rows) {
+    if (!r.currency) continue;
+    const block = Number(r.block);
+    const key = `${r.currency}-${r.rateE6}-${r.rateAt}`;
+    let i = keyed.get(key);
+    if (i == null) {
+      i = spans.push({ currency: r.currency, rateE6: String(r.rateE6), at: Number(r.rateAt ?? 0), from: block, to: block, payouts: 0, units: "0" }) - 1;
+      keyed.set(key, i);
+    }
+    const s = spans[i]!;
+    s.from = Math.min(s.from, block);
+    s.to = Math.max(s.to, block);
+    s.payouts++;
+    s.units = (BigInt(s.units) + BigInt(r.amount)).toString();
+    units += BigInt(r.amount);
+    let txs = blockSpans.get(block);
+    if (!txs) blockSpans.set(block, (txs = new Map()));
+    txs.set(r.tx.toLowerCase(), i);
+  }
+  const exact: Record<string, number> = {};
+  for (const txs of blockSpans.values()) {
+    if (new Set(txs.values()).size < 2) continue;
+    for (const [tx, i] of txs) exact[tx] = i;
+  }
+  return { spans, exact, payouts: spans.reduce((n, s) => n + s.payouts, 0), units: units.toString() };
 }
 
 // ---------------------------------------------------------------- the whole network, day by day

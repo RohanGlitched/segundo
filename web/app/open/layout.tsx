@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Open a tab" };
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <>
-      {children}
+      <div className="fill">{children}</div>
       <Footer />
     </>
   );

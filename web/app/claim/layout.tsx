@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <>
-      {children}
+      <div className="fill">{children}</div>
       <Footer />
     </>
   );

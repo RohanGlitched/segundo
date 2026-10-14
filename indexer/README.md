@@ -31,24 +31,32 @@ addresses are lower case.
 | `Tab` | tab | payer, payee, rate, budget, top-ups, paid, refunded, open/closed/held/clocked in, shifts, seconds worked, fee paid, fee refunded |
 | `Person` | address | profile (name, place, currency), earned, paid out, funded, refunded, fees paid and refunded, distinct clients and freelancers, first seen, last active |
 | `Engagement` | client and freelancer pair | tabs between them, paid between them |
-| `Payout` | `Settled` event | tab, payee, payer, amount, paid to date, time, tx |
+| `Payout` | `Settled` event | tab, payee, payer, amount, paid to date, time, tx; the payee's currency, the trusted CRE rate in force at that block and the amount at it (`rateE6`, `rateAt`, `localE6`) |
 | `Shift` | clock-in | start, end, seconds, earned (banked at clock-out minus banked at clock-in), rate, who stopped the clock |
 | `Funding` | open or top-up | amount, expected fee, the fee that paid for it |
 | `Fee` | AUSD transfer into the treasury | linked (paired with an open or top-up) or not, tab, refunded in full |
 | `FeeRefund` | AUSD transfer out of the treasury to a fee payer | kind (`close`, `failed`, `other`), tab, fee |
 | `RefundDue` | closed tab still owed a fee refund | expected amount; removed when the refund lands |
-| `RateSnapshot` | CRE report's `RatesPosted` | currencies, rates (units per 1 USD times 1e6), report time, tx. Every report, whoever sent it (see below) |
-| `CurrencyRate` | currency | latest on-chain rate, from any sender |
-| `KeeperRun` | CRE report's `Kept` | tabs settled, AUSD paid, tabs skipped |
+| `RateSnapshot` | CRE report's `RatesPosted` | currencies, rates (units per 1 USD times 1e6), report time, tx, sender, `trusted`. Every report, whoever sent it (see below) |
+| `CurrencyRate` | currency | latest trusted on-chain rate |
+| `KeeperRun` | CRE report's `Kept` | tabs settled, AUSD paid, tabs skipped, sender, `trusted` |
 | `SkippedSettle` | `SettleSkipped` | tab the keeper couldn't pay in that run |
 | `DailyStat` | UTC day | payouts, paid, fees, refunds, tabs opened/closed, funded, shifts, seconds worked, active and new people |
-| `Totals` | one row, id `totals` | running totals of all of the above, plus `netFees` |
+| `Totals` | one row, id `totals` | running totals of all of the above, plus `netFees`; `rateReports` and `keeperRuns` count trusted reports only, `untrustedReports` the rest |
 
-**CRE rates are unfiltered here.** On testnet, reports reach SegundoKeeper through Chainlink's MockKeystoneForwarder, which
-anyone can call. This indexer records every `RatesPosted` and doesn't store the transaction sender, so `RateSnapshot` and
-`CurrencyRate` can include rates someone else posted. Check a snapshot's `tx` sender against the CRE loop key
-`0x022875424E1556FEC66Fdc5A7D52820dea4dBb8D` before trusting it. The web app does this itself in `web/lib/cre.ts` and
-doesn't read rates from this indexer. Filtering here would mean adding `from` to `field_selection` and redeploying.
+**Only Segundo's own CRE reports count.** On testnet, reports reach SegundoKeeper through Chainlink's
+MockKeystoneForwarder, which anyone can call. The indexer reads each transaction's sender (`from` in `field_selection`)
+and trusts a `RatesPosted` or `Kept` only when it was sent by the CRE loop key `0x022875424E1556FEC66Fdc5A7D52820dea4dBb8D`
+or the keeper key `0xe77f8062f66767428b1786709E079cABd01ABF40` and is dated no more than five minutes past its block
+(`src/lib/books.ts`, the same rule as `web/lib/cre.ts`). Other reports are still recorded, with `trusted: false` and
+their sender, so the record stays complete, but they never move `CurrencyRate`, never price a payout and count only in
+`Totals.untrustedReports`. A payout that a stranger's `Kept` triggered is still a real payout: Till's `Settled` counts it.
+
+**Each payout carries the rate of its day.** When a `Settled` lands, the handler looks up the trusted `CurrencyRate` for
+the freelancer's profile currency. Events run in chain order, so that is the newest trusted report at or before the
+payout (a report earlier in the same keeper transaction included). It is stored on the payout as `rateE6`, `rateAt` and
+`rateSnapshot`, with `localE6 = amount * rateE6 / 1e6`. Income statements (`/proof/<address>`) price each line at it
+instead of today's rate. Payouts made before the first CRE report, or to someone with no profile currency, have none.
 
 ### How fees are counted
 

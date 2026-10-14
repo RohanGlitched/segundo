@@ -36,8 +36,9 @@ export function LiveHero() {
       {net === undefined ? (
         <>
           <div className={`skeleton ${styles.placeholder}`} aria-label="Loading a live tab" />
-          <p className={styles.caption} aria-hidden>
-            &nbsp;
+          {/* The caption's words are known before the tab is: print them now, so nothing below moves when it arrives. */}
+          <p className={styles.caption}>
+            A real tab on Monad testnet, paying out while you watch. <span className={styles.pending}>Open this tab</span>
           </p>
         </>
       ) : featured ? (

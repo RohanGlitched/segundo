@@ -1,9 +1,10 @@
 /**
  * Till's seeded people: three client studios and five freelancers who keep real tabs running on
  * Monad testnet, so the site always shows live pay. Freelancers clock in and out around their own
- * local working hours, and any freelancer hired by someone else (a judge) clocks in within seconds.
+ * local working hours, staggered so that at least three of the five are on the clock at any minute
+ * of the UTC day, and any freelancer hired by someone else (a judge) clocks in within seconds.
  * Every action is signed by the bot and submitted gaslessly through the forwarder by the keeper,
- * which also settles running tabs every few minutes. Like any client, the studios pay Segundo's 1% fee
+ * which also settles running tabs every fifteen minutes. Like any client, the studios pay Segundo's 1% fee
  * on every budget and top-up: a signed AUSD transfer to the treasury, sent right after the tab is funded.
  *
  *   RPC_URL=... TILL=0x... FORWARDER=0x... KEYS=keys/wallets.json node bots/till-bots.mjs
@@ -20,17 +21,19 @@ const AGORA_FAUCET = "0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C";
 const TREASURY = process.env.TREASURY || "0xAdF0F9443EafD19916cBd8f7541ea5e19e69F62c"; // Segundo's treasury: the 1% client fee
 const keys = JSON.parse(fs.readFileSync(process.env.KEYS || "keys/wallets.json", "utf8"));
 const TICK_MS = Number(process.env.TICK_MS || 4000);
-const SETTLE_EVERY_MS = Number(process.env.SETTLE_EVERY_MS || 300_000);
+const SETTLE_EVERY_MS = Number(process.env.SETTLE_EVERY_MS || 900_000);
 // When run from cron each minute, exit before the next run starts (cron + flock restart it).
 const RUN_FOR_MS = Number(process.env.RUN_FOR_MS || 0);
-// MON is the scarce resource on testnet, so the seeded tabs run lean on transactions: large budgets,
-// two work blocks a day, and a settle every five minutes.
+// MON is the scarce resource on testnet, so the seeded tabs run lean on transactions: top-ups of
+// $120 (one every few hours, not every hour), two work blocks a day, and one batched settle of
+// every running tab each fifteen minutes (pay accrues by the second on chain in between; a watched
+// tab page pays out on its own).
 const usd = (n) => BigInt(Math.round(n * 1e6));
 /** Segundo's fee: 1% of a budget or top-up, rounded up to the next AUSD unit (same rule as web/lib/money.ts). */
 const feeFor = (amount) => (amount <= 0n ? 0n : (amount + 99n) / 100n);
 // AUSD comes from Agora's on-chain faucet, so studios fund themselves and budgets can be realistic.
 const BUDGET = usd(Number(process.env.BUDGET || 40));
-const TOPUP = usd(Number(process.env.TOPUP || 40));
+const TOPUP = usd(Number(process.env.TOPUP || 120));
 const RECYCLE_ABOVE = usd(Number(process.env.RECYCLE_ABOVE || 1_000_000));
 const STARTED = Date.now();
 
@@ -64,9 +67,12 @@ const dollarAbi = parseAbi([
 ]);
 
 // UTC offsets are fixed here; good enough to keep each person to plausible local hours. Shifts are
-// local hours [start, end); together the five cover every hour of the UTC day, so the site always
-// has someone on the clock whatever time a judge opens it (Lucas edits video into the evening,
-// Ana starts early).
+// local hours [start, end) with an hour's break; a day can run past midnight ([.., 24] then [0, ..]).
+// The days are long and staggered so that at least three of the five are on the clock at every
+// minute of the UTC day (judges open the site from every time zone): Ana starts at dawn in Manila,
+// Priya keeps office hours, Wanjiru, Tunde and Lucas work into the night. Each day ends 15 minutes
+// after the next person's starts, so a slow clock-in never drops the count to two (coverage() checks
+// this at every start).
 const DAY = [[9, 12], [14, 18]];
 const CLIENTS = [
   { key: "bot1", name: "Northwind Studio", place: "Berlin", cur: "EUR" },
@@ -74,11 +80,11 @@ const CLIENTS = [
   { key: "bot3", name: "Kite & Co", place: "Singapore", cur: "SGD" },
 ];
 const FREELANCERS = [
-  { key: "bot4", name: "Ana Reyes", place: "Manila", cur: "PHP", utc: 8, client: "bot1", rate: 32, memo: "Brand system for autumn launch", shifts: [[8.5, 12], [14, 18]] },
-  { key: "bot5", name: "Tunde Bakare", place: "Lagos", cur: "NGN", utc: 1, client: "bot2", rate: 45, memo: "Payments API integration" },
-  { key: "bot6", name: "Priya Nair", place: "Pune", cur: "INR", utc: 5.5, client: "bot1", rate: 28, memo: "Illustrations for the help centre" },
-  { key: "bot7", name: "Lucas Almeida", place: "São Paulo", cur: "BRL", utc: -3, client: "bot3", rate: 30, memo: "Product launch video", shifts: [[9, 12], [14, 22]] },
-  { key: "bot8", name: "Wanjiru Kamau", place: "Nairobi", cur: "KES", utc: 3, client: "bot2", rate: 26, memo: "Website copy, five pages" },
+  { key: "bot4", name: "Ana Reyes", place: "Manila", cur: "PHP", utc: 8, client: "bot1", rate: 32, memo: "Brand system for autumn launch", shifts: [[5, 10.25], [11, 20.25]] },
+  { key: "bot5", name: "Tunde Bakare", place: "Lagos", cur: "NGN", utc: 1, client: "bot2", rate: 45, memo: "Payments API integration", shifts: [[12, 16.25], [17, 24], [0, 4.25]] },
+  { key: "bot6", name: "Priya Nair", place: "Pune", cur: "INR", utc: 5.5, client: "bot1", rate: 28, memo: "Illustrations for the help centre", shifts: [[7.5, 11.75], [12.5, 21.75]] },
+  { key: "bot7", name: "Lucas Almeida", place: "São Paulo", cur: "BRL", utc: -3, client: "bot3", rate: 30, memo: "Product launch video", shifts: [[12, 18.25], [19, 24], [0, 4.25]] },
+  { key: "bot8", name: "Wanjiru Kamau", place: "Nairobi", cur: "KES", utc: 3, client: "bot2", rate: 26, memo: "Website copy, five pages", shifts: [[9, 14.25], [15, 24], [0, 1.25]] },
 ];
 const acct = (k) => privateKeyToAccount(keys[k].privateKey);
 const BOT_ADDRS = new Set(Object.keys(keys).filter((k) => k.startsWith("bot")).map((k) => acct(k).address.toLowerCase()));
@@ -173,13 +179,21 @@ async function payFee(c, amount, what) {
 const dollarOf = (a) => pub.readContract({ address: DOLLAR, abi: dollarAbi, functionName: "balanceOf", args: [a] });
 
 /**
- * Is this freelancer at work? Two blocks a day in their own time zone, 09:00 to 12:00 and 14:00 to
- * 18:00, like a real working day. Few clock-ins keep the relayer's MON use low.
+ * Is this freelancer at work? Their own shifts in their own time zone (see FREELANCERS): two blocks
+ * a day with a break between, so each person clocks in and out only a couple of times a day.
  */
 function onShift(f, now = new Date()) {
   const localMin = (now.getUTCHours() * 60 + now.getUTCMinutes() + f.utc * 60 + 1440) % 1440;
   if (process.env.ALWAYS_ON) return true;
   return (f.shifts || DAY).some(([a, b]) => localMin >= a * 60 && localMin < b * 60);
+}
+
+/** The fewest freelancers on shift at any minute of the UTC day, and who is on shift right now. */
+function coverage(now = new Date()) {
+  const day = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  let fewest = FREELANCERS.length;
+  for (let m = 0; m < 1440; m++) fewest = Math.min(fewest, FREELANCERS.filter((f) => onShift(f, new Date(day + m * 60_000))).length);
+  return { fewest, now: FREELANCERS.filter((f) => onShift(f, now)).map((f) => f.name.split(" ")[0]) };
 }
 
 async function ensureProfiles() {
@@ -337,7 +351,9 @@ async function person(f, now, due) {
 
 async function main() {
   if (!TILL || !FORWARDER) throw new Error("Set TILL and FORWARDER.");
-  log(`till bots on ${RPC}, keeper ${keeper.account.address}`);
+  const cover = coverage();
+  log(`till bots on ${RPC}, keeper ${keeper.account.address}; on shift now: ${cover.now.join(", ")}; fewest on shift all day: ${cover.fewest}`);
+  if (cover.fewest < 3) log(`!!! SHIFTS LEAVE ONLY ${cover.fewest} ON THE CLOCK at some hour of the day`);
   if (!process.env.SKIP_PROFILES) await ensureProfiles().catch((e) => log("profiles:", e.shortMessage || e.message));
   for (;;) {
     if (RUN_FOR_MS && Date.now() - STARTED > RUN_FOR_MS) return;

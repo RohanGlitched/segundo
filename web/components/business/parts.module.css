@@ -100,6 +100,15 @@
   border-top: 1px solid var(--rule);
   padding-top: 18px;
 }
+.splitThree {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px 32px;
+}
+@media (max-width: 1080px) {
+  .splitThree {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 .splitCol {
   display: flex;
   flex-direction: column;
@@ -330,6 +339,14 @@
   color: var(--serial);
 }
 .stubSub dd {
+  font-size: 16px;
+}
+/* A row whose figure is our assumption, in the warning colour like the inputs it comes from. */
+.assumeRow dt {
+  color: var(--warn);
+  font-weight: 600;
+}
+.assumeRow dd {
   font-size: 16px;
 }
 .calcGroup {

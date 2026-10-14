@@ -12,8 +12,10 @@ export type Stats = {
   /** Only transfers matched to an open or top-up count as fees. refunded/net arrive with the close-time fee refund. */
   fees: { total: string; count: number; last7d: string; refunded?: string; refunds?: number; net?: string };
   paid: { total: string; payouts: number; tabs: number; freelancers: number; clients: number };
-  /** Tabs opened in the app by wallets other than our demo studios (our own test runs included). */
+  /** Tabs opened in the app by wallets that are neither our demo studios nor the team's own known test wallets. */
   outside?: Slice;
+  /** Tabs opened by the team's own known test wallets (public in VERIFY.md), kept apart from outside use. */
+  team?: Slice;
   /** Tabs our demo studios opened; studios and people are how many demo wallets we run. */
   demo?: Slice & { studios: number; people: number };
   /** Tabs opened straight on the contract, without the app (allowed by design; no fee is due). */

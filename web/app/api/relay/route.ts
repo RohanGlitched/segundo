@@ -3,9 +3,9 @@ import { forwarderAbi, tillAbi } from "@/lib/abi";
 import { authorizationCall, authorizationKey, type SignedAuthorization } from "@/lib/authorization";
 import { DOLLAR, FORWARDER, TILL, TREASURY, dollarAbi, publicClient } from "@/lib/chain";
 import { feeFor, formatFee } from "@/lib/money";
-import { feeRefundNonce, fromTreasury, refundClosedTab, type Refund, type TabRefund } from "@/lib/refund";
+import { feeRefundNonce, fromTreasury, refundClosedTab, requestRan, type Refund, type TabRefund } from "@/lib/refund";
 import type { Relayer } from "@/lib/pool";
-import { LOW_GAS, MIN_BUDGET, asRelayer, clientIp, json, limited, relayerFor, reserveFor, revertReason, sendAndWait } from "@/lib/server";
+import { LOW_GAS, MIN_BUDGET, asRelayer, clientIp, json, limited, noOp, relayerFor, reserveFor, revertReason, sendAndWait } from "@/lib/server";
 
 export const runtime = "nodejs";
 
@@ -47,10 +47,11 @@ export async function POST(req: Request) {
   const r = body.request;
   if (!r || typeof r.data !== "string" || typeof r.signature !== "string" || !isAddress(r.from)) return json({ error: "Send a signed request." }, 400);
   let gas: bigint;
+  let claimed: bigint;
   try {
     if (r.to?.toLowerCase() !== TILL.toLowerCase() || BigInt(r.value) !== 0n) return json({ error: "The relayer only pays for Segundo actions." }, 400);
     gas = BigInt(r.gas);
-    BigInt(r.nonce); // must parse; the forwarder checks the real one
+    claimed = BigInt(r.nonce);
   } catch {
     return json({ error: "Send a signed request." }, 400);
   }
@@ -89,18 +90,36 @@ export async function POST(req: Request) {
   }
 
   const from = r.from.toLowerCase();
-  if (limited(`relay:${from}`, 40, 60_000) || limited(`relay-ip:${clientIp(req)}`, 60, 60_000) || limited("relay:all", 240, 60_000))
+  const ip = clientIp(req);
+  // Calls on a tab are paced per tab as well, so a loop of free holds or clock-ins on one tab stops quickly.
+  const tab = fn === "open" || fn === "openWithPermit" || fn === "setProfile" ? null : String(args[0]);
+  if (
+    limited(`relay:${from}`, 40, 60_000) ||
+    limited(`relay-ip:${ip}`, 60, 60_000) ||
+    limited("relay:all", 240, 60_000) ||
+    (tab !== null && limited(`relay-tab:${tab}`, 12, 60_000)) ||
+    (fn === "setProfile" && limited(`relay-profile-ip:${ip}`, 6, 60_000))
+  )
     return json({ error: "Too many actions in a minute. Wait a moment and try again." }, 429);
+  if (limited(`relay-hour:${from}`, 300, 3_600_000) || limited(`relay-hour-ip:${ip}`, 600, 3_600_000))
+    return json({ error: "Too many actions this hour. Try again later." }, 429);
   // The signer's own relayer key: their actions stay in order on it while other people's run on the rest of the pool.
   // When gas runs low, the actions that give money back keep working longest.
   const { relayer: keeper, low } = await relayerFor(r.from, reserveFor(fn));
   if (low) return json({ error: low, lowGas: true }, 503);
 
   const request = { from: r.from, to: r.to, value: 0n, gas, deadline: Number(r.deadline), data: r.data, signature: r.signature };
-  const valid = await publicClient
-    .readContract({ address: FORWARDER, abi: forwarderAbi, functionName: "verify", args: [request] })
-    .catch(() => false);
-  if (!valid) return json({ error: "The signature doesn't match this request. Reload the page and try again." }, 400);
+  // The forwarder signs requests under the signer's current nonce. Read before verify, it is the nonce this request
+  // was signed for, which is what tells later whether the request ran somewhere else.
+  const nonce = (await publicClient.readContract({ address: FORWARDER, abi: forwarderAbi, functionName: "nonces", args: [r.from] }).catch(() => null)) as bigint | null;
+  const valid =
+    nonce !== null &&
+    nonce === claimed &&
+    (await publicClient.readContract({ address: FORWARDER, abi: forwarderAbi, functionName: "verify", args: [request] }).catch(() => false));
+  if (!valid || nonce === null) return json({ error: "The signature doesn't match this request. Reload the page and try again." }, 400);
+  // Valid on chain but changing nothing: the relayer would only burn gas on it.
+  const nothing = await noOp(fn, args, r.from);
+  if (nothing) return json({ error: nothing }, 409);
 
   if (fee) {
     // The budget and the fee leave the wallet together, so both must be there before anything moves.
@@ -165,6 +184,16 @@ export async function POST(req: Request) {
     } catch (e) {
       const why = revertReason(e);
       if (!feePaid || !fee) return json({ error: why }, 502);
+      // The fee goes back only for a request that didn't run. A copy of the signed request sent straight to the
+      // forwarder makes this send fail too, and that tab was funded: its fee stays.
+      const ran = await requestRan(r.from, nonce, r.data).catch(() => requestRan(r.from, nonce, r.data)).catch(() => null);
+      if (ran !== false) {
+        console.error(`!!! ${fn} by ${r.from} failed after its ${fee.value} fee landed in ${feePaid.hash} (${why}); request nonce ${nonce} ${ran ? "ran elsewhere" : "unknown"}, fee kept`);
+        const error = ran
+          ? "That action has already gone through (it was sent another way as well), so Segundo's fee stays with it. Reload to see it."
+          : "The action didn't go through and Segundo couldn't confirm it hasn't run elsewhere, so the fee is held for now. Reload to see where it stands.";
+        return json({ error, reason: why, fee: fee.value, feeHash: feePaid.hash }, ran ? 409 : 502);
+      }
       // The fee paid for something that didn't happen: it goes straight back.
       console.error(`!!! ${fn} by ${r.from} failed after its ${fee.value} fee landed in ${feePaid.hash} (${why}); refunding the fee`);
       const back = await refundFee(keeper, r.from, fee.value, fee.nonce);

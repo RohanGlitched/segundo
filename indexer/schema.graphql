@@ -121,6 +121,16 @@ type Payout {
   block: Int!
   day: String!
   tx: String!
+  "The payee's profile currency when they were paid; unset if they had none."
+  currency: String
+  "The trusted CRE rate in force for that currency at this payout (units per 1 USD, times 1e6); unset before the first report."
+  rateE6: BigInt
+  "DON time of that rate."
+  rateAt: Int
+  "The report that posted it."
+  rateSnapshot: RateSnapshot
+  "amount in the payee's currency at that rate, times 1e6 (amount * rateE6 / 1e6)."
+  localE6: BigInt
 }
 
 """
@@ -217,7 +227,9 @@ type RefundDue {
 }
 
 """
-Exchange rates posted on chain by Segundo's Chainlink CRE workflow (SegundoKeeper.RatesPosted).
+Exchange rates posted on chain through SegundoKeeper (SegundoKeeper.RatesPosted). On testnet the reports arrive through
+Chainlink's MockKeystoneForwarder, which anyone can call, so every report is kept but only those sent by Segundo's
+reporting keys are `trusted`; the rest never reach CurrencyRate, payouts or the totals.
 """
 type RateSnapshot {
   "txHash-logIndex"
@@ -227,13 +239,17 @@ type RateSnapshot {
   currencies: [String!]!
   "Units of each currency per 1 USD, times 1e6, in the same order as currencies."
   ratesE6: [BigInt!]!
+  "Sender of the transaction, lower case."
+  from: String!
+  "Sent by the CRE loop key or the keeper key, and dated no later than five minutes past its block."
+  trusted: Boolean! @index
   block: Int!
   timestamp: Int!
   tx: String!
 }
 
 """
-Latest on-chain rate for one currency.
+Latest trusted on-chain rate for one currency.
 """
 type CurrencyRate {
   "ISO code, e.g. PHP"
@@ -245,7 +261,7 @@ type CurrencyRate {
 }
 
 """
-One CRE report that settled tabs (SegundoKeeper.Kept).
+One CRE report that settled tabs (SegundoKeeper.Kept). Untrusted runs (see RateSnapshot) are kept but not counted.
 """
 type KeeperRun {
   "txHash-logIndex"
@@ -254,6 +270,9 @@ type KeeperRun {
   tabs: Int!
   paid: BigInt!
   skipped: Int!
+  "Sender of the transaction, lower case."
+  from: String!
+  trusted: Boolean! @index
   block: Int!
   timestamp: Int! @index
   tx: String!
@@ -330,10 +349,13 @@ type Totals {
   otherOutflow: BigInt!
   shifts: Int!
   secondsWorked: BigInt!
+  "Trusted rate reports and keeper runs only (see RateSnapshot)."
   rateReports: Int!
   keeperRuns: Int!
   keeperPaid: BigInt!
   keeperSkipped: Int!
+  "Reports (RatesPosted or Kept) sent by anyone other than Segundo's reporting keys."
+  untrustedReports: Int!
   lastBlock: Int!
   lastTimestamp: Int!
 }

@@ -1,7 +1,13 @@
 import type { Metadata } from "next";
+import { Footer } from "@/components/Footer";
 
 export const metadata: Metadata = { title: "Your tabs" };
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  return children;
+  return (
+    <>
+      <div className="fill">{children}</div>
+      <Footer />
+    </>
+  );
 }

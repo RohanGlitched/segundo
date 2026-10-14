@@ -27,20 +27,26 @@ export function TimeCard({
   lines,
   now,
   earnedUsd,
+  paidUsd,
   running,
   partial,
   loading,
   since,
+  stoppedAt,
 }: {
   lines: StubLine[];
   now: number;
   earnedUsd: number;
+  /** What the tab itself says has been paid out: the same figure as the page's "Paid out" row. */
+  paidUsd?: number;
   running: boolean;
   partial?: boolean;
   /** The history is still being read: draw what's in, but don't total it yet. */
   loading?: boolean;
   /** When the current session started (the tab's own `since`, unix seconds), for a shift that began before the lines read. */
   since?: number;
+  /** When a shift the budget ended stopped (unix seconds): the contract keeps its start, with no clock-out line. */
+  stoppedAt?: number;
 }) {
   // The card measures itself before paint and draws at that width: the chart fits inside it at any size, and text
   // stays at its CSS size instead of shrinking with a fixed-width drawing.
@@ -98,6 +104,9 @@ export function TimeCard({
   // A long shift can start before the stretch of history on screen: the clock is running, so it fills the card from
   // the start of the shift (the tab's own clock-in time) or from the first line read, whichever is later.
   else if (running) work.push([since && since > t0 && since < t1 ? since : t0, t1]);
+  // The budget ran out mid-shift: the shift ran from its start (or the first line read) to the moment it was spent.
+  else if (stoppedAt && since && since > 0 && !work.some(([a, b]) => a <= since && b >= Math.min(stoppedAt, t1) - 1))
+    work.push([Math.max(since, t0), Math.max(Math.max(since, t0) + 1, Math.min(stoppedAt, t1))]);
   const shiftBefore = running && inAt == null && since != null && since > 0 && since < t0 ? since : null;
   if (heldAt != null) holds.push([heldAt, t1]);
 
@@ -109,6 +118,14 @@ export function TimeCard({
       cum += toUsd(e.amount);
       paidPts.push([e.time, cum]);
     }
+  // A payout the tab already counts but the lines haven't reached yet: the line steps up to it at the newest moment,
+  // so the card's total always matches the page's "Paid out" row.
+  const lag = !partial && paidUsd != null && paidUsd > cum + 1e-7 ? paidUsd - cum : 0;
+  if (lag) {
+    const at = Math.min(t1, Math.max(events.at(-1)!.time, now));
+    paidPts.push([at, cum], [at, cum + lag]);
+    cum += lag;
+  }
   paidPts.push([t1, cum]);
   // With only the latest stretch of history, scale the money line to what was paid in that stretch.
   const top = Math.max(partial ? cum : earnedUsd, cum, 0.000001);
@@ -159,7 +176,7 @@ export function TimeCard({
         </text>
         {!loading && (
           <text x={W - R} y={y(cum) - 8} textAnchor="end" className={styles.val}>
-            {formatUsd(cum, cum < 1 ? 4 : 2)} paid out
+            {formatUsd(cum, cum < 1 ? 4 : 2)} {partial ? "paid in this stretch" : "paid out"}
           </text>
         )}
       </svg>

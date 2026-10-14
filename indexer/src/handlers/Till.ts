@@ -184,6 +184,12 @@ indexer.onEvent({ contract: "Till", event: "Settled" }, async ({ event, context 
   const pair = await context.Engagement.get(`${client.id}-${freelancer.id}`);
   if (pair) context.Engagement.set({ ...pair, paid: pair.paid + amount });
 
+  // The trusted CRE rate in force for the freelancer's currency right now: events run in chain order, so the
+  // latest CurrencyRate is the newest trusted report at or before this payout (a report earlier in the same
+  // transaction, as in a keeper run, included). Statements price each payout at it instead of today's rate.
+  const code = freelancer.currency;
+  const rate = code ? await context.CurrencyRate.get(code) : undefined;
+
   context.Payout.set({
     id: eventId(event.transaction.hash, event.logIndex),
     tab_id: tab.id,
@@ -195,6 +201,11 @@ indexer.onEvent({ contract: "Till", event: "Settled" }, async ({ event, context 
     block: books.block,
     day: books.day.id,
     tx: event.transaction.hash,
+    currency: code,
+    rateE6: rate?.rateE6,
+    rateAt: rate?.at,
+    rateSnapshot_id: rate?.snapshot_id,
+    localE6: rate ? (amount * rate.rateE6) / 1_000_000n : undefined,
   });
 
   const t = books.totals;

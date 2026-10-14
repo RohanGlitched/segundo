@@ -35,8 +35,8 @@ export function Money() {
           tab contract itself has no fee switch; the 1% pays for the gasless, passkey and cash-out service around it.
         </p>
         <p className={styles.moneyNext}>
-          <span>Next:</span> a share of the yield on budgets waiting in tabs, a margin on cash-out to local money (shown before you confirm), and
-          advances against income the chain has already verified.
+          <span>Next:</span> a share of the yield on budgets waiting in tabs (part of it passed back to the client), a share of the cash-out
+          partner&apos;s spread (shown before you confirm, never on top), and advances against income the chain has already verified.
         </p>
         <p className={styles.moneyLinks}>
           <Link href="/business" className="btn primary">

@@ -28,6 +28,19 @@
   font-size: clamp(30px, 3.6vw, 44px);
   letter-spacing: -0.02em;
 }
+/* Same eyebrow as every page head (components/PageHead.module.css). */
+.eyebrow {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--serial);
+  font-variation-settings: var(--semi);
+  letter-spacing: 0.02em;
+  margin-bottom: -10px;
+}
+.head {
+  padding-top: 0;
+  padding-bottom: 8px;
+}
 .addr {
   font-size: 14.5px;
   color: var(--ink-soft);

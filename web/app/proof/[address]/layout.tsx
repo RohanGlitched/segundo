@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { getAddress, isAddress } from "viem";
 import { readProfiles } from "@/lib/tabs";
 
@@ -18,6 +19,9 @@ export async function generateMetadata({ params }: { params: Promise<{ address: 
   };
 }
 
-export default function Layout({ children }: { children: React.ReactNode }) {
+/** Anything that isn't an address is a real 404 (app/proof/not-found.tsx keeps the friendly page). */
+export default async function Layout({ children, params }: { children: React.ReactNode; params: Promise<{ address: string }> }) {
+  const { address } = await params;
+  if (!isAddress(address, { strict: false })) notFound();
   return children;
 }

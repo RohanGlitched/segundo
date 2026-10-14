@@ -10,6 +10,19 @@
   src: url("/fonts/dollar.woff2") format("woff2");
   unicode-range: U+24;
 }
+
+/* Archivo's ₦ ₱ ₹ sit in its 86 KB latin-ext file, which only loads once those signs are on screen. This 3 KB face
+   holds just those three glyphs from the same Archivo variable font. It must come after next/font's own Archivo faces. */
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-display: swap;
+  src: url("/fonts/currency.woff2") format("woff2");
+  unicode-range: U+20A6, U+20B1, U+20B9;
+}
+
 :root {
   --paper: #edf1ec;
   --sheet: #f7f9f6;
@@ -231,6 +244,52 @@ select.input {
 
 [id] {
   scroll-margin-top: 76px;
+}
+
+/* Skip link: off screen until a keyboard user tabs to it, then a slip of note paper at the top left. */
+.skip {
+  position: absolute;
+  left: 12px;
+  top: -60px;
+  z-index: 40;
+  padding: 10px 16px;
+  border: 1.5px solid var(--ink);
+  border-radius: var(--radius);
+  background: var(--sheet);
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: var(--shadow);
+}
+.skip:focus {
+  top: 10px;
+}
+.main:focus {
+  outline: none;
+}
+/* Pages drawn in the browser hold the screen while they load, so the footer starts below the fold instead of
+   painting under the header and jumping down when the page arrives. */
+.fill {
+  min-height: calc(100svh - 63px);
+}
+
+/* Transaction links inside text: an underline as well as serial red, so they read as links without colour. */
+p a.serial,
+li a.serial {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+}
+p a.serial:hover,
+li a.serial:hover {
+  text-decoration-color: currentColor;
+}
+/* A full 42-character address breaks rather than running off a phone screen. */
+p a.serial,
+li a.serial,
+dd a.serial {
+  overflow-wrap: anywhere;
 }
 html {
   overflow-x: clip;

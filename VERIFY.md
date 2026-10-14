@@ -56,15 +56,16 @@ Clients pay Segundo 1% on top of every budget and top-up; freelancers pay nothin
 1. **Checked.** The relayer refuses a fee from anyone but the signer, to anyone but the treasury, under 1%, or with under two minutes to run; checks the wallet holds the budget plus the fee; and simulates both the fee transfer and the open.
 2. **Fee first.** The relayer sends the fee and waits for it to land.
 3. **Then the open or top-up**, simulated again now that the fee has moved, then sent through the forwarder.
-4. **If that fails, the whole fee goes back** from the treasury straight away.
-5. **At close, 1% of the unspent budget goes back**: `floor(refunded ÷ 100)`, never more than the fees that tab actually paid (`refundClosedTab` in `web/lib/refund.ts`).
+4. **If that fails, the whole fee goes back** from the treasury straight away, but only when the request provably didn't run. The relayer reads `forwarder.nonces(from)` before it verifies the request; after a failed send it looks for the forwarder's `ExecutedForwardRequest` for that nonce, and a request that ran some other way (sent straight to the forwarder, say) keeps its fee (`requestRan` in `web/lib/refund.ts`).
+5. **At close, 1% of the unspent budget goes back**: `floor(refunded ÷ 100)`, split over the fees that tab actually paid, never more than 1% of the funding each fee paid for or of the tab's whole budget (`refundClosedTab` and `splitRefund` in `web/lib/refund.ts`).
 
-Every refund is an EIP-3009 transfer **signed by the treasury and submitted by the relayer**, so the treasury never needs MON. Its nonce is derived from what is being refunded, so AUSD itself refuses a second refund of the same thing, from any server instance:
+Every refund is an EIP-3009 transfer **signed by the treasury and submitted by the relayer**, so the treasury never needs MON. Its nonce is derived from the client's own fee authorisation, so AUSD itself lets each fee come back at most once, whichever tab, server instance or path asks:
 
 ```
-close refund:  nonce = keccak256("segundo:fee-refund:tab" ‖ pad32(Till) ‖ pad32(tab id))
-failed open:   nonce = keccak256("segundo:fee-refund:fee" ‖ the client's fee-authorisation nonce)
+refund of a fee, whole or in part:  nonce = keccak256("segundo:fee-refund:fee" ‖ the client's fee-authorisation nonce)
 ```
+
+A close refund is one transfer per fee the tab paid. A fee pairs with a funding only when the same account sent both (the relayer key that served the request, or a demo studio's keeper) and it covers at least 1% of that funding (`pairFees`), so one fee can't refund several tabs, and a tab funded without the app pairs with nothing. Tabs refunded before this change used a per-tab nonce, `keccak256("segundo:fee-refund:tab" ‖ pad32(Till) ‖ pad32(tab id))`, and a tab refunded under it is not refunded again; tab 124 below is one of them.
 
 ### One tab through the whole cycle
 
@@ -77,7 +78,7 @@ Tab № 124, client `0xA4980bae43FC09C0ee7B764121E63cCA93b01065`, demo freelance
 | 3 | Close | [0xc864b77e…](https://testnet.monadvision.com/tx/0xc864b77edbb87b2ebd9cad2acdbc05ae9c59ff4685f90a6cfa7135ac4841d984) | 70,686,400 | 12:51:43 | Last 171,389 units to the freelancer; `Closed(paid = 280,000, refunded = 1,720,000)` |
 | 4 | Fee refund | [0xe431e833…](https://testnet.monadvision.com/tx/0xe431e833aef54acc52eb5b117b65b08d6b0dd95d1bce35128a3bb21a5449bb5b) | 70,686,435 | 12:51:54 | 17,200 units treasury → client = floor(1,720,000 ÷ 100) |
 
-Net: the client paid 20,000 − 17,200 = **2,800 units, exactly 1% of the 280,000 the freelancer earned**. The refund's `AuthorizationUsed` nonce is `0xee5931b8…3836`, the close-refund nonce for tab 124 above; `authorizationState(treasury, that nonce)` on AUSD returns `true`, so no second refund for tab 124 can go through.
+Net: the client paid 20,000 − 17,200 = **2,800 units, exactly 1% of the 280,000 the freelancer earned**. The refund's `AuthorizationUsed` nonce is `0xee5931b8…3836`, the per-tab close-refund nonce for tab 124 used at the time; `authorizationState(treasury, that nonce)` on AUSD returns `true`, so no second refund for tab 124 can go through.
 
 ### A failed open: the whole fee back
 
@@ -152,6 +153,7 @@ Samples: [first of the burst](https://testnet.monadvision.com/tx/0x17b4822eb39ab
 cd contracts
 forge test                                                    # 52 tests pass: units, edges, adversary, a 1,000-run fuzz, stateful invariants (+1 fork rehearsal, skipped off-fork)
 forge test --match-contract Fork --fork-url monad_testnet     # Agora AUSD (faucet, permit, transferWithAuthorization) on a Monad fork
+cd ../web && npm test                                         # 42 Vitest tests on a fake chain: relay checks, fee pairing, one refund per fee, failed-open refunds, cash-out settlement
 ```
 
 | Claim | Test |
@@ -183,7 +185,7 @@ The Chainlink CRE receiver, workflow and indexer have their own suites:
 cd cre/contracts && forge test                                                        # SegundoKeeper: 9 tests (the 2 fork tests skip off-fork)
 forge test --mt test_fork --fork-url https://testnet-rpc.monad.xyz                    # 2 fork tests against the live Till
 cd cre/segundo-keeper && bun test                                                     # workflow: 6 tests with the CRE SDK's test runtime
-cd indexer && pnpm test                                                               # HyperIndex handlers: 5 tests
+cd indexer && pnpm test                                                               # HyperIndex handlers: 7 tests
 ```
 
 | Claim | Test |
@@ -217,8 +219,8 @@ node scripts/e2e-keys.cjs <baseUrl>
 | "Can only pay you or refund the client" | `Till._settle` pays `payee` only; `Till.close` refunds `payer` only; no owner or admin functions exist |
 | "No gas, one signature" | `web/lib/relay.ts` (EIP-712 forward requests, EIP-2612 permit and EIP-3009 transfers on AUSD), `web/app/api/relay/route.ts` |
 | "Clients pay 1% on top; freelancers pay nothing" | `feeFor` in `web/lib/money.ts`; `signFee` in `web/lib/relay.ts`; the relayer checks and simulates the fee, sends it first, then the open (`web/app/api/relay/route.ts`); the demo studios pay it right after their open (`bots/till-bots.mjs`) |
-| "If the tab can't be opened, the fee comes straight back" | `refundFee` in `web/app/api/relay/route.ts`, `fromTreasury` and `feeRefundNonce` in `web/lib/refund.ts` |
-| "1% of what you don't spend comes back at close" | `refundClosedTab` in `web/lib/refund.ts`: floor(refunded ÷ 100), capped at the fees the tab paid; nonce `tabRefundNonce(id)`; a missed refund can be retried with `POST /api/relay {"refund": "<tab id>"}` |
+| "If the tab can't be opened, the fee comes straight back" | `refundFee` in `web/app/api/relay/route.ts`, only after `requestRan` in `web/lib/refund.ts` shows the request didn't run; `fromTreasury` and `feeRefundNonce` in `web/lib/refund.ts` |
+| "1% of what you don't spend comes back at close" | `refundClosedTab` in `web/lib/refund.ts`: floor(refunded ÷ 100), split over the fees the tab paid (`pairFees`, `splitRefund`), one transfer per fee under `feeRefundNonce(client fee nonce)`; a missed refund can be retried with `POST /api/relay {"refund": "<tab id>"}` |
 | "Send by link; they need nothing but the link" | `web/lib/sendlink.ts` (`newLinkKey`, `claimLink`, `readFragment`), `sweepFromKey` in `web/lib/relay.ts`, `web/app/claim/page.tsx` |
 | "Send to an email address" | `web/app/api/recipient/route.ts`, `recipientWallet` in `web/lib/privy-server.ts` |
 | "Cash out to local money" (simulated on testnet) | `web/app/cashout/page.tsx`, `web/app/cashout/corridors.ts` (`DEMO_PARTNER`, corridors and sources) |
@@ -233,7 +235,7 @@ node scripts/e2e-keys.cjs <baseUrl>
 | "Your passkey is your account" | `web/lib/mera.ts`: PRF output → BIP-39 entropy → key at `m/44'/60'/0'/0/0` → Mera signing session; `web/lib/wallet.tsx` locks it after 15 min idle or 5 min in the background |
 | "Sealed with your passkey; our servers never see them" | `web/lib/seal.ts`: PRF with salt `sha256("segundo/seal/v1")` → HKDF-SHA-256 → AES-256-GCM; account, passkey, format version and seal time as additional data (version 2); stored in this browser only |
 | "Revenue, live from the chain" and income statements | `web/lib/envio.ts` reads every Till event, every fee into the treasury and every refund out of it through Envio HyperRPC; `web/app/api/stats`, `web/app/api/history`, `web/app/proof/[address]` |
-| "Payouts every few seconds while you watch" | `web/app/tab/[id]/page.tsx` calls `/api/settle` every 6 s for the first two minutes a page is open, then every 20 s, then once a minute; it also settles once when a clock stops |
+| "Payouts every 6 s at first while you watch" | `web/app/tab/[id]/page.tsx` calls `/api/settle` every 6 s for the first two minutes a page is open, then every 20 s, then once a minute; it also settles once when a clock stops |
 | Live numbers on the landing page | `web/app/api/live/route.ts` reads every tab's state from the contract |
 | Pay stub from chain | `web/lib/hooks.ts` `useHistory` walks `Activity(id, prevBlock)` one exact block at a time |
 

@@ -247,7 +247,7 @@ export function ShareDetails({ address, wallet, block }: { address: Address; wal
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [link, setLink] = useState<string | null>(null);
-  const sealed = hasSealedDetails(address);
+  const sealed = hasSealedDetails(address, wallet);
 
   useEffect(() => {
     const arrived = () => {

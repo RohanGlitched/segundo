@@ -286,3 +286,9 @@
 .feeLine a {
   text-decoration: none;
 }
+
+/* The page head sits on the page's own top padding, and leads into the form or the sign-in gate. */
+.head {
+  padding-top: 0;
+  padding-bottom: 28px;
+}

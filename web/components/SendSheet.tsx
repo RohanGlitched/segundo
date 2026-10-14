@@ -20,7 +20,7 @@ import {
   updateSentLink,
   type SentLink,
 } from "@/lib/sendlink";
-import { PROMPT_FREE_LABEL, asksForPasskey, useWallet, type Wallet } from "@/lib/wallet";
+import { passkeyHint, useWallet, type Wallet } from "@/lib/wallet";
 import styles from "./SendSheet.module.css";
 
 type Mode = "link" | "contact" | "address";
@@ -80,6 +80,8 @@ export function SendSheet({
     remember(MODE_KEY, m);
   };
   const empty = balance != null && balance < MIN;
+  const meraSite = useWallet().accounts === "mera";
+  const shown: Mode = meraSite && mode === "contact" ? "link" : mode;
 
   return (
     <dialog
@@ -103,12 +105,15 @@ export function SendSheet({
           </button>
         </header>
         <div className={styles.modes} role="group" aria-label="How to send">
-          <button type="button" aria-pressed={mode === "link"} onClick={() => pick("link")} disabled={busy}>
+          <button type="button" aria-pressed={shown === "link"} onClick={() => pick("link")} disabled={busy}>
             By link
           </button>
-          <button type="button" aria-pressed={mode === "contact"} onClick={() => pick("contact")} disabled={busy}>
-            To an email
-          </button>
+          {/* The passkey-only site has no email sign-in, so a send to an email couldn't be collected there (as on /send). */}
+          {!meraSite && (
+            <button type="button" aria-pressed={mode === "contact"} onClick={() => pick("contact")} disabled={busy}>
+              To an email
+            </button>
+          )}
           <button type="button" aria-pressed={mode === "address"} onClick={() => pick("address")} disabled={busy}>
             To a wallet address
           </button>
@@ -124,9 +129,9 @@ export function SendSheet({
             </button>
           </div>
         )}
-        {mode === "link" ? (
+        {shown === "link" ? (
           <LinkForm max={balance ?? 0n} fromName={fromName} onMoved={onMoved} onBusy={setBusy} />
-        ) : mode === "contact" ? (
+        ) : shown === "contact" ? (
           <ContactForm max={balance ?? 0n} fromName={fromName} onMoved={onMoved} onBusy={setBusy} />
         ) : (
           <AddressForm max={balance ?? 0n} onMoved={onMoved} onBusy={setBusy} />
@@ -221,9 +226,7 @@ function PasskeyNote({ wallet, value }: { wallet: Wallet; value: bigint }) {
   if (wallet.kind !== "mera") return null;
   return (
     <p className={styles.fine}>
-      {asksForPasskey(wallet, value)
-        ? `Over ${PROMPT_FREE_LABEL}, Segundo asks for your passkey again before the money goes.`
-        : `Up to ${PROMPT_FREE_LABEL} sends with no prompt while signing is unlocked; over ${PROMPT_FREE_LABEL}, Segundo asks for your passkey again.`}
+      {passkeyHint(wallet, value) ?? "Up to $50 in all sends with no prompt while signing is unlocked; past that, Segundo asks for your passkey again."}
     </p>
   );
 }

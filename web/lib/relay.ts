@@ -203,12 +203,16 @@ export async function requestTestDollars(address: Address): Promise<Landed> {
   return { ...res, ms: Math.round(performance.now() - started) };
 }
 
-/** Anyone may settle a tab: used by the tab page to pay out while someone is watching. */
+/**
+ * Anyone may settle a tab: used by the tab page to pay out while someone is watching. `ms` is the server's own
+ * send-to-receipt time for the payout (what "landed in" means), not the round trip to this browser, which also
+ * counts the wait for the tab to be ready and the trip to the server and back.
+ */
 export async function settleNow(id: bigint): Promise<Landed & { amount: bigint }> {
   const started = performance.now();
-  const res = await post<{ hash?: Hex; block?: number; amount?: string; skipped?: boolean; reason?: string }>("/api/settle", { id: id.toString() });
+  const res = await post<{ hash?: Hex; block?: number; amount?: string; ms?: number; skipped?: boolean; reason?: string }>("/api/settle", { id: id.toString() });
   if (!res.hash) throw new Error(res.reason ?? "Nothing to pay out right now.");
-  return { hash: res.hash, block: res.block!, amount: BigInt(res.amount ?? "0"), ms: Math.round(performance.now() - started) };
+  return { hash: res.hash, block: res.block!, amount: BigInt(res.amount ?? "0"), ms: res.ms ?? Math.round(performance.now() - started) };
 }
 
 /** Turns contract and relayer errors into one plain sentence. */

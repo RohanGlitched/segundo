@@ -4,43 +4,77 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { explorerAddress } from "@/lib/chain";
-import { useWallet } from "@/lib/wallet";
+import { budgetLeft, useWallet } from "@/lib/wallet";
+import { formatUsd, toUsd } from "@/lib/money";
 import { shortAddress } from "@/lib/tabs";
 import { InstallApp, usePwaSetup, useStandalone } from "./InstallApp";
 import { Mark } from "./Mark";
 import { SignInChoices } from "./ui";
 import styles from "./Header.module.css";
 
-/** A small popover that closes on outside click and Escape. */
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])';
+
+/**
+ * A small popover: focus moves to its first item when it opens, Escape closes it and puts focus back on the button
+ * that opened it, and it closes when a click or the keyboard's focus leaves it.
+ */
 function usePopover() {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!open) return;
+    // The panel renders after the button inside the same box; its first control takes focus.
+    const first = [...(box.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])].find((el) => el !== trigger.current);
+    first?.focus({ preventScroll: true });
     const onDown = (e: MouseEvent) => !box.current?.contains(e.target as Node) && setOpen(false);
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      trigger.current?.focus();
+    };
+    const onFocus = (e: FocusEvent) => {
+      const to = e.target as Node | null;
+      if (to && !box.current?.contains(to)) setOpen(false);
+    };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
+    document.addEventListener("focusin", onFocus);
     return () => {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
+      document.removeEventListener("focusin", onFocus);
     };
   }, [open]);
-  return { open, setOpen, box };
+  return { open, setOpen, box, trigger };
 }
 
 /** Signed out: "Sign in" opens the same choices as every sign-in panel, passkey first. */
 function SignInMenu() {
   const wallet = useWallet();
   const standalone = useStandalone();
-  const { open, setOpen, box } = usePopover();
+  const { open, setOpen, box, trigger } = usePopover();
   const [phone, setPhone] = useState(false);
   useEffect(() => {
     if (!open) setPhone(false);
   }, [open]);
+  // While the wallet is still waking up the button looks ready (never greyed out); a tap then opens the menu once it is.
+  const [wanted, setWanted] = useState(false);
+  useEffect(() => {
+    if (wanted && wallet.ready) {
+      setWanted(false);
+      setOpen(true);
+    }
+  }, [wanted, wallet.ready, setOpen]);
   return (
     <div className={styles.account} ref={box}>
-      <button className="btn small primary" onClick={() => setOpen((o) => !o)} disabled={!wallet.ready} aria-expanded={open} aria-haspopup="dialog">
+      <button
+        ref={trigger}
+        className="btn small primary"
+        onClick={() => (wallet.ready ? setOpen((o) => !o) : setWanted(true))}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+      >
         Sign in
       </button>
       {open && (
@@ -81,7 +115,7 @@ function AccountMenu() {
   const wallet = useWallet();
   const router = useRouter();
   const standalone = useStandalone();
-  const { open, setOpen, box } = usePopover();
+  const { open, setOpen, box, trigger } = usePopover();
   const [copied, setCopied] = useState(false);
   const [phone, setPhone] = useState(false);
   useEffect(() => {
@@ -91,9 +125,14 @@ function AccountMenu() {
   if (!wallet.address) return null;
   return (
     <div className={styles.account} ref={box}>
-      <button className={styles.who} onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-haspopup="menu" title={wallet.address}>
+      <button ref={trigger} className={styles.who} onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-haspopup="menu" title={wallet.address}>
         <i aria-hidden className={styles.dot} />
-        {wallet.kind === "privy" ? wallet.label : shortAddress(wallet.address)}
+        <span className={styles.whoLong}>{wallet.kind === "privy" ? wallet.label : shortAddress(wallet.address)}</span>
+        {/* On a small phone: the dot and the last four characters, so the chip keeps its gutter. */}
+        <span className={styles.whoShort} aria-hidden>
+          …{wallet.address.slice(-4)}
+        </span>
+        <span className="visually-hidden">, account menu</span>
         <span aria-hidden className={styles.caret} />
       </button>
       {open && phone && (
@@ -107,6 +146,11 @@ function AccountMenu() {
             {wallet.kind === "mera" ? "Signed in with your passkey" : wallet.kind === "privy" ? "Signed in with email" : "Practice wallet in this browser"}
             <span className="serial">{shortAddress(wallet.address)}</span>
           </p>
+          {wallet.kind === "mera" && wallet.unlocked && (
+            <p className={styles.menuNote}>
+              Signing is unlocked: {formatUsd(toUsd(budgetLeft(wallet.session)))} more before Segundo asks for your passkey again.
+            </p>
+          )}
           {wallet.note && <p className={styles.menuNote}>{wallet.note}</p>}
           <Link role="menuitem" href="/app" className={styles.item} onClick={() => setOpen(false)}>
             Your tabs
@@ -194,11 +238,11 @@ const MENU = [
 /** On narrow screens the page links fold into one menu, so every page stays one tap away. */
 function MainMenu() {
   const path = usePathname();
-  const { open, setOpen, box } = usePopover();
+  const { open, setOpen, box, trigger } = usePopover();
   useEffect(() => setOpen(false), [path, setOpen]);
   return (
     <div className={`${styles.account} ${styles.menuWrap}`} ref={box}>
-      <button className={styles.menuBtn} onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-controls="main-menu">
+      <button ref={trigger} className={styles.menuBtn} onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-controls="main-menu">
         <svg width="16" height="12" viewBox="0 0 16 12" aria-hidden>
           <path d="M1 1.5h14M1 6h14M1 10.5h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
         </svg>

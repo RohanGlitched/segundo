@@ -112,51 +112,52 @@ export function SignInChoices({ compact, onDone }: { compact?: boolean; onDone?:
         {meraSite ? " Same passkey, same account as segundo.world." : ""}
       </p>
       {hostNote && <p className={styles.leadNote}>{hostNote}</p>}
-      <button className={`btn ${styles.full}`} onClick={() => passkey("in")} disabled={off}>
-        {busy === "in" ? waiting : "Sign back in with your passkey"}
-      </button>
-      {wallet.hasPasskeyHere && (
-        <button className={styles.textBtn} onClick={() => passkey("any")} disabled={off}>
-          {busy === "any" ? waiting : "Use a passkey saved on another device"}
+      {/* The no-sign-up way in, as a real button right under the main one: a judge or a curious client can try the
+          whole flow in one tap. */}
+      {others && (
+        <button
+          className={`btn ${styles.full} ${styles.practice}`}
+          onClick={() => {
+            wallet.usePractice();
+            onDone?.();
+          }}
+          disabled={off}
+        >
+          <span className={styles.practiceMain}>Try it without signing up</span>
+          <span className={styles.practiceSub}>25 free test AUSD, this browser only</span>
         </button>
       )}
+      {others && (
+        <p className={styles.or}>
+          <span>or, if you have an account</span>
+        </p>
+      )}
+      <div className={styles.again}>
+        <button className={`btn ${others ? "quiet" : ""} ${styles.full}`} onClick={() => passkey("in")} disabled={off}>
+          {busy === "in" ? waiting : "Sign back in with your passkey"}
+        </button>
+        {others && wallet.privyEnabled && (
+          <button
+            className={`btn quiet ${styles.full}`}
+            onClick={() => {
+              wallet.signIn();
+              onDone?.();
+            }}
+            disabled={off}
+          >
+            Continue with email
+          </button>
+        )}
+        {wallet.hasPasskeyHere && (
+          <button className={styles.textBtn} onClick={() => passkey("any")} disabled={off}>
+            {busy === "any" ? waiting : "Use a passkey saved on another device"}
+          </button>
+        )}
+      </div>
       {error && (
         <p className="notice error" role="alert">
           {error}
         </p>
-      )}
-      {others && (
-        <>
-          <p className={styles.or}>
-            <span>or</span>
-          </p>
-          <div className={styles.alt}>
-            {wallet.privyEnabled && (
-              <button
-                className={`btn quiet ${styles.full}`}
-                onClick={() => {
-                  wallet.signIn();
-                  onDone?.();
-                }}
-                disabled={off}
-              >
-                Continue with email
-              </button>
-            )}
-            {/* The no-sign-up way in, as a real button: a judge or a curious client can try the whole flow in one tap. */}
-            <button
-              className={`btn ${styles.full} ${styles.practice}`}
-              onClick={() => {
-                wallet.usePractice();
-                onDone?.();
-              }}
-              disabled={off}
-            >
-              <span className={styles.practiceMain}>Try it without signing up</span>
-              <span className={styles.practiceSub}>Use a practice wallet instead: 25 free test AUSD, in this browser only</span>
-            </button>
-          </div>
-        </>
       )}
       {!compact &&
         (others ? (

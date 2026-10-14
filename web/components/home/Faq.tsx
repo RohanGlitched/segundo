@@ -19,7 +19,7 @@ const QA: { q: string; a: ReactNode }[] = [
   },
   {
     q: "What does it cost?",
-    a: "Freelancers pay nothing to be paid: every second of pay reaches you in full. Clients pay 1% of what they spend. The fee is signed with each budget or top-up, in the same step and with no gas, and when you close the tab the unspent budget and its fee come back. Fund $100, use $60, and you pay $60.60 in all.",
+    a: "Freelancers pay nothing to be paid: every second of pay reaches you in full, and turning it into local money later costs only the cash-out partner's spread, shown before you confirm. Clients pay 1% of what they spend. The fee is signed with each budget or top-up, in the same step and with no gas, and when you close the tab the unspent budget and its fee come back. Fund $100, use $60, and you pay $60.60 in all.",
   },
   {
     q: "How does Segundo make money?",
@@ -27,7 +27,7 @@ const QA: { q: string; a: ReactNode }[] = [
       <>
         From that 1% client fee, which is already live on testnet and lands in a public treasury you can check on Monad&apos;s explorer. It pays for the
         service around the tab: no gas for either side, passkey sign-up, and cash-out as it arrives. Later, a share of the yield on budgets waiting in
-        tabs and a small margin on cash-out to local banks and mobile money. The whole model, with live numbers and what gas costs us, is on{" "}
+        tabs (part of it passed back to the client) and a share of the cash-out partner&apos;s spread, never a fee on top. The whole model, with live numbers and what gas costs us, is on{" "}
         <Link href="/business">how Segundo makes money</Link>.
       </>
     ),
@@ -38,11 +38,11 @@ const QA: { q: string; a: ReactNode }[] = [
   },
   {
     q: "What stops a freelancer clocking in and doing nothing?",
-    a: "The client watches the same tab live and can pause pay at any moment; the clock stops in the same block. The most either side can lose is a few seconds.",
+    a: "The same as on any hourly contract: the client sees every shift live and in the tab's statement, and can pause pay or close the tab at any second, with the clock stopping in the same block. A client who doesn't watch can still pay for idle time, but only from the budget already funded, never more. A time-tracker plug-in, next on the list, adds evidence of activity.",
   },
   {
     q: "How often am I paid?",
-    a: "You earn every second you're on the clock. While the tab is open on someone's screen, what you've earned is paid out to your wallet every few seconds; when nobody has it open, Segundo's keeper pays it out every few minutes. Either way, anything earned and not yet paid out is locked in the contract for you.",
+    a: "You earn every second you're on the clock. On testnet, while the tab is open on someone's screen, what you've earned is paid out to your wallet every 6 seconds for the first two minutes, then every 20 seconds, then once a minute; when nobody has it open, Segundo's keeper pays it out every 5 minutes. On mainnet the plan is every 10 seconds while the tab is on screen, batched with every other open tab, and every 5 minutes otherwise. Either way, anything earned and not yet paid out is locked in the contract for you.",
   },
   {
     q: "How do clients add money?",

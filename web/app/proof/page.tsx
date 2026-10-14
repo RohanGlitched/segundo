@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Footer } from "@/components/Footer";
 import { DEMO_FREELANCERS } from "@/lib/demo";
+import { PageHead } from "@/components/PageHead";
+import { StatementSpecimen } from "@/components/HeadArt";
 import { LookupForm } from "./LookupForm";
 import { NetworkLedger } from "./NetworkLedger";
 import styles from "./lookup.module.css";
@@ -31,17 +33,19 @@ export default function ProofLookup() {
   return (
     <>
       <main className={`wrap ${styles.page}`}>
-        <section className={styles.top}>
-          <p className={styles.kicker}>Income statements</p>
-          <h1 className={styles.h1}>Check a Segundo income statement</h1>
-          <p className={styles.lede}>
-            Freelancers paid through Segundo can show anyone exactly what they earned. Paste the account address printed on a statement, or scan its QR
-            code, and the statement is rebuilt from Monad while you watch.
-          </p>
-          <LookupForm />
+        <section data-nav="skip">
+          <PageHead
+            wideArt
+            eyebrow="Income statements"
+            title="Check a Segundo income statement"
+            lede="Freelancers paid through Segundo can show anyone exactly what they earned. Paste the account address printed on a statement, or scan its QR code, and the statement is rebuilt from Monad while you watch."
+            art={<StatementSpecimen />}
+          >
+            <LookupForm />
+          </PageHead>
         </section>
 
-        <section className={styles.section} aria-labelledby="for">
+        <section className={styles.section} aria-labelledby="for" data-nav="Who it's for">
           <h2 id="for" className={styles.h2}>
             Proof of income without an employer
           </h2>
@@ -59,7 +63,7 @@ export default function ProofLookup() {
           </ul>
         </section>
 
-        <section className={styles.section} aria-labelledby="on-it">
+        <section className={styles.section} aria-labelledby="on-it" data-nav="What it shows">
           <h2 id="on-it" className={styles.h2}>
             What a statement shows
           </h2>
@@ -92,7 +96,7 @@ export default function ProofLookup() {
           </dl>
         </section>
 
-        <section className={styles.section} aria-labelledby="checked">
+        <section className={styles.section} aria-labelledby="checked" data-nav="Why trust it">
           <h2 id="checked" className={styles.h2}>
             Why you can trust the numbers
           </h2>
@@ -116,7 +120,7 @@ export default function ProofLookup() {
           <p className={styles.note}>Segundo runs on Monad testnet with test AUSD for now. The contract is deployed under Segundo&apos;s working name, Till.</p>
         </section>
 
-        <section className={styles.section} aria-labelledby="ledger">
+        <section className={styles.section} aria-labelledby="ledger" data-nav="Ledger">
           <p className={styles.kicker}>Indexed by Envio HyperIndex</p>
           <h2 id="ledger" className={styles.h2}>
             The ledger behind every statement
@@ -128,7 +132,7 @@ export default function ProofLookup() {
           <NetworkLedger />
         </section>
 
-        <section className={styles.section} aria-labelledby="samples">
+        <section className={styles.section} aria-labelledby="samples" data-nav="Samples">
           <h2 id="samples" className={styles.h2}>
             Sample statements
           </h2>

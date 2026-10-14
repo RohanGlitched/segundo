@@ -6,14 +6,15 @@ import { UnderLoad } from "@/components/home/UnderLoad";
 import { Calculator } from "@/components/business/Calculator";
 import { LiveRevenue } from "@/components/business/LiveRevenue";
 import { Loop } from "@/components/business/Loop";
-import { AT_DEFAULTS, BATCH_EXTRA, EXAMPLE, GAS, POLICY, PRICES, breakEvenEvery, feePerMonth } from "@/components/business/economics";
+import { OpenOnHash } from "@/components/business/OpenOnHash";
+import { ASK, AT_DEFAULTS, BATCH_EXTRA, EXAMPLE, GAS, POLICY, PRICES, TESTNET_PACE, breakEvenEvery, feePerMonth } from "@/components/business/economics";
 import { TREASURY, explorerAddress } from "@/lib/chain";
 import { DEMO_FREELANCERS } from "@/lib/demo";
 import styles from "./business.module.css";
 
 type Src = { name: string; url: string };
 
-/** Every outside figure on this page and where it comes from, checked October 13, 2026, numbered as in the list at the end. */
+/** Every outside figure on this page and where it comes from, checked October 13 and 14, 2026, numbered as in the list at the end. */
 const SRC = {
   upworkFee: { name: "Upwork Help Center, Freelancer Service Fees", url: "https://support.upwork.com/hc/en-us/articles/211062538-Freelancer-Service-Fees" },
   upworkClient: { name: "Upwork Help Center, What is the Client Marketplace Fee?", url: "https://support.upwork.com/hc/en-us/articles/4660220468499-What-is-the-Client-Marketplace-Fee" },
@@ -52,6 +53,10 @@ const SRC = {
   monPrice: { name: "The Block, Monad (MON) price", url: "https://www.theblock.co/price/380273/monad-mon-usd" },
   vda: { name: "Income Tax Department of India, Taxation of virtual digital assets", url: "https://incometaxindia.gov.in/w/taxation-of-virtual-digital-asset-vda-" },
   genius: { name: "Congress.gov, S.1582, the GENIUS Act (119th Congress)", url: "https://www.congress.gov/bill/119th-congress/senate-bill/1582" },
+  fincen: {
+    name: "FinCEN, Application of FinCEN's Regulations to Certain Business Models Involving Convertible Virtual Currencies (FIN-2019-G001, May 2019)",
+    url: "https://www.fincen.gov/resources/statutes-regulations/guidance/application-fincens-regulations-certain-business-models",
+  },
 } satisfies Record<string, Src>;
 
 type Key = keyof typeof SRC;
@@ -73,8 +78,8 @@ const COSTS: { who: string; what: string; cost: ReactNode; src: Key[]; us?: bool
   { who: "Upwork", what: "When hourly pay is released", cost: "10 days after the weekly billing period ends", src: ["upworkHourly"] },
   { who: "Upwork", what: "Withdrawing what you earned", cost: "$0.99 to a local bank, $50 by US dollar wire", src: ["upworkWithdraw"] },
   { who: "Fiverr", what: "Seller fee, and the buyer's service fee", cost: "Sellers keep 80%; buyers add 5.5%, plus $3.50 under $200", src: ["fiverrSeller", "fiverrBuyer"] },
-  { who: "Deel", what: "Contractor management, paid by the company", cost: "$49 per contractor a month", src: ["deel"] },
-  { who: "Remote", what: "Contractor management, paid by the company", cost: "From $29 per contractor a month", src: ["remote"] },
+  { who: "Deel", what: "Contractor management (contracts, tax forms, invoices), paid by the company", cost: "$49 per contractor a month", src: ["deel"] },
+  { who: "Remote", what: "Contractor management (contracts, tax forms, invoices), paid by the company", cost: "From $29 per contractor a month", src: ["remote"] },
   { who: "Payoneer", what: "Receiving from a client, then converting to a local bank", cost: "Up to 3.99% + $0.49 by card, 1% by US bank debit; 1.2% to 4% to convert and withdraw", src: ["payoneer"] },
   { who: "Wise", what: "Receiving a US dollar wire, then converting", cost: "$6.11 per wire received; conversion from 0.23%", src: ["wise", "wiseConvert"] },
   {
@@ -105,7 +110,7 @@ const SIDE: { what: string; wire: ReactNode; market: string; till: string }[] = 
       </>
     ),
     market: "A platform fee on every payment, then a withdrawal fee",
-    till: "Nothing for freelancers to be paid. Clients pay 1% of what they spend. Network fees are paid for you.",
+    till: "Nothing for freelancers to be paid; clients pay 1% of what they spend, and network fees are paid for you. Turning it into local money costs the cash-out partner's spread, assumed 1%.",
   },
   {
     what: "Who holds the money meanwhile",
@@ -135,10 +140,10 @@ const LINES: { title: string; status: "live" | "next" | "later"; label: string; 
         <p>
           Freelancers pay nothing to be paid, and Segundo pays the gas for every action out of the fee; the calculator below shows what that costs and
           where it breaks even. At {EXAMPLE.hours} hours a week and ${EXAMPLE.rate} an hour, 1% is about <b>${Math.round(feePerMonth())} a month per freelancer</b>,
-          against $49 on Deel
-          <Ref k="deel" /> and from $29 on Remote
-          <Ref k="remote" />, and it is only charged when work happens. This is the line we can show working today: the panel above counts it as it
-          lands.
+          and nothing in a month with no work. Deel charges $49
+          <Ref k="deel" /> and Remote from $29 a month
+          <Ref k="remote" /> per contractor for contractor management: contracts, tax forms and invoices. That is a different job. Segundo is the pay
+          rail, priced on the money that moves. This is the line we can show working today: the panel above counts it as it lands.
         </p>
       </>
     ),
@@ -156,8 +161,10 @@ const LINES: { title: string; status: "live" | "next" | "later"; label: string; 
           <Ref k="agora" />.
         </p>
         <p>
-          The rate is a matter for an agreement with Agora, so we don&apos;t put a number on it here; the calculator below treats it as an assumption you can
-          set to zero. Nothing about it touches a freelancer&apos;s pay or needs a change to the contract.
+          The budget is the client&apos;s money, so the client gets a share of that yield back and Segundo keeps the rest: a reason to fund a week ahead
+          rather than pay late. The rate is a matter for an agreement with Agora, so we don&apos;t put a number on it here; the calculator below treats
+          Segundo&apos;s share as an assumption you can set to zero. Nothing about it touches a freelancer&apos;s pay or needs a change to the contract.
+          Planned for mainnet.
         </p>
       </>
     ),
@@ -226,12 +233,22 @@ const ALTS: { name: string; examples: string; forWho: string; when: string; cost
     when: "On the invoice or payroll date",
     cost: (
       <>
-        $49 or from $29 per contractor a month, paid by the company
+        $49 or from $29 per contractor a month, paid by the company, for contracts, tax forms and invoices; a seat to manage the contractor, not a
+        rail that moves the money
         <Ref k="deel" />
         <Ref k="remote" />
       </>
     ),
     holds: "The company until it pays, then the platform and banks",
+    gone: "An unpaid invoice",
+  },
+  {
+    name: "Stablecoin payroll",
+    examples: "Rise, Bitwage, Request Finance",
+    forWho: "Companies paying contractors in stablecoins",
+    when: "On a pay date or when an invoice is approved, in USDC or similar",
+    cost: "Plan or per-payment fees, paid by the company; the contractor manages a wallet or an account with the provider",
+    holds: "The company until the pay run, then the contractor's wallet",
     gone: "An unpaid invoice",
   },
   {
@@ -268,8 +285,8 @@ const ALTS: { name: string; examples: string; forWho: string; when: string; cost
     name: "Segundo",
     examples: "",
     forWho: "Clients paying freelancers abroad by the hour",
-    when: `Earned every second on the clock; paid out on a schedule (on mainnet every ${POLICY.onScreenS} s on screen, every ${POLICY.offScreenS / 60} minutes otherwise), and in full at close. Anyone can trigger a payout`,
-    cost: "1% of what the client spends. Nothing for the freelancer to be paid; gas is covered",
+    when: `Earned every second on the clock, from a capped budget funded before work starts; paid out on a schedule (on mainnet every ${POLICY.onScreenS} s on screen, every ${POLICY.offScreenS / 60} minutes otherwise), and in full at close. Anyone can trigger a payout`,
+    cost: "1% of what the client spends. Nothing for the freelancer to be paid; gas is covered. A passkey, no wallet app",
     holds: "A public contract that can only pay the freelancer for time worked or refund the client",
     gone: "Every second worked is paid out or locked to the freelancer; the rest of the budget can only go back to the client",
     us: true,
@@ -279,7 +296,11 @@ const ALTS: { name: string; examples: string; forWho: string; when: string; cost
 const DIFFS = [
   {
     t: "Paid while you work",
-    d: `Not ten days after the week. Earned every second, and paid out every few seconds while the tab is on screen (every ${POLICY.onScreenS} s, batched, on mainnet). Anyone can trigger a payout.`,
+    d: `Not ten days after the week. Earned every second and paid out as they work: on testnet every ${TESTNET_PACE.firstS} s at first while the tab is on screen, then every ${TESTNET_PACE.thenS} s, then once a minute; on mainnet every ${POLICY.onScreenS} s, batched. Anyone can trigger a payout.`,
+  },
+  {
+    t: "Paid by time, not by pay run",
+    d: "Stablecoin payroll pays on a date. Segundo pays for seconds on the clock, from a budget the client can pause at any second.",
   },
   { t: "The budget is locked before you start", d: "The money is in the contract before the first second, so there is no invoice to chase." },
   { t: "Clients pay only for time worked", d: "The clock runs only while the freelancer is on it, and the client can pause it at once." },
@@ -302,8 +323,8 @@ const ROAD: { when: string; status: "live" | "next" | "later"; label: string; it
     label: "October 2026, live on testnet",
     items: [
       <>
-        <b>The tab contract</b> on Monad testnet: per-second pay, pause, top-up, refund; verified on Sourcify, 53 Foundry tests including fuzz and
-        invariant runs
+        <b>The tab contract</b> on Monad testnet: per-second pay, pause, top-up, refund; verified on Sourcify, 52 Foundry tests including fuzz and
+        invariant runs, plus a fork rehearsal against Agora&apos;s AUSD
       </>,
       <>
         <b>Gasless everything</b>: AUSD permits and transfer authorisations, a forwarder and a relayer, so nobody holds MON
@@ -364,11 +385,14 @@ const ROAD: { when: string; status: "live" | "next" | "later"; label: string; it
         <b>Time-tracker plug-ins</b>: the tools freelancers already use clock them in and out of a tab
       </>,
       <>
-        <b>A yield-share agreement</b> with Agora for budgets waiting in tabs
+        <b>A yield-share agreement</b> with Agora for budgets waiting in tabs, with part of it passed back to the client
       </>,
       <>
-        <b>Batched payouts</b>: every tab on screen paid in one settleMany every {POLICY.onScreenS} seconds, with the relayer&apos;s gas capped at{" "}
-        {POLICY.gasCap * 100}% of a tab&apos;s fee
+        <b>W-8BEN in sealed details</b>: a freelancer keeps the US tax form sealed with their passkey and discloses it to the client who asks
+      </>,
+      <>
+        <b>Batched payouts</b>: every tab on screen paid in one settleMany every {POLICY.onScreenS} seconds, with the relayer&apos;s payout gas capped
+        at {POLICY.gasCap * 100}% of a tab&apos;s fee
       </>,
       <>
         <b>An on-ramp partner</b> so a client can fund a tab from a euro or dollar bank account
@@ -411,6 +435,28 @@ const NAV: { id: string; label: string }[] = [
 ];
 const nav = (id: string) => NAV.find((x) => x.id === id)!.label;
 
+/** What the client gets for the 1%: the side that pays needs its own reasons. */
+const CLIENT_WHY: { t: string; d: string }[] = [
+  { t: "Pay only for seconds worked", d: "The clock runs only while the freelancer is on it, and the client can pause it at any second." },
+  { t: "No invoices to process", d: "Every tab produces its own statement from the chain, with each shift and payout. That is the invoice." },
+  { t: "No outgoing wire fees", d: "Funding a tab is one signature in digital dollars, with the gas paid by Segundo." },
+  { t: "One balance, many countries", d: "Freelancers in Manila, Lagos, Pune, Nairobi and São Paulo are paid from the same account." },
+  { t: "Budget yield shared back", d: "On mainnet, part of the reserve yield on a funded budget goes back to the client. Planned." },
+];
+
+/** A long section's body, folded behind its heading so the page reads in one pass and opens where you want detail. */
+function Fold({ label, sub, children }: { label: string; sub: string; children: ReactNode }) {
+  return (
+    <details className={styles.fold}>
+      <summary>
+        <span className={styles.foldHead}>{label}</span>
+        <span className={styles.foldSub}>{sub}</span>
+      </summary>
+      <div className={styles.foldBody}>{children}</div>
+    </details>
+  );
+}
+
 function Status({ status, children }: { status: "live" | "next" | "later"; children: ReactNode }) {
   return (
     <span className={`${styles.status} ${status === "live" ? styles.live : status === "next" ? styles.next : ""}`}>
@@ -423,6 +469,7 @@ export default function Business() {
   return (
     <>
       <main>
+        <OpenOnHash />
         {/* ------------------------------------------------------------ the model in one line */}
         <section id="overview" className={`wrap ${styles.top}`} data-nav="Overview">
           <div className={styles.topText}>
@@ -447,9 +494,19 @@ export default function Business() {
             </p>
             <p className={styles.lede}>
               Today a freelancer abroad gives up a cut of every hour to a marketplace, waits ten days for it, and pays again to bring it home. Segundo charges
-              the side that is buying the time, on what it actually spends, and pays the side doing the work every second, in full. The fee is already running
-              on Monad testnet.
+              the side that is buying the time, on what it actually spends. The freelancer earns every second and is paid as they work, from a budget locked
+              before they start. The fee is already running on Monad testnet.
             </p>
+            <div className={styles.why}>
+              <p className={styles.whyHead}>What the client gets for the 1%</p>
+              <ul>
+                {CLIENT_WHY.map((w) => (
+                  <li key={w.t}>
+                    <b>{w.t}.</b> {w.d}
+                  </li>
+                ))}
+              </ul>
+            </div>
             <div className={styles.ctas}>
               <a href="#live" className="btn primary">
                 See the live treasury
@@ -461,17 +518,17 @@ export default function Business() {
           </div>
           <div className={styles.receipt} aria-label="One week of work on Segundo">
             <p className={styles.receiptHead}>
-              <span>One week: 36 of 40 hours at $25</span>
+              <span>One week: 35 of 40 hours at $20</span>
               <span className="serial">№ 0001</span>
             </p>
             <dl className={styles.receiptList}>
               <div>
-                <dt>The client funds $1,000, plus 1%</dt>
-                <dd className="denom">$1,010.00</dd>
+                <dt>The client funds $800, plus 1%</dt>
+                <dd className="denom">$808.00</dd>
               </div>
               <div>
-                <dt>The freelancer is paid, by the second</dt>
-                <dd className="denom">$900.00</dd>
+                <dt>The freelancer is paid, as they work</dt>
+                <dd className="denom">$700.00</dd>
               </div>
               <div>
                 <dt>Unspent budget back at close</dt>
@@ -483,11 +540,11 @@ export default function Business() {
               </div>
               <div className={styles.fee}>
                 <dt>Segundo fee: 1% of what was spent</dt>
-                <dd className="denom">$9.00</dd>
+                <dd className="denom">$7.00</dd>
               </div>
               <div className={styles.total}>
                 <dt>The client pays in all</dt>
-                <dd className="denom">$909.00</dd>
+                <dd className="denom">$707.00</dd>
               </div>
               <div>
                 <dt>The freelancer pays to be paid</dt>
@@ -495,8 +552,8 @@ export default function Business() {
               </div>
             </dl>
             <p className={styles.receiptFoot}>
-              On Upwork the same week could cost the freelancer up to $135 (a 0–15% fee
-              <Ref k="upworkFee" />) and the client up to $71.91 more (up to 7.99%
+              On Upwork the same week could cost the freelancer up to $105 (a 0–15% fee
+              <Ref k="upworkFee" />) and the client up to $55.93 more (up to 7.99%
               <Ref k="upworkClient" />
               ), paid out 10 days after the week ends
               <Ref k="upworkHourly" />.
@@ -619,14 +676,18 @@ export default function Business() {
           <p className={styles.marketNote}>
             On price alone, a business paying through Wise or Payoneer already pays far less than the 6.36% world average, which is for a $200 consumer
             transfer. Once a cash-out partner&apos;s spread is added, Segundo costs a freelancer about what those services do. The difference is timing
-            and the guarantee: pay arrives while the work happens, from a budget locked before the first second. On price, Segundo wins against
-            marketplaces (up to 15% plus up to 7.99%) and payroll seats ($29 to $49 a month).
+            and the guarantee: pay arrives while the work happens, from a budget locked before the first second. Against marketplaces (up to 15% plus up
+            to 7.99%) Segundo costs far less. Payroll seats ($29 to $49 a month) buy contract management rather than a pay rail; Segundo&apos;s 1% comes
+            to about ${Math.round(feePerMonth())} a month at ${EXAMPLE.rate} an hour and {EXAMPLE.hours} hours a week, more at higher pay, and nothing in a
+            month without work.
           </p>
 
           <h3 className={styles.h3}>Side by side: a wire, a marketplace and Segundo</h3>
           <div className={styles.side} role="table" aria-label="Bank wire, marketplace and Segundo compared">
             <div className={`${styles.sideRow} ${styles.sideHead}`} role="row">
-              <span role="columnheader" />
+              <span role="columnheader">
+                <span className="visually-hidden">Question</span>
+              </span>
               <span role="columnheader">Bank wire</span>
               <span role="columnheader">Freelance marketplace</span>
               <span role="columnheader" className={styles.sideUs}>
@@ -692,8 +753,10 @@ export default function Business() {
               Unit economics
             </h2>
             <p className={styles.sub}>
-              At {EXAMPLE.hours} hours a week and ${EXAMPLE.rate} an hour, 1% is about ${Math.round(feePerMonth())} a month per freelancer, against $49 on
-              Deel and from $29 on Remote, charged only when work happens. What it costs Segundo is gas, and that depends on how often pay is paid out.
+              At {EXAMPLE.hours} hours a week and ${EXAMPLE.rate} an hour, 1% is about ${Math.round(feePerMonth())} a month per freelancer, charged only
+              when work happens. Against that fee Segundo pays gas, which depends on how often pay is paid out, and other variable costs: identity checks,
+              sanctions screening and servers, which the calculator assumes at $2 a freelancer-month. Card or bank on-ramp fees are the client&apos;s, paid
+              to the on-ramp partner on top of the 1%.
             </p>
           </div>
           <div className={styles.cadence}>
@@ -726,33 +789,41 @@ export default function Business() {
               <div>
                 <dt>On testnet today</dt>
                 <dd>
-                  A tab on screen asks for a payout every few seconds, each its own settle, at most one per tab every six blocks and only once half a cent
-                  is owed. The keeper pays every other running tab every {POLICY.offScreenS / 60} minutes in one settleMany. Sent alone every few seconds,
-                  payouts cost more than a $20 tab&apos;s fee while it is on screen: fine for a demo on test MON, not for mainnet.
+                  A tab open on screen asks for a payout every {TESTNET_PACE.firstS} s for its first two minutes, then every {TESTNET_PACE.thenS} s,
+                  then once a minute after ten minutes. Each is its own settle, at most one per tab every six blocks and only once half a cent is owed.
+                  The keeper pays every other running tab every {TESTNET_PACE.keeperS / 60} minutes in one settleMany. Sent alone that often, payouts
+                  cost more than a $20 tab&apos;s fee while it is on screen: fine for a demo on test MON, not for mainnet.
                 </dd>
               </div>
               <div className={styles.cadencePolicy}>
                 <dt>The policy for mainnet</dt>
                 <dd>
                   A tab on screen is paid every <b>{POLICY.onScreenS} seconds</b>, batched with every other open tab into one settleMany. Off screen, the
-                  keeper pays every <b>{POLICY.offScreenS / 60} minutes</b>. The relayer slows a tab&apos;s payouts rather than spend more than{" "}
-                  <b>{POLICY.gasCap * 100}% of its fee</b> on gas. With the calculator&apos;s defaults below, gas comes to{" "}
+                  keeper pays every <b>{POLICY.offScreenS / 60} minutes</b>. The relayer slows a tab&apos;s payouts, on screen and off, rather than
+                  spend more than <b>{POLICY.gasCap * 100}% of its fee</b> on payout gas. With the calculator&apos;s defaults below, gas comes to{" "}
                   <b>{(AT_DEFAULTS.gasShare * 100).toFixed(0)}% of the fee</b>, about ${AT_DEFAULTS.gasTabHour.toFixed(3)} a tab-hour against $
-                  {AT_DEFAULTS.feeTabHour.toFixed(2)}, and the fee covers gas until MON reaches ${AT_DEFAULTS.breakEvenMon.toFixed(2)}.
+                  {AT_DEFAULTS.feeTabHour.toFixed(2)}, and at the 10-second schedule the fee covers gas until MON reaches $
+                  {AT_DEFAULTS.breakEvenMon.toFixed(2)}.
                 </dd>
               </div>
             </dl>
           </div>
           <p className={styles.sub}>
             Change any figure. The fee is what Segundo charges today, and gas is what the relayer actually spends, measured from its receipts. The yield
-            share, the MON price and the share of time a tab is on screen, marked in amber, are assumptions until there is an agreement with Agora and a
-            mainnet to price gas on.
+            share, the other costs, the MON price, the cash-out spread and the share of time a tab is on screen, marked in amber, are assumptions until
+            there is an agreement with Agora, signed partners and a mainnet to price gas on.
           </p>
-          <Calculator marketFee={0.1} marketLabel="On a marketplace taking 10% (Upwork's range is 0–15%)" wireCost={0.0636} />
+          <Calculator
+            marketFee={0.1}
+            marketLabel="On a marketplace taking 10% (Upwork's range is 0–15%)"
+            convert={[0.012, 0.04]}
+            convertLabel="Payoneer, 1.2% to 4% to convert and withdraw"
+            cashOutSpread={0.01}
+          />
           <p className={styles.source}>
             Marketplace range from Upwork&apos;s published freelancer fees
-            <Ref k="upworkFee" />; the 6.36% is the World Bank&apos;s global average for sending $200 in Q3 2025
-            <Ref k="rpw" />. Monad&apos;s minimum base fee
+            <Ref k="upworkFee" />; Payoneer&apos;s conversion and withdrawal fees from its pricing page
+            <Ref k="payoneer" />. Monad&apos;s minimum base fee
             <Ref k="monadGas" />; MON price reference
             <Ref k="monPrice" />.
           </p>
@@ -806,10 +877,10 @@ export default function Business() {
           <h3 className={styles.h3}>A serviceable market, built from the bottom up</h3>
           <div className={styles.sam} role="table" aria-label="Serviceable market estimate">
             <div className={styles.samRow} role="row">
-              <span role="rowheader">People already paid across borders every month</span>
+              <span role="rowheader">Payoneer customers, freelancers and online sellers, moving over $500 a month</span>
               <span role="cell" className="denom">536,000</span>
               <span role="cell" className={styles.samSrc}>
-                Payoneer&apos;s active customers at the end of 2025, each moving over $500 a month
+                Payoneer&apos;s active customers at the end of 2025 with over $500 a month in volume; many are e-commerce sellers, not freelancers
                 <Ref k="payoneer25" />
               </span>
             </div>
@@ -853,54 +924,58 @@ export default function Business() {
               it&apos;s sent. None of them pays a freelancer while the work is happening without a wallet to manage.
             </p>
           </div>
-          <div className={styles.compare} role="table" aria-label="Segundo and the alternatives compared">
-            <div className={`${styles.cmpRow} ${styles.cmpHead}`} role="row">
-              <span role="columnheader" />
-              <span role="columnheader">Who it&apos;s for</span>
-              <span role="columnheader">When money arrives</span>
-              <span role="columnheader">Cost</span>
-              <span role="columnheader">Who holds the money</span>
-              <span role="columnheader">If the client disappears</span>
-            </div>
-            {ALTS.map((a) => (
-              <div className={`${styles.cmpRow} ${a.us ? styles.cmpUs : ""}`} role="row" key={a.name}>
-                <span role="rowheader" className={styles.cmpName}>
-                  {a.name}
-                  {a.examples && <small>{a.examples}</small>}
+          <Fold label="See the comparison" sub="Marketplaces, contractor payroll, stablecoin payroll, receive-and-convert apps and crypto streams, next to Segundo">
+            <div className={styles.compare} role="table" aria-label="Segundo and the alternatives compared">
+              <div className={`${styles.cmpRow} ${styles.cmpHead}`} role="row">
+                <span role="columnheader">
+                  <span className="visually-hidden">Option</span>
                 </span>
-                <span role="cell" data-label="For">
-                  {a.forWho}
-                </span>
-                <span role="cell" data-label="Money arrives">
-                  {a.when}
-                </span>
-                <span role="cell" data-label="Cost">
-                  {a.cost}
-                </span>
-                <span role="cell" data-label="Holds the money">
-                  {a.holds}
-                </span>
-                <span role="cell" data-label="If the client disappears">
-                  {a.gone}
-                </span>
+                <span role="columnheader">Who it&apos;s for</span>
+                <span role="columnheader">When money arrives</span>
+                <span role="columnheader">Cost</span>
+                <span role="columnheader">Who holds the money</span>
+                <span role="columnheader">If the client disappears</span>
               </div>
-            ))}
-          </div>
-          <p className={styles.source}>
-            Superfluid also asks for a deposit while a stream is open, returned when it closes normally
-            <Ref k="superfluid" />. Marketplace release times from Upwork
-            <Ref k="upworkHourly" /> and Fiverr
-            <Ref k="fiverrClear" />.
-          </p>
-          <h3 className={styles.h3}>What Segundo does differently</h3>
-          <ul className={styles.diffs}>
-            {DIFFS.map((d) => (
-              <li key={d.t}>
-                <b>{d.t}</b>
-                <span>{d.d}</span>
-              </li>
-            ))}
-          </ul>
+              {ALTS.map((a) => (
+                <div className={`${styles.cmpRow} ${a.us ? styles.cmpUs : ""}`} role="row" key={a.name}>
+                  <span role="rowheader" className={styles.cmpName}>
+                    {a.name}
+                    {a.examples && <small>{a.examples}</small>}
+                  </span>
+                  <span role="cell" data-label="For">
+                    {a.forWho}
+                  </span>
+                  <span role="cell" data-label="Money arrives">
+                    {a.when}
+                  </span>
+                  <span role="cell" data-label="Cost">
+                    {a.cost}
+                  </span>
+                  <span role="cell" data-label="Holds the money">
+                    {a.holds}
+                  </span>
+                  <span role="cell" data-label="If the client disappears">
+                    {a.gone}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className={styles.source}>
+              Superfluid also asks for a deposit while a stream is open, returned when it closes normally
+              <Ref k="superfluid" />. Marketplace release times from Upwork
+              <Ref k="upworkHourly" /> and Fiverr
+              <Ref k="fiverrClear" />.
+            </p>
+            <h3 className={styles.h3}>What Segundo does differently</h3>
+            <ul className={styles.diffs}>
+              {DIFFS.map((d) => (
+                <li key={d.t}>
+                  <b>{d.t}</b>
+                  <span>{d.d}</span>
+                </li>
+              ))}
+            </ul>
+          </Fold>
         </section>
 
         <div className={`wrap ${styles.gap}`}>
@@ -918,49 +993,51 @@ export default function Business() {
               currency the note already prints in.
             </p>
           </div>
-          <ul className={styles.corridors}>
-            {CORRIDORS.map((c) => (
-              <li key={c.to} className={styles.corridor} style={{ "--c": c.ink, "--cn": c.night } as CSSProperties}>
-                <span className={styles.corridorTo}>{c.to}</span>
-                <span className={styles.corridorCode}>{c.code}</span>
-                <span className={styles.corridorFrom}>{c.from}</span>
-                <span className={styles.corridorWhy}>{c.why}</span>
-              </li>
-            ))}
-          </ul>
+          <Fold label="See the plan" sub="Five corridors, the invite loop, distribution and why now">
+            <ul className={styles.corridors}>
+              {CORRIDORS.map((c) => (
+                <li key={c.to} className={styles.corridor} style={{ "--c": c.ink, "--cn": c.night } as CSSProperties}>
+                  <span className={styles.corridorTo}>{c.to}</span>
+                  <span className={styles.corridorCode}>{c.code}</span>
+                  <span className={styles.corridorFrom}>{c.from}</span>
+                  <span className={styles.corridorWhy}>{c.why}</span>
+                </li>
+              ))}
+            </ul>
 
-          <h3 className={styles.h3}>The loop: every tab onboards a freelancer</h3>
-          <Loop />
+            <h3 className={styles.h3}>The loop: every tab onboards a freelancer</h3>
+            <Loop />
 
-          <h3 className={styles.h3}>Distribution and timing</h3>
-          <div className={styles.points}>
-            <div>
-              <h3>Time trackers as the front door</h3>
-              <p>
-                Agencies already run a tracker that knows when someone is working. A plug-in that clocks in and out of a Segundo tab turns every tracker
-                install into a place pay can start, with no new habit for anyone.
-              </p>
+            <h3 className={styles.h3}>Distribution and timing</h3>
+            <div className={styles.points}>
+              <div>
+                <h3>Time trackers as the front door</h3>
+                <p>
+                  Agencies already run a tracker that knows when someone is working. A plug-in that clocks in and out of a Segundo tab turns every tracker
+                  install into a place pay can start, with no new habit for anyone.
+                </p>
+              </div>
+              <div>
+                <h3>Invite links as the sales team</h3>
+                <p>
+                  A client never has to find a freelancer on Segundo, and a freelancer never has to sign up before they&apos;re paid: the tab arrives as a link,
+                  and the passkey takes under a minute. Both sides leave with a working account.
+                </p>
+              </div>
+              <div>
+                <h3>Why now</h3>
+                <p>
+                  The US now has a federal law for dollar stablecoins, the GENIUS Act
+                  <Ref k="genius" />, so a business can hold and pay in one with clearer rules, and AUSD&apos;s issuer shares the yield on its reserves
+                  with partners. Upwork&apos;s freelancer fee now varies from 0% to 15% a contract
+                  <Ref k="upworkFee" />, so freelancers are watching what they pay. Monad made a block every 0.305 seconds on average over the last
+                  10,000 we measured, and our payouts landed 0.6 to 2.6 seconds after they were sent (see <Link href="/network">Monad under load</Link>).
+                  Passkeys make a wallet as easy as unlocking a phone.
+                </p>
+              </div>
             </div>
-            <div>
-              <h3>Invite links as the sales team</h3>
-              <p>
-                A client never has to find a freelancer on Segundo, and a freelancer never has to sign up before they&apos;re paid: the tab arrives as a link,
-                and the passkey takes under a minute. Both sides leave with a working account.
-              </p>
-            </div>
-            <div>
-              <h3>Why now</h3>
-              <p>
-                The US now has a federal law for dollar stablecoins, the GENIUS Act
-                <Ref k="genius" />, so a business can hold and pay in one with clearer rules, and AUSD&apos;s issuer shares the yield on its reserves
-                with partners. Upwork&apos;s freelancer fee now varies from 0% to 15% a contract
-                <Ref k="upworkFee" />, so freelancers are watching what they pay. Monad made a block every 0.305 seconds on average over the last
-                10,000 we measured, and our payouts landed 0.6 to 2.6 seconds after they were sent (see <Link href="/network">Monad under load</Link>).
-                Passkeys make a wallet as easy as unlocking a phone.
-              </p>
-            </div>
-          </div>
-          <UnderLoad />
+            <UnderLoad />
+          </Fold>
         </section>
 
         {/* ------------------------------------------------------------ money in */}
@@ -974,46 +1051,48 @@ export default function Business() {
               decides whether there is a customer at all. Here is what exists and what doesn&apos;t.
             </p>
           </div>
-          <ol className={styles.routes}>
-            <li>
-              <Status status="live">Live on testnet</Status>
-              <h3>A faucet, for trying it</h3>
-              <p>
-                Every Segundo account can take test AUSD in one tap and fund a tab with it. It isn&apos;t money, and it proves only the flow after the
-                dollars arrive.
-              </p>
-            </li>
-            <li>
-              <Status status="next">Exists on mainnet, not wired in</Status>
-              <h3>Agora, for larger studios</h3>
-              <p>
-                Agora issues AUSD to institutions: a business with an Agora account wires dollars from its bank and receives AUSD, and redeems it the same
-                way
-                <Ref k="agoraHome" />. That suits an agency with a treasury, not a small studio.
-              </p>
-            </li>
-            <li>
-              <Status status="next">Exists on mainnet, not wired in</Status>
-              <h3>Exchanges and apps that support Monad</h3>
-              <p>
-                Anyone can buy AUSD, or buy another dollar stablecoin and swap it, and withdraw it to their Segundo address on Monad. It works, but it
-                asks a client to run an exchange account.
-              </p>
-            </li>
-            <li>
-              <Status status="later">Needs a partner</Status>
-              <h3>Bank or card, inside Segundo</h3>
-              <p>
-                A licensed on-ramp partner turns a SEPA, ACH or card payment into AUSD in the client&apos;s own Segundo account, with one price in euros or
-                dollars shown before they fund. The partner runs the identity checks; the tab contract doesn&apos;t change. No partner is signed yet, so
-                the app doesn&apos;t offer it.
-              </p>
-            </li>
-          </ol>
-          <p className={styles.marketNote}>
-            Every tab also produces a statement from the chain, with each shift, hour and payout. Exported per period, that is the invoice a client files
-            for their books, the one a freelancer used to have to chase.
-          </p>
+          <Fold label="See the four routes" sub="What exists today for funding a tab, and what still needs a partner">
+            <ol className={styles.routes}>
+              <li>
+                <Status status="live">Live on testnet</Status>
+                <h3>A faucet, for trying it</h3>
+                <p>
+                  Every Segundo account can take test AUSD in one tap and fund a tab with it. It isn&apos;t money, and it proves only the flow after the
+                  dollars arrive.
+                </p>
+              </li>
+              <li>
+                <Status status="next">Exists on mainnet, not wired in</Status>
+                <h3>Agora, for larger studios</h3>
+                <p>
+                  Agora issues AUSD to institutions: a business with an Agora account wires dollars from its bank and receives AUSD, and redeems it the same
+                  way
+                  <Ref k="agoraHome" />. That suits an agency with a treasury, not a small studio.
+                </p>
+              </li>
+              <li>
+                <Status status="next">Exists on mainnet, not wired in</Status>
+                <h3>Exchanges and apps that support Monad</h3>
+                <p>
+                  Anyone can buy AUSD, or buy another dollar stablecoin and swap it, and withdraw it to their Segundo address on Monad. It works, but it
+                  asks a client to run an exchange account.
+                </p>
+              </li>
+              <li>
+                <Status status="later">Needs a partner</Status>
+                <h3>Bank or card, inside Segundo</h3>
+                <p>
+                  A licensed on-ramp partner turns a SEPA, ACH or card payment into AUSD in the client&apos;s own Segundo account, with one price in euros or
+                  dollars shown before they fund. The partner runs the identity checks; the tab contract doesn&apos;t change. No partner is signed yet, so
+                  the app doesn&apos;t offer it.
+                </p>
+              </li>
+            </ol>
+            <p className={styles.marketNote}>
+              Every tab also produces a statement from the chain, with each shift, hour and payout. Exported per period, that is the invoice a client files
+              for their books, the one a freelancer used to have to chase.
+            </p>
+          </Fold>
         </section>
 
         {/* ------------------------------------------------------------ compliance */}
@@ -1027,53 +1106,89 @@ export default function Business() {
               each one needs review in each market before launch.
             </p>
           </div>
-          <div className={styles.risks}>
-            <div>
-              <h3>Segundo doesn&apos;t hold the money</h3>
-              <p>
-                Budgets sit in a contract with no admin key, and fees go to a public treasury. Nobody at Segundo can move what is in a tab: it can only
-                pay the freelancer or go back to the client.
-              </p>
+          <Fold label="See each risk" sub="Custody, identity checks, money transmission, MiCA, India, sanctions, tax forms and free sends">
+            <div className={styles.risks}>
+              <div>
+                <h3>Segundo doesn&apos;t hold the money</h3>
+                <p>
+                  Budgets sit in a contract with no admin key, and fees go to a public treasury. Nobody at Segundo can move what is in a tab: it can only
+                  pay the freelancer or go back to the client.
+                </p>
+              </div>
+              <div>
+                <h3>Identity checks at each end, by licensed partners</h3>
+                <p>
+                  Money enters through an on-ramp partner and leaves through a cash-out partner, and each runs its own KYC and AML checks under its own
+                  licence. Moving money into and out of local currency is the regulated step, and we plan to leave it with those partners rather than
+                  become a money transmitter ourselves.
+                </p>
+              </div>
+              <div>
+                <h3>Our position on money transmission</h3>
+                <p>
+                  Segundo is non-custodial software: the user signs, a public contract holds the budget, and the 1% is charged by the front end, never
+                  taken from a tab. FinCEN&apos;s 2019 guidance on convertible virtual currency treats providers of software that never takes custody
+                  differently from money transmitters
+                  <Ref k="fincen" />. One flow needs its own review: send to an email puts money in an embedded wallet Privy creates for that address
+                  until its owner signs in.
+                </p>
+              </div>
+              <div>
+                <h3>EU clients and MiCA</h3>
+                <p>
+                  EU clients will fund tabs through a MiCA-authorised partner, in whichever dollar stablecoin it may offer, swapped to AUSD at funding;
+                  whether AUSD itself can be offered to EU users depends on its issuer&apos;s status, which we haven&apos;t confirmed. The EU&apos;s transfer
+                  of funds rules add checks on transfers over €1,000 to self-hosted wallets, and the partner runs them.
+                </p>
+              </div>
+              <div>
+                <h3>Sanctions screening</h3>
+                <p>
+                  Today the relayer submits anything a valid signature asks for. On mainnet it should screen addresses against sanctions lists before it
+                  submits, and refuse to sponsor gas for any that match, alongside the partners&apos; own screening.
+                </p>
+              </div>
+              <div>
+                <h3>A payment tool, not an employer</h3>
+                <p>
+                  Segundo doesn&apos;t employ anyone or decide how a client classifies a contractor; that stays with the client. What it gives both sides is
+                  the record: a statement per tab for the client&apos;s books and a pay history for the freelancer.
+                </p>
+              </div>
+              <div>
+                <h3>India: AUSD is a virtual digital asset</h3>
+                <p>
+                  India taxes gains on transferring a virtual digital asset at 30% and deducts 1% tax at source (section 194S) above small yearly
+                  thresholds
+                  <Ref k="vda" />. A cash-out partner would deduct the 1% and show it before the freelancer confirms; the pay itself is income they
+                  declare as usual. Export income normally has to arrive as foreign exchange through banking channels under FEMA, and GST zero-rating
+                  relies on that, so pay in a digital dollar may not qualify. India launches after counsel review; the Philippines and Nigeria come first.
+                </p>
+              </div>
+              <div>
+                <h3>US tax forms</h3>
+                <p>
+                  A US client paying a contractor abroad collects a W-8BEN. Planned: the freelancer keeps it in their sealed details, encrypted with their
+                  passkey, and discloses it to the client who asks, the way they already share details with a landlord.
+                </p>
+              </div>
+              <div>
+                <h3>Free sends, with limits</h3>
+                <p>
+                  Sending AUSD costs nothing and Segundo pays the gas. That is an acquisition loop, not revenue: every send brings in a person with a
+                  balance. The relayer limits sends per account (10 a minute), per IP address and overall, and refuses a send it can&apos;t
+                  simulate; on mainnet, a daily cap per account comes on top.
+                </p>
+              </div>
+              <div>
+                <h3>Licensing in each corridor</h3>
+                <p>
+                  Each corridor needs a partner licensed there, such as a virtual asset service provider registered with the Bangko Sentral ng Pilipinas
+                  for Manila. <Link href="/cashout">The cash-out page</Link> lists what each one needs. No partner is signed yet.
+                </p>
+              </div>
             </div>
-            <div>
-              <h3>Identity checks at each end, by licensed partners</h3>
-              <p>
-                Money enters through an on-ramp partner and leaves through a cash-out partner, and each runs its own KYC and AML checks under its own
-                licence. Moving money into and out of local currency is the regulated step, and we plan to leave it with those partners rather than
-                become a money transmitter ourselves.
-              </p>
-            </div>
-            <div>
-              <h3>Sanctions screening</h3>
-              <p>
-                Today the relayer submits anything a valid signature asks for. On mainnet it should screen addresses against sanctions lists before it
-                submits, and refuse to sponsor gas for any that match, alongside the partners&apos; own screening.
-              </p>
-            </div>
-            <div>
-              <h3>A payment tool, not an employer</h3>
-              <p>
-                Segundo doesn&apos;t employ anyone or decide how a client classifies a contractor; that stays with the client. What it gives both sides is
-                the record: a statement per tab for the client&apos;s books and a pay history for the freelancer.
-              </p>
-            </div>
-            <div>
-              <h3>India: AUSD is a virtual digital asset</h3>
-              <p>
-                India taxes gains on transferring a virtual digital asset at 30% and deducts 1% tax at source (section 194S) above small yearly
-                thresholds
-                <Ref k="vda" />. A cash-out partner would deduct the 1% and show it before the freelancer confirms; the pay itself is income they
-                declare as usual.
-              </p>
-            </div>
-            <div>
-              <h3>Licensing in each corridor</h3>
-              <p>
-                Each corridor needs a partner licensed there, such as a virtual asset service provider registered with the Bangko Sentral ng Pilipinas
-                for Manila. <Link href="/cashout">The cash-out page</Link> lists what each one needs. No partner is signed yet.
-              </p>
-            </div>
-          </div>
+          </Fold>
         </section>
 
         {/* ------------------------------------------------------------ milestones */}
@@ -1084,21 +1199,23 @@ export default function Business() {
             </h2>
             <p className={styles.sub}>What exists today, and what has to happen before the first real paycheck.</p>
           </div>
-          <ol className={styles.road}>
-            {ROAD.map((r) => (
-              <li key={r.when}>
-                <div className={styles.roadWhen}>
-                  <b>{r.when}</b>
-                  <Status status={r.status}>{r.label}</Status>
-                </div>
-                <ul className={`${styles.roadItems} ${r.status === "live" ? styles.done : ""}`}>
-                  {r.items.map((it, i) => (
-                    <li key={i}>{it}</li>
-                  ))}
-                </ul>
-              </li>
-            ))}
-          </ol>
+          <Fold label="See the milestones" sub="What was built during Monad Metropolis, what comes next, and later">
+            <ol className={styles.road}>
+              {ROAD.map((r) => (
+                <li key={r.when}>
+                  <div className={styles.roadWhen}>
+                    <b>{r.when}</b>
+                    <Status status={r.status}>{r.label}</Status>
+                  </div>
+                  <ul className={`${styles.roadItems} ${r.status === "live" ? styles.done : ""}`}>
+                    {r.items.map((it, i) => (
+                      <li key={i}>{it}</li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
+            </ol>
+          </Fold>
         </section>
 
         {/* ------------------------------------------------------------ founder */}
@@ -1123,6 +1240,9 @@ export default function Business() {
               <p>Hiring next: a payments and compliance lead, once the first cash-out corridor is signed.</p>
             </div>
           </div>
+          <p className={styles.ask}>
+            <b>The ask.</b> {ASK}
+          </p>
         </section>
 
         {/* ------------------------------------------------------------ sources */}
@@ -1131,18 +1251,20 @@ export default function Business() {
             Sources
           </h2>
           <p className={styles.sub}>
-            Checked October 13, 2026. Chain figures come from Monad testnet and are split into our demo studios and everyone else. Gas figures are averages
-            over Segundo&apos;s relayer receipts.
+            Checked October 13 and 14, 2026. Chain figures come from Monad testnet and are split into outside wallets, the team&apos;s test wallets and
+            our demo studios. Gas figures are averages over Segundo&apos;s relayer receipts.
           </p>
-          <ol className={styles.sources}>
-            {ORDER.map((k) => (
-              <li key={k}>
-                <a href={SRC[k].url} target="_blank" rel="noreferrer">
-                  {SRC[k].name}
-                </a>
-              </li>
-            ))}
-          </ol>
+          <Fold label="See all sources" sub="Every outside figure on this page, with a link">
+            <ol className={styles.sources}>
+              {ORDER.map((k) => (
+                <li key={k}>
+                  <a href={SRC[k].url} target="_blank" rel="noreferrer">
+                    {SRC[k].name}
+                  </a>
+                </li>
+              ))}
+            </ol>
+          </Fold>
         </section>
 
         <section id="start" className={`wrap ${styles.closing}`} aria-labelledby="close" data-nav="Start">

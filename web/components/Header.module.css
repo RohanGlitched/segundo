@@ -97,6 +97,24 @@
     max-width: 140px;
   }
 }
+.whoLong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.whoShort {
+  display: none;
+  font-variation-settings: var(--semi);
+  letter-spacing: 0.04em;
+}
+@media (max-width: 420px) {
+  .whoLong {
+    display: none;
+  }
+  .whoShort {
+    display: inline;
+  }
+}
 .caret {
   width: 7px;
   height: 7px;

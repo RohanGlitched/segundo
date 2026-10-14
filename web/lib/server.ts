@@ -2,6 +2,7 @@ import "server-only";
 import {
   BaseError,
   ContractFunctionRevertedError,
+  createPublicClient,
   createWalletClient,
   decodeErrorResult,
   formatTransactionReceipt,
@@ -40,6 +41,17 @@ export function signer(kind: keyof typeof KEYS): Relayer {
 
 type Client = Relayer;
 
+/**
+ * The relayer's own line to Monad. viem's default waits 10 s for an answer and then asks again, so one public-RPC
+ * call that never comes back held a payout for 10 or 20 s (measured on segundo.world: 10.98 s and 20.28 s landings
+ * between 0.7 to 1.4 s ones, with nothing else queued on that key and the base fee flat). From the server a Monad read
+ * answers in a fraction of a second, so a read that hasn't answered in 1.5 s is asked again at once; calls go one per
+ * HTTP request, so a slow one can't hold up a batch.
+ */
+export const rpc = createPublicClient({ chain: monadTestnet, transport: http(RPC_URL, { timeout: 1_500, retryCount: 2, retryDelay: 50 }) });
+/** For receipt looks and sends: never retried by viem (the watcher looks again in a moment; a send is handled below). */
+const once = createPublicClient({ chain: monadTestnet, transport: http(RPC_URL, { timeout: 2_500, retryCount: 0 }) });
+
 /** Within one server instance, a signer picks its nonces one at a time, so they never collide. */
 const queues = new Map<string, Promise<unknown>>();
 function serialised<T>(key: string, fn: () => Promise<T>): Promise<T> {
@@ -58,7 +70,7 @@ const lanes = new Map<string, { next: number; at: number }>();
 let feeCache: { at: number; fees: { maxFeePerGas: bigint; maxPriorityFeePerGas: bigint } } | null = null;
 async function feesNow() {
   if (feeCache && Date.now() - feeCache.at < 5_000) return feeCache.fees;
-  const f = await publicClient.estimateFeesPerGas();
+  const f = await rpc.estimateFeesPerGas();
   const fees = { maxFeePerGas: f.maxFeePerGas, maxPriorityFeePerGas: f.maxPriorityFeePerGas };
   feeCache = { at: Date.now(), fees };
   return fees;
@@ -71,29 +83,34 @@ async function feesNow() {
  * block is not, so one key keeps many transactions in flight (the benchmark on /network landed 48 from one key in one block).
  * A nonce race with another instance is retried with a fresh nonce and a little jitter, and so is a call the public
  * RPC turned away for its per-second limit.
+ * `ms` is the time from handing the signed transaction to the node to seeing its receipt: what "landed in" means.
  */
 export function sendAndWait(client: Client, tx: { to: Address; data: Hex; minGas?: bigint }) {
   const from = client.account.address;
   return (async () => {
     for (let attempt = 0; ; attempt++) {
       let hash: Hex;
+      let sentAt = 0;
       try {
-        const [est, fees] = await Promise.all([publicClient.estimateGas({ account: from, to: tx.to, data: tx.data }), feesNow()]);
+        const [est, fees] = await Promise.all([rpc.estimateGas({ account: from, to: tx.to, data: tx.data }), feesNow()]);
         const gas = (est * 115n) / 100n > (tx.minGas ?? 0n) ? (est * 115n) / 100n : tx.minGas!;
         hash = await serialised(from, async () => {
           let lane = lanes.get(from);
           if (!lane || Date.now() - lane.at > 3_000) {
-            const onChain = await publicClient.getTransactionCount({ address: from, blockTag: "pending" });
+            const onChain = await rpc.getTransactionCount({ address: from, blockTag: "pending" });
             lane = { next: Math.max(onChain, lane?.next ?? 0), at: Date.now() };
           }
           const nonce = lane.next;
           const raw = await client.account.signTransaction({ chainId: monadTestnet.id, type: "eip1559", to: tx.to, data: tx.data, gas, nonce, ...fees });
+          sentAt = Date.now();
           try {
-            await publicClient.request({ method: "eth_sendRawTransaction", params: [raw] });
+            await once.request({ method: "eth_sendRawTransaction", params: [raw] });
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
-            // "already known" is this very transaction arriving twice (a retried request): it was sent.
-            if (!/already known/i.test(msg)) {
+            // "already known" is this very transaction arriving twice (a retried request): it was sent. A send the node
+            // didn't answer in time may well have reached it: wait for its receipt rather than sign a second one (the
+            // receipt watcher gives up after 30 s and the key's nonces are read afresh).
+            if (!/already known|took too long|timed? ?out/i.test(msg)) {
               // Monad answers a nonce another instance already used with "invalid parameters" (-32602):
               // forget the lane so the next try reads the pending count afresh.
               if (/nonce too high|gap|invalid param|missing or invalid/i.test(msg)) lanes.delete(from);
@@ -113,9 +130,9 @@ export function sendAndWait(client: Client, tx: { to: Address; data: Hex; minGas
         }
         throw e;
       }
-      const receipt = await receiptOf(hash, from);
+      const { receipt, at } = await receiptOf(hash, from);
       if (receipt.status !== "success") throw new Error("Monad rejected the transaction.");
-      return { hash, block: Number(receipt.blockNumber), logs: receipt.logs };
+      return { hash, block: Number(receipt.blockNumber), logs: receipt.logs, ms: Math.max(0, at - sentAt) };
     }
   })();
 }
@@ -129,20 +146,28 @@ export function sendAndWait(client: Client, tx: { to: Address; data: Hex; minGas
  * the relayer's own keys seen that way are remembered for a minute.
  */
 type Waiter = { from: Address; since: number; asked: number; done: (r: TransactionReceipt | Error) => void };
+type Seen = { receipt: TransactionReceipt; at: number };
 const waiting = new Map<string, Waiter>();
 let watching = false;
 let blockReceipts = true;
 const RECEIPT_TIMEOUT = 30_000;
-/** Receipts asked for by hash on each look (every 200 ms). */
+/** Receipts asked for by hash on each look. */
 const BY_HASH = 4;
+/**
+ * Looks come every 120 ms while one or two transactions wait (a receipt is first asked for 300 ms after the send, as
+ * Monad rarely has one sooner), and every 200 ms when more are waiting, which keeps a busy instance under the RPC's limit.
+ */
+const LOOK_MS = (n: number) => (n <= 2 ? 120 : 200);
+const FIRST_LOOK_MS = 300;
 const recent = new Map<string, { at: number; receipt: TransactionReceipt }>();
 
-function receiptOf(hash: Hex, from: Address): Promise<TransactionReceipt> {
+/** The receipt, and when this instance first saw it. */
+function receiptOf(hash: Hex, from: Address): Promise<Seen> {
   const early = recent.get(hash.toLowerCase());
-  if (early) return Promise.resolve(early.receipt);
+  if (early) return Promise.resolve(early);
   return new Promise((resolve, reject) => {
     const now = Date.now();
-    waiting.set(hash.toLowerCase(), { from, since: now, asked: now, done: (r) => (r instanceof Error ? reject(r) : resolve(r)) });
+    waiting.set(hash.toLowerCase(), { from, since: now, asked: now, done: (r) => (r instanceof Error ? reject(r) : resolve({ receipt: r, at: Date.now() })) });
     watch();
   });
 }
@@ -165,7 +190,7 @@ function watch() {
   async function readBlocks(look: number) {
     if (last === null || look % 8 === 0 || Date.now() - readAt > 1_500) {
       // Start a few blocks back (a transaction can land before the first look), and skip ahead after a stall.
-      const h = await publicClient.getBlockNumber({ cacheTime: 0 }).catch(() => null);
+      const h = await once.getBlockNumber({ cacheTime: 0 }).catch(() => null);
       if (h !== null && (head === null || h > head)) head = h;
       if (h !== null && (last === null || h - last > 30n)) last = h - 10n;
     }
@@ -174,7 +199,7 @@ function watch() {
     const count = head !== null && head - from > 2n ? Math.min(Number(head - from), 12) : 2;
     const blocks = await Promise.all(
       Array.from({ length: count }, (_, i) =>
-        (publicClient.request({ method: "eth_getBlockReceipts", params: [toHex(from + 1n + BigInt(i))] } as never) as Promise<RpcTransactionReceipt[] | null>).catch((e: unknown) => {
+        (once.request({ method: "eth_getBlockReceipts", params: [toHex(from + 1n + BigInt(i))] } as never) as Promise<RpcTransactionReceipt[] | null>).catch((e: unknown) => {
           if (/not (found|supported|available)|does not exist|unsupported/i.test(e instanceof Error ? e.message : String(e))) blockReceipts = false;
           return null;
         }),
@@ -196,14 +221,14 @@ function watch() {
 
   (async () => {
     for (let look = 0; waiting.size; look++) {
-      await sleep(200);
+      await sleep(LOOK_MS(waiting.size));
       const now = Date.now();
-      const due = [...waiting].filter(([, w]) => now - w.since > 500).sort((a, b) => a[1].asked - b[1].asked);
+      const due = [...waiting].filter(([, w]) => now - w.since >= FIRST_LOOK_MS).sort((a, b) => a[1].asked - b[1].asked);
       const ask = due.slice(0, blockReceipts ? BY_HASH : 3 * BY_HASH);
       await Promise.all([
         ...ask.map(async ([hash, w]) => {
           w.asked = now;
-          const r = await publicClient.getTransactionReceipt({ hash: hash as Hex }).catch(() => null);
+          const r = await once.getTransactionReceipt({ hash: hash as Hex }).catch(() => null);
           if (r) found(hash, r);
         }),
         blockReceipts && waiting.size > ask.length ? readBlocks(look) : null,
@@ -241,7 +266,11 @@ export function revertReason(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-/** Very small in-memory limiter per serverless instance; enough to stop a runaway loop on testnet. */
+/**
+ * Very small in-memory limiter per serverless instance; enough to stop a runaway loop on testnet. The relay layers
+ * it (per signer, per IP, per tab and overall, by the minute and by the hour), and refuses calls that change
+ * nothing (noOp), so a loop of free calls pays for itself in fresh tabs or fresh IP addresses.
+ */
 const hits = new Map<string, number[]>();
 let lastPrune = 0;
 export function limited(key: string, max: number, windowMs: number): boolean {
@@ -259,6 +288,33 @@ export function limited(key: string, max: number, windowMs: number): boolean {
   list.push(now);
   hits.set(key, list);
   return false;
+}
+
+type TabRead = { tab: { payer: Address; rate: bigint; held: boolean; closed: boolean }; owed: bigint };
+
+/**
+ * Why a relayed Till call would change nothing, or null when it does something. These calls are valid on chain
+ * and carry no fee, so each one would only burn the relayer's gas: a hold to the state the tab is already in, the
+ * rate it already pays, a payout with nothing owed, the profile already set. Calls the contract itself refuses
+ * (clocking in twice, closing a closed tab) never get this far: their simulation fails first. A failed read lets the
+ * call through; the send itself is simulated again.
+ */
+export async function noOp(fn: string, args: readonly unknown[], from: Address): Promise<string | null> {
+  try {
+    if (fn === "setProfile") {
+      const p = (await publicClient.readContract({ address: TILL, abi: tillAbi, functionName: "profileOf", args: [from] })) as { name: string; place: string; currency: Hex };
+      const same = p.name === args[0] && p.place === args[1] && p.currency.toLowerCase() === String(args[2]).toLowerCase();
+      return same ? "Your profile already says that." : null;
+    }
+    if (fn !== "hold" && fn !== "setRate" && fn !== "settle") return null;
+    const v = (await publicClient.readContract({ address: TILL, abi: tillAbi, functionName: "getTab", args: [args[0] as bigint] })) as TabRead;
+    if (fn === "hold" && v.tab.held === args[1]) return v.tab.held ? "This tab is already on hold." : "This tab isn't on hold.";
+    if (fn === "setRate" && v.tab.rate === args[1]) return "The tab already pays that rate.";
+    if (fn === "settle" && v.owed === 0n) return "Nothing is owed on this tab right now.";
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /** The caller's address as the platform saw it (Vercel sets x-real-ip; the first forwarded hop is the fallback). */
@@ -297,9 +353,15 @@ export async function keeperMon(): Promise<bigint | null> {
   return (await poolMon())[i < 0 ? 0 : i] ?? null;
 }
 
+/**
+ * The pool's MON for choosing a key, waiting at most 1.5 s: past that the action goes ahead on its own key, as it does
+ * when a read fails (the send itself fails loudly if that key really is dry).
+ */
+export const monSoon = (): Promise<(bigint | null)[]> => Promise.race([poolMon(), sleep(1_500).then(() => [] as (bigint | null)[])]);
+
 /** Refuses an action when no relayer key holds the MON its tier needs; returns the message to show. */
 export async function lowOnGas(tier: keyof typeof RESERVE): Promise<string | null> {
-  const mon = await poolMon();
+  const mon = await monSoon();
   const best = mon[richest(mon)];
   if (best == null) return null; // an RPC hiccup must not block the action; the send itself will fail loudly
   return best < RESERVE[tier] ? LOW_GAS : null;
@@ -314,11 +376,25 @@ export async function lowOnGas(tier: keyof typeof RESERVE): Promise<string | nul
 export async function relayerFor(seed: Address | bigint, tier: keyof typeof RESERVE): Promise<{ relayer: Client; low: string | null }> {
   const keys = pool();
   const i = laneOf(seed, keys.length);
-  const mon = await poolMon();
+  const mon = await monSoon();
   if (mon[i] == null || mon[i]! >= RESERVE[tier]) return { relayer: keys[i]!, low: null };
   const r = richest(mon);
   if (mon[r] != null && mon[r]! >= RESERVE[tier]) return { relayer: keys[r]!, low: null };
   return { relayer: keys[i]!, low: LOW_GAS };
+}
+
+/**
+ * The key a watched tab's payouts go out on: id mod (N - 1), skipping key 0. Key 0 is also the demo bots' keeper
+ * (it counts its own nonces between runs) and the pool's richest key, which takes every request whose own key is
+ * short, so a payout queued there waits behind other people's work. With a one-key pool it is key 0 after all.
+ */
+export async function settleRelayer(id: bigint): Promise<{ relayer: Client; low: string | null }> {
+  const keys = pool();
+  if (keys.length < 2) return relayerFor(id, "settle");
+  const i = 1 + Number(id % BigInt(keys.length - 1));
+  const mon = await monSoon();
+  if (mon[i] == null || mon[i]! >= RESERVE.settle) return { relayer: keys[i]!, low: null };
+  return relayerFor(id, "settle");
 }
 
 export const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>

@@ -7,7 +7,7 @@ import { Mark } from "@/components/Mark";
 import { GrandRosette } from "@/components/home/Art";
 import { useBench, type Bench } from "@/components/home/UnderLoad";
 import { catchingUp, count, isFull, money, usdOf, useStats, type Stats } from "@/components/business/stats";
-import { AT_DEFAULTS, EXAMPLE, POLICY, feePerMonth, headroom } from "@/components/business/economics";
+import { ASK, AT_DEFAULTS, EXAMPLE, POLICY, feePerMonth, headroom } from "@/components/business/economics";
 import { NetworkProvider } from "@/lib/network";
 import benchRun from "@/public/bench.json";
 import styles from "./deck.module.css";
@@ -26,9 +26,9 @@ const feesGross = (x: Stats) =>
   `net of ${count(x.fees.refunds ?? 0)} ${x.fees.refunds === 1 ? "refund" : "refunds"} at close; ${money(usdOf(x.fees.total))} collected in ${count(x.fees.count)} ${
     x.fees.count === 1 ? "fee" : "fees"
   }`;
-/** Monad's average block time, measured from the chain by /api/stats; the October 13 measurement until it answers. */
-const blockTime = (s: Stats | null | undefined) =>
-  `${((s?.chain?.blockMs ?? 305) / 1000).toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} s`;
+/** Monad's average block time over 10,000 blocks, the October 13 measurement every page and doc quotes. */
+const BLOCK_TIME = `${(benchRun.blockTime.avgMs / 1000).toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} s`;
+const DEMO_VIDEO = "https://youtu.be/U6be6-HecJI";
 
 const CITIES = [
   { city: "Manila", code: "PHP", ink: "#2557B0", night: "#93B4F2", line: "Designers and assistants for studios abroad. Wants pesos in GCash, over InstaPay." },
@@ -125,7 +125,7 @@ const SLIDES: Slide[] = [
     title: "Why Monad",
     notes:
       "Any chain can count seconds, and Segundo counts them for free with timestamps. Monad is where paying them out makes sense. Every payout is a real transaction in AUSD, and in our load test ninety-six payouts used eight percent of one Monad block: room for about eleven hundred. Next, a vault per tab lets payouts to different freelancers run in parallel.",
-    body: (s) => (
+    body: () => (
       <div className={styles.split}>
         <div>
           <p className={styles.kicker}>Why Monad</p>
@@ -142,8 +142,8 @@ const SLIDES: Slide[] = [
         <div className={styles.stat}>
           <span className={styles.statLabel}>Payouts one block has room for</span>
           <span className={`denom ${styles.bigNum}`}>~{ROOM.perBlock.toLocaleString("en-US")}</span>
-          <span className={styles.statLabel}>Average Monad block</span>
-          <span className={`denom ${styles.bigNum}`}>{blockTime(s)}</span>
+          <span className={styles.statLabel}>Average Monad block, over 10,000 (Oct 13)</span>
+          <span className={`denom ${styles.bigNum}`}>{BLOCK_TIME}</span>
           <span className={styles.source}>
             {ROOM.payouts} settles filled {ROOM.pct}% of block {ROOM.block.toLocaleString("en-US")}{" "}
             on Monad testnet; gas room, not a measured rate. Monad charges the gas limit, so the relayer sends the estimate plus 15%, from a pool of keys.
@@ -167,7 +167,7 @@ const SLIDES: Slide[] = [
               <b>1% client fee; unspent budget and its fee come back</b> <span className={styles.on}>Live on testnet</span>
             </li>
             <li>
-              <b>Share of AUSD reserve yield on budgets in escrow</b> <span>Next</span>
+              <b>Share of AUSD reserve yield on budgets in escrow, part of it passed back to the client</b> <span>Next</span>
             </li>
             <li>
               <b>Share of the cash-out spread, never on top</b> <span>Next</span>
@@ -195,7 +195,8 @@ const SLIDES: Slide[] = [
           </dl>
           <span className={styles.source}>
             Payouts every {POLICY.onScreenS} s on screen and every {POLICY.offScreenS / 60} minutes otherwise, batched; gas from relayer receipts at
-            102 gwei and MON at $0.05. Covers gas until MON reaches ${AT_DEFAULTS.breakEvenMon.toFixed(2)}. The calculator is on /business.
+            102 gwei and MON at $0.05. At that schedule the fee covers gas until MON reaches ${AT_DEFAULTS.breakEvenMon.toFixed(2)}. Gas only: the
+            calculator on /business adds other variable costs.
           </span>
           <span className={styles.source}>
             {live(s, (x) => (whole(x) ? `Fees kept on testnet so far: ${feesNet(x)}, ${feesGross(x)}.` : catchingUp(x) ?? ""))} Test AUSD has no
@@ -209,14 +210,20 @@ const SLIDES: Slide[] = [
     id: "units",
     title: "Against the incumbents",
     notes:
-      "Per freelancer, at thirty-five hours a week and twenty dollars an hour, one percent is about thirty dollars a month, paid by the client and only when work happens. Deel charges forty-nine dollars a seat, Remote from twenty-nine, and Upwork takes up to fifteen percent from the freelancer plus up to eight from the client.",
+      "Per freelancer, at thirty-five hours a week and twenty dollars an hour, one percent is about thirty dollars a month, paid by the client and only when work happens. Deel and Remote sell a seat for contract management, forty-nine and from twenty-nine dollars a month; that's a different job, and Segundo is the pay rail. Upwork takes up to fifteen percent from the freelancer plus up to eight from the client. For the client, the 1% buys paying only for seconds worked, no invoices to process, no outgoing wire fees and one balance for five countries.",
     body: () => (
       <div>
         <p className={styles.kicker}>Unit economics</p>
         <h2 className={styles.h}>About ${Math.round(feePerMonth())} a freelancer-month, charged only when work happens.</h2>
+        <p className={styles.lead}>
+          The client gets for it: pay only for seconds worked, pause any second, no invoices to process, no outgoing wire fees, one balance for five
+          countries.
+        </p>
         <div className={styles.matrix} role="table" aria-label="A month of one freelancer's work, priced four ways">
           <div role="row" className={styles.mHead}>
-            <span role="columnheader" />
+            <span role="columnheader">
+              <span className="visually-hidden">Service</span>
+            </span>
             <span role="columnheader">
               A month at {EXAMPLE.hours} h a week and ${EXAMPLE.rate} ({usd0(MONTH_PAY)} of work)
             </span>
@@ -224,9 +231,9 @@ const SLIDES: Slide[] = [
             <span role="columnheader">In a month with no work</span>
           </div>
           {[
-            ["Segundo", `${usd0(feePerMonth())}, 1% of what is spent`, "The client", "$0"],
-            ["Deel", "$49 per contractor", "The company", "$49"],
-            ["Remote", "From $29 per contractor", "The company", "From $29"],
+            ["Segundo", `${usd0(feePerMonth())}, 1% of what is spent: the pay rail`, "The client", "$0"],
+            ["Deel", "$49 per contractor, for contracts, tax forms and invoices", "The company", "$49"],
+            ["Remote", "From $29 per contractor, for contracts, tax forms and invoices", "The company", "From $29"],
             ["Upwork", `Up to ${usd0(MONTH_PAY * 0.15)} (15%) plus up to ${usd0(MONTH_PAY * 0.0799)} (7.99%)`, "Freelancer and client", "$0"],
           ].map((r) => (
             <div role="row" key={r[0]} className={r[0] === "Segundo" ? styles.mUs : undefined}>
@@ -238,9 +245,9 @@ const SLIDES: Slide[] = [
           ))}
         </div>
         <p className={styles.source}>
-          Deel and Remote pricing pages; Upwork Help Center, freelancer service fees and client marketplace fee. A month is 52 ÷ 12 weeks. On price
-          against Wise or Payoneer, Segundo is about even once a cash-out spread is added; the difference there is timing and a budget locked before
-          work starts.
+          Deel and Remote pricing pages; Upwork Help Center, freelancer service fees and client marketplace fee. A month is 52 ÷ 12 weeks. Deel and
+          Remote sell contractor management, not the pay rail. On price against Wise or Payoneer, Segundo is about even once a cash-out spread
+          (assumed 1%) is added; the difference there is timing and a budget locked before work starts.
         </p>
       </div>
     ),
@@ -249,7 +256,7 @@ const SLIDES: Slide[] = [
     id: "market",
     title: "Market",
     notes:
-      "Hundreds of millions of people work online. From the bottom up: Payoneer alone pays five hundred and thirty-six thousand people more than five hundred dollars a month across borders. Their pay, three to ten billion dollars a year, is our serviceable market; at one percent, that's thirty-two to a hundred and five million in revenue. That's an estimate, and every input is on the business page.",
+      "Hundreds of millions of people work online. From the bottom up: five hundred and thirty-six thousand Payoneer customers, freelancers and online sellers, each move more than five hundred dollars a month across borders. Their pay, three to ten billion dollars a year, is our serviceable market; at one percent, that's thirty-two to a hundred and five million in revenue. That's an estimate, and every input is on the business page.",
     body: () => (
       <div>
         <p className={styles.kicker}>Market</p>
@@ -269,7 +276,7 @@ const SLIDES: Slide[] = [
             <span className={`denom ${styles.bigNum}`}>$3.2–10.5B</span>
             <p>of cross-border pay a year, the serviceable market, bottom up. At 1%: $32–105M a year in revenue</p>
             <p className={styles.source}>
-              536,000 Payoneer customers moving over $500 a month (Payoneer FY 2025, Form 8-K) × $6,000 to $19,500 a year (the upper end is our assumption:
+              536,000 Payoneer customers, freelancers and online sellers, moving over $500 a month (Payoneer FY 2025, Form 8-K) × $6,000 to $19,500 a year (the upper end is our assumption:
               25 h a week at $15)
             </p>
           </div>
@@ -281,21 +288,24 @@ const SLIDES: Slide[] = [
     id: "competition",
     title: "Competition",
     notes:
-      "Marketplaces pay late: Upwork releases hourly pay ten days after the week and takes up to fifteen percent, and Fiverr keeps twenty percent of each order. Payroll waits for the payroll run, and transfer apps wait for an invoice. Crypto streams run by calendar time and need a wallet. Segundo pays by the second, for time worked.",
+      "Marketplaces pay late: Upwork releases hourly pay ten days after the week and takes up to fifteen percent, and Fiverr keeps twenty percent of each order. Payroll waits for the payroll run, and transfer apps wait for an invoice. Stablecoin payroll, like Rise, Bitwage or Request Finance, pays in USDC on a pay date, with a wallet to manage. Crypto streams run by calendar time and need a wallet. Segundo pays by time worked, from a capped budget funded first, with a passkey and no wallet app.",
     body: () => (
       <div>
         <p className={styles.kicker}>Competition</p>
         <h2 className={styles.h}>Everyone else pays after the work. We pay during it.</h2>
         <div className={styles.matrix} role="table" aria-label="Segundo and the alternatives">
           <div role="row" className={styles.mHead}>
-            <span role="columnheader" />
+            <span role="columnheader">
+              <span className="visually-hidden">Option</span>
+            </span>
             <span role="columnheader">When money arrives</span>
             <span role="columnheader">Cost to the freelancer</span>
             <span role="columnheader">If the client disappears</span>
           </div>
           {[
             ["Marketplaces", "10 days after the week (Upwork)", "0–15% on Upwork, 20% on Fiverr", "Open a dispute"],
-            ["Contractor payroll", "On the payroll date", "None; the company pays $29–49 a month", "Waits for the payroll run"],
+            ["Contractor payroll", "On the payroll date", "None; the company pays $29–49 a month for contract management", "Waits for the payroll run"],
+            ["Stablecoin payroll (Rise, Bitwage, Request Finance)", "On a pay date, in USDC", "A wallet or provider account to manage", "Waits for the pay run"],
             ["Receive and convert", "When the client pays", "Receiving and conversion fees", "Chase an invoice"],
             ["Crypto streaming", "Calendar-time streams the payer manages; no clock-in, no cap per hour", "Gas, a wallet, a seed phrase", "Paid until the stream stops"],
             ["Segundo", "Earned every second you're clocked in, paid out as you work", "Nothing to be paid. Client pays 1% of what they spend", "Every second worked is paid or locked to you"],
@@ -315,7 +325,7 @@ const SLIDES: Slide[] = [
     id: "proof",
     title: "Live proof",
     notes:
-      "It's live. These numbers come from the chain right now, split honestly: wallets that aren't ours, then our demo studios, which are bots. Fees are shown net of what went back to clients at close.",
+      "It's live. These numbers come from the chain right now, split honestly: wallets that aren't ours, then our own test wallets, then our demo studios, which are bots. Fees are shown net of what went back to clients at close.",
     body: (s) => (
       <div>
         <p className={styles.kicker}>Live proof</p>
@@ -326,8 +336,8 @@ const SLIDES: Slide[] = [
               ["Outside wallets", (x: Stats) => (whole(x) && x.outside ? count(x.outside.wallets) : "—")],
               ["Their tabs", (x: Stats) => (whole(x) && x.outside ? count(x.outside.tabs) : "—")],
               ["Paid on their tabs", (x: Stats) => (whole(x) && x.outside ? money(usdOf(x.outside.paid)) : "—")],
-              ["Demo studios' tabs (bots)", (x: Stats) => (whole(x) && x.demo ? count(x.demo.tabs) : "—")],
-              ["Paid by demo studios (bots)", (x: Stats) => (whole(x) && x.demo ? money(usdOf(x.demo.paid)) : "—")],
+              ["Team test wallets' tabs", (x: Stats) => (whole(x) && x.team ? count(x.team.tabs) : "—")],
+              ["Demo studios' tabs (bots)", (x: Stats) => (whole(x) && x.demo ? `${count(x.demo.tabs)}, ${money(usdOf(x.demo.paid))} paid` : "—")],
               ["Fees kept, net of refunds", (x: Stats) => (whole(x) ? feesNet(x) : "—")],
             ] as const
           ).map(([k, f]) => (
@@ -339,8 +349,9 @@ const SLIDES: Slide[] = [
           ))}
         </dl>
         <p className={styles.source}>
-          {s && catchingUp(s) ? `${catchingUp(s)} ` : ""}Outside wallets are everyone who isn&apos;t a demo studio, our own test runs included. Demo studios: three bot studios paying five bot
-          freelancers. The load test is left out. Contract verified on Sourcify, 53 Foundry tests including fuzz and invariant runs.
+          {s && catchingUp(s) ? `${catchingUp(s)} ` : ""}Outside wallets are wallets the team doesn&apos;t control; our known test wallets (public in
+          VERIFY.md) are counted apart, though fresh accounts from our test scripts can&apos;t be told apart. Demo studios: three bot studios paying
+          five bot freelancers. The load test is left out. Contract verified on Sourcify, 52 Foundry tests including fuzz and invariant runs.
         </p>
       </div>
     ),
@@ -349,7 +360,7 @@ const SLIDES: Slide[] = [
     id: "next",
     title: "Next",
     notes:
-      "In the next ninety days: an audit and mainnet on AUSD, ten design-partner studios, a cash-out partner in the Philippines and one in Nigeria, and an on-ramp partner for euros and dollars. I'm Rohan, building this solo from India; the first hire is a payments and compliance lead. If you hire abroad, pay out locally, or invest in payments, let's talk. Thank you.",
+      "In the next ninety days: an audit and mainnet on AUSD, ten design-partner studios, a cash-out partner in the Philippines and one in Nigeria, and an on-ramp partner for euros and dollars. I'm raising a five hundred thousand dollar pre-seed for twelve months to do exactly that. I'm Rohan, building this solo from India; the first hire is a payments and compliance lead. If you hire abroad, pay out locally, or invest in payments, let's talk. Thank you.",
     body: () => (
       <div className={styles.split}>
         <div>
@@ -380,12 +391,15 @@ const SLIDES: Slide[] = [
         </div>
         <div className={styles.ask}>
           <p className={styles.kicker}>The ask</p>
-          <p className={styles.askText}>
-            Studios that hire abroad: be one of the ten. Payout partners in Manila and Lagos: sign the first corridor. Investors in payments: back the
-            audit and the first corridors.
+          <p className={styles.askText}>{ASK}</p>
+          <p className={styles.source}>
+            Studios that hire abroad: be one of the ten. Payout partners in Manila and Lagos: sign the first corridor.
           </p>
           <p className={styles.askLink}>
-            <span className="serial">segundo.world</span>
+            <span className="serial">segundo.world</span> ·{" "}
+            <a href={DEMO_VIDEO} target="_blank" rel="noreferrer">
+              Watch the demo video
+            </a>
           </p>
           <p className={styles.source}>Rohan Borade, founder, building solo from India. First hire: a payments and compliance lead.</p>
         </div>
@@ -400,7 +414,7 @@ export default function DeckPage() {
   const [at, setAt] = useState(0);
   const [notes, setNotes] = useState(false);
   const [present, setPresent] = useState(false);
-  const stage = useRef<HTMLDivElement>(null);
+  const stage = useRef<HTMLElement>(null);
   const n = SLIDES.length;
 
   const go = useCallback((i: number) => setAt(Math.max(0, Math.min(n - 1, i))), [n]);
@@ -504,7 +518,7 @@ export default function DeckPage() {
 
   return (
     <NetworkProvider>
-      <div className={styles.deck} ref={stage} data-notes={notes ? "on" : undefined}>
+      <main id="main" className={styles.deck} ref={stage} data-notes={notes ? "on" : undefined}>
         <div className={styles.toolbar}>
           <Link href="/business" className={styles.back}>
             How Segundo makes money
@@ -565,7 +579,7 @@ export default function DeckPage() {
             <i style={{ width: `${((at + 1) / n) * 100}%` }} />
           </div>
         </nav>
-      </div>
+      </main>
     </NetworkProvider>
   );
 }

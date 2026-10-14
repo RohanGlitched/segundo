@@ -16,9 +16,12 @@ export const metadata: Metadata = {
   title: { default: title, template: "%s | Segundo" },
   description,
   applicationName: "Segundo",
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://segundo.world"),
-  // The card image comes from app/opengraph-image.tsx; icons from app/icon.tsx and app/apple-icon.tsx.
-  openGraph: { type: "website", siteName: "Segundo", title, description, locale: "en" },
+  // Pinned so every host (mera.segundo.world, previews) names segundo.world as the canonical page.
+  metadataBase: new URL("https://segundo.world"),
+  // "./" resolves to each page's own path: /tab/4 becomes https://segundo.world/tab/4.
+  alternates: { canonical: "./" },
+  // The card image is app/opengraph-image.png; icons from app/icon.tsx and app/apple-icon.tsx.
+  openGraph: { type: "website", siteName: "Segundo", title, description, locale: "en", url: "./" },
   twitter: { card: "summary_large_image", title, description },
   appleWebApp: { capable: true, title: "Segundo", statusBarStyle: "default" },
 };
@@ -36,12 +39,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={archivo.variable}>
       <head>
         <link rel="preload" href="/fonts/dollar.woff2" as="font" type="font/woff2" crossOrigin="" />
+        <link rel="preload" href="/fonts/currency.woff2" as="font" type="font/woff2" crossOrigin="" />
       </head>
       <body>
+        <a className="skip" href="#main">
+          Skip to content
+        </a>
         <Providers>
           <Header />
           <GasNotice />
-          {children}
+          <div id="main" tabIndex={-1} className="main">
+            {children}
+          </div>
           <PageNav />
         </Providers>
       </body>

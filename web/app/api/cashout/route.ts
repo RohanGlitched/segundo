@@ -19,5 +19,5 @@ export async function POST(req: Request) {
   if (limited(`cashout-ip:${clientIp(req)}`, 10, 60_000) || limited("cashout:all", 40, 60_000))
     return json({ error: "Agora settlement is busy. Your cash-out itself has landed." }, 429);
   const r = await settleCashOut(b.transfer as `0x${string}`);
-  return json(r, "error" in r ? 502 : 200);
+  return json(r, "error" in r ? 502 : "skipped" in r && r.status ? r.status : 200);
 }

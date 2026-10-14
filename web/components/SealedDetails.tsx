@@ -35,13 +35,14 @@ export function SealedDetails() {
   const [envelope, setEnvelope] = useState<SealedEnvelope | null>(() => readSealed(wallet.address));
   const [open, setOpen] = useState<Details | null>(null);
   const [draft, setDraft] = useState<Details | null>(null);
-  const [busy, setBusy] = useState<"unseal" | "seal" | "restore" | null>(null);
+  const [busy, setBusy] = useState<"unseal" | "seal" | "restore" | "look" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const file = useRef<HTMLInputElement>(null);
   // Whether Segundo's server holds this account's sealed copy: "kept", "none" (not found, or no server copies on this
-  // deployment), or null while it's being checked.
-  const [remote, setRemote] = useState<"kept" | "none" | null>(null);
+  // deployment), "locked" (not looked yet: the read is signed by the account, and signing is locked), or null while
+  // it's being checked.
+  const [remote, setRemote] = useState<"kept" | "none" | "locked" | null>(null);
   const sealable = canSeal(wallet);
   const unlocked = wallet.unlocked;
 
@@ -55,14 +56,21 @@ export function SealedDetails() {
     return () => window.removeEventListener("segundo:sealed", reread);
   }, [reread]);
   // A fresh browser has no copy of its own: fetch the server's (ciphertext; cached here and announced by "segundo:sealed").
+  // The server hands it only to the account, so the read is signed: silently while signing is unlocked, so it waits
+  // for the unlock rather than asking for the passkey on its own.
   useEffect(() => {
     if (!wallet.address || !sealable) return;
+    if (!unlocked) {
+      setRemote((r) => r ?? "locked");
+      return;
+    }
     let live = true;
-    void fetchSealed(wallet.address).then((e) => live && setRemote(e ? "kept" : "none"));
+    void fetchSealed(wallet).then((e) => live && setRemote(e ? "kept" : "none"));
     return () => {
       live = false;
     };
-  }, [wallet.address, sealable]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wallet.address, sealable, unlocked]);
 
   // Sealed in this browser before server copies existed: keep it there too, but only when that needs no passkey prompt.
   const kept = useRef(false);
@@ -81,7 +89,7 @@ export function SealedDetails() {
     return () => window.removeEventListener("segundo:lock", drop);
   }, []);
 
-  const attempt = async (which: "unseal" | "seal" | "restore", fn: () => Promise<void>) => {
+  const attempt = async (which: "unseal" | "seal" | "restore" | "look", fn: () => Promise<void>) => {
     setError(null);
     setNote(null);
     setBusy(which);
@@ -93,6 +101,12 @@ export function SealedDetails() {
       setBusy(null);
     }
   };
+
+  const look = () =>
+    attempt("look", async () => {
+      const e = await fetchSealed(wallet, { prompt: true, again: true });
+      setRemote(e ? "kept" : "none");
+    });
 
   const unseal = () =>
     attempt("unseal", async () => {
@@ -222,9 +236,19 @@ export function SealedDetails() {
             {restoreButton}
           </div>
           <p className={styles.policy}>
-            {remote === null
-              ? "Looking for a sealed copy of your details…"
-              : "Sealed them on another device? Signing in with the same passkey brings them here from Segundo's sealed copy; a backup file you downloaded restores them too."}
+            {remote === null ? (
+              "Looking for a sealed copy of your details…"
+            ) : remote === "locked" ? (
+              <>
+                Sealed them on another device? Segundo hands its sealed copy only to your account, so looking for it takes a signature, and signing is
+                locked.{" "}
+                <button className="btn small quiet" onClick={look} disabled={!!busy}>
+                  {busy === "look" ? "Waiting for your passkey…" : "Look with your passkey"}
+                </button>
+              </>
+            ) : (
+              "Sealed them on another device? Signing in with the same passkey brings them here from Segundo's sealed copy; a backup file you downloaded restores them too."
+            )}
           </p>
         </>
       )}

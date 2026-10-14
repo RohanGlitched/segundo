@@ -26,6 +26,12 @@
   border-top: 1px solid var(--rule);
   border-bottom: 1px solid var(--rule);
 }
+/* On a phone the live line wraps to two lines once the numbers arrive: hold both from the start. */
+@media (max-width: 720px) {
+  .strip {
+    min-height: calc(2 * 1.55 * 15px + 24px + 2px);
+  }
+}
 .fee {
   color: var(--ink);
   font-weight: 650;
@@ -107,6 +113,19 @@
 .inspectBody {
   padding: 4px 22px 24px;
   animation: open 0.25s ease-out;
+}
+@supports (interpolate-size: allow-keywords) {
+  .inspect {
+    interpolate-size: allow-keywords;
+  }
+  .inspect::details-content {
+    block-size: 0;
+    overflow: clip;
+    transition: block-size 0.3s cubic-bezier(0.2, 0.7, 0.2, 1), content-visibility 0.3s allow-discrete;
+  }
+  .inspect[open]::details-content {
+    block-size: auto;
+  }
 }
 @keyframes open {
   from {
@@ -251,7 +270,12 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 36px;
-  margin-top: 40px;
+  margin: 4px 0 28px;
+}
+.points > div {
+  padding-top: 16px;
+  border-top: 1.5px solid var(--ink);
+  min-width: 0;
 }
 .points h3 {
   font-size: 19px;
@@ -260,7 +284,28 @@
 .points p {
   color: var(--ink-soft);
 }
+.points b {
+  color: var(--serial);
+  font-weight: 650;
+}
 
+/* Between phone and wide desktop the pitch column needs more room: a fuller lede line and both paths the same width. */
+@media (max-width: 1180px) and (min-width: 901px) {
+  .top {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    align-items: start;
+    gap: 32px 36px;
+  }
+  .pitch {
+    padding-top: 8px;
+  }
+  .lede {
+    font-size: 18px;
+  }
+}
+.paths :global(.btn) {
+  min-width: 172px;
+}
 @media (max-width: 900px) {
   .top {
     grid-template-columns: minmax(0, 1fr);
@@ -355,5 +400,19 @@
   }
   .tight {
     padding-top: 40px;
+  }
+}
+/* On a phone the closing rosette is a vignette under the headline, not a screen of its own before it. */
+@media (max-width: 620px) {
+  .closing {
+    grid-template-areas: "text" "art";
+  }
+  .closingText {
+    grid-area: text;
+  }
+  .closingArt {
+    grid-area: art;
+    max-width: 200px;
+    justify-self: start;
   }
 }

@@ -17,11 +17,14 @@ const B0 = 70_700_000;
 const T0 = 1_791_000_000;
 const DAY = new Date(T0 * 1000).toISOString().slice(0, 10);
 
+/** Segundo's CRE loop key, one of the two reporters the indexer trusts (src/lib/books.ts CRE_REPORTERS). */
+const CRE_KEY = "0x022875424e1556fec66fdc5a7d52820dea4dbb8d";
+
 const tx = (n: number) => `0x${n.toString(16).padStart(64, "0")}`;
-/** Block and transaction for the n-th simulated event: one block (and about a second) apart. */
-const at = (n: number, seconds = n) => ({
+/** Block and transaction for the n-th simulated event: one block (and about a second) apart, sent by `from`. */
+const at = (n: number, seconds = n, from: `0x${string}` = CLIENT) => ({
   block: { number: B0 + n, timestamp: T0 + seconds },
-  transaction: { hash: tx(n) },
+  transaction: { hash: tx(n), from },
 });
 
 describe("a tab from fee to refund", () => {
@@ -249,11 +252,11 @@ describe("Chainlink CRE keeper", () => {
       chains: {
         [CHAIN]: {
           simulate: [
-            { contract: "SegundoKeeper", event: "RatesPosted", ...at(0), params: { at: BigInt(T0), currencies: [php, inr], ratesE6: [57_000_000n, 83_000_000n] } },
-            { contract: "SegundoKeeper", event: "RatesPosted", ...at(1), params: { at: BigInt(T0 + 60), currencies: [php], ratesE6: [57_250_000n] } },
+            { contract: "SegundoKeeper", event: "RatesPosted", ...at(0, 0, CRE_KEY), params: { at: BigInt(T0), currencies: [php, inr], ratesE6: [57_000_000n, 83_000_000n] } },
+            { contract: "SegundoKeeper", event: "RatesPosted", ...at(1, 60, CRE_KEY), params: { at: BigInt(T0 + 60), currencies: [php], ratesE6: [57_250_000n] } },
             // One report: tab 9 couldn't be paid, two others were.
-            { contract: "SegundoKeeper", event: "SettleSkipped", ...at(2), params: { id: 9n } },
-            { contract: "SegundoKeeper", event: "Kept", ...at(2), logIndex: 5, params: { at: BigInt(T0 + 120), tabs: 3n, paid: 4_200n } },
+            { contract: "SegundoKeeper", event: "SettleSkipped", ...at(2, 120, CRE_KEY), params: { id: 9n } },
+            { contract: "SegundoKeeper", event: "Kept", ...at(2, 120, CRE_KEY), logIndex: 5, params: { at: BigInt(T0 + 120), tabs: 3n, paid: 4_200n } },
           ],
         },
       },
@@ -268,6 +271,82 @@ describe("Chainlink CRE keeper", () => {
     const runs = await indexer.KeeperRun.getAll();
     t.expect(runs).toHaveLength(1);
     t.expect(runs[0]).toMatchObject({ tabs: 3, paid: 4_200n, skipped: 1 });
-    t.expect(await indexer.Totals.getOrThrow("totals")).toMatchObject({ rateReports: 2, keeperRuns: 1, keeperPaid: 4_200n, keeperSkipped: 1 });
+    t.expect(await indexer.Totals.getOrThrow("totals")).toMatchObject({
+      rateReports: 2,
+      keeperRuns: 1,
+      keeperPaid: 4_200n,
+      keeperSkipped: 1,
+      untrustedReports: 0,
+    });
+  });
+
+  it("keeps reports from other senders, marked untrusted, without letting them move a rate or a count", async (t) => {
+    const indexer = createTestIndexer();
+    const php = "0x504850";
+    await indexer.process({
+      chains: {
+        [CHAIN]: {
+          simulate: [
+            { contract: "SegundoKeeper", event: "RatesPosted", ...at(0, 0, CRE_KEY), params: { at: BigInt(T0), currencies: [php], ratesE6: [57_000_000n] } },
+            // Anyone can call the testnet MockKeystoneForwarder: a stranger posts a rate and a run.
+            { contract: "SegundoKeeper", event: "RatesPosted", ...at(1, 1, STRANGER), params: { at: BigInt(T0 + 1), currencies: [php], ratesE6: [1n] } },
+            { contract: "SegundoKeeper", event: "Kept", ...at(1, 1, STRANGER), logIndex: 3, params: { at: BigInt(T0 + 1), tabs: 2n, paid: 99n } },
+            // Segundo's own key, but dated a day ahead of its block: not trusted either (it would freeze later reports).
+            { contract: "SegundoKeeper", event: "RatesPosted", ...at(2, 2, CRE_KEY), params: { at: BigInt(T0 + 86_400), currencies: [php], ratesE6: [2n] } },
+            // A later genuine report still lands.
+            { contract: "SegundoKeeper", event: "RatesPosted", ...at(3, 60, CRE_KEY), params: { at: BigInt(T0 + 60), currencies: [php], ratesE6: [57_100_000n] } },
+          ],
+        },
+      },
+    });
+
+    t.expect(await indexer.CurrencyRate.getOrThrow("PHP")).toMatchObject({ rateE6: 57_100_000n, at: T0 + 60, updates: 2 });
+    const snapshots = await indexer.RateSnapshot.getAll();
+    t.expect(snapshots).toHaveLength(4);
+    t.expect(snapshots.filter((s) => s.trusted)).toHaveLength(2);
+    t.expect(snapshots.find((s) => s.from === STRANGER)).toMatchObject({ trusted: false, ratesE6: [1n] });
+    const runs = await indexer.KeeperRun.getAll();
+    t.expect(runs).toHaveLength(1);
+    t.expect(runs[0]).toMatchObject({ from: STRANGER, trusted: false });
+    t.expect(await indexer.Totals.getOrThrow("totals")).toMatchObject({ rateReports: 2, keeperRuns: 0, keeperPaid: 0n, untrustedReports: 3 });
+  });
+
+  it("prices each payout at the trusted rate in force when it landed", async (t) => {
+    const indexer = createTestIndexer();
+    const php = "0x504850";
+    const pay = (n: number, amount: bigint, paid: bigint) =>
+      ({ contract: "Till", event: "Settled", ...at(n), params: { id: 1n, payee: FREELANCER, amount, paid } }) as const;
+    await indexer.process({
+      chains: {
+        [CHAIN]: {
+          simulate: [
+            { contract: "Till", event: "ProfileSet", ...at(0, 0, FREELANCER), params: { who: FREELANCER, name: "Ana", place: "Manila", currency: php } },
+            {
+              contract: "Till",
+              event: "Opened",
+              ...at(1),
+              params: { id: 1n, payer: CLIENT, payee: FREELANCER, rate: 36_000_000n, budget: 100_000_000n, invite: ZERO, memo: "" },
+            },
+            // Paid before Segundo's first CRE report: no rate at the time.
+            pay(2, 1_000_000n, 1_000_000n),
+            { contract: "SegundoKeeper", event: "RatesPosted", ...at(3, 3, CRE_KEY), params: { at: BigInt(T0 + 3), currencies: [php], ratesE6: [57_000_000n] } },
+            pay(4, 2_000_000n, 3_000_000n),
+            // A stranger's rate is ignored; the payout after it keeps the trusted 57.
+            { contract: "SegundoKeeper", event: "RatesPosted", ...at(5, 5, STRANGER), params: { at: BigInt(T0 + 5), currencies: [php], ratesE6: [1_000_000n] } },
+            pay(6, 1_500_000n, 4_500_000n),
+            { contract: "SegundoKeeper", event: "RatesPosted", ...at(7, 7, CRE_KEY), params: { at: BigInt(T0 + 7), currencies: [php], ratesE6: [58_500_000n] } },
+            pay(8, 1_000_000n, 5_500_000n),
+          ],
+        },
+      },
+    });
+
+    const payouts = (await indexer.Payout.getAll()).sort((a, b) => a.block - b.block);
+    t.expect(payouts).toHaveLength(4);
+    t.expect(payouts[0]).toMatchObject({ currency: "PHP", rateE6: undefined, localE6: undefined });
+    t.expect(payouts[1]).toMatchObject({ currency: "PHP", rateE6: 57_000_000n, rateAt: T0 + 3, localE6: 114_000_000n });
+    t.expect(payouts[1]?.rateSnapshot_id?.startsWith(tx(3))).toBe(true);
+    t.expect(payouts[2]).toMatchObject({ rateE6: 57_000_000n, localE6: 85_500_000n });
+    t.expect(payouts[3]).toMatchObject({ rateE6: 58_500_000n, rateAt: T0 + 7, localE6: 58_500_000n });
   });
 });

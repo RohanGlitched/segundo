@@ -1,10 +1,12 @@
 import "server-only";
-import { getAddress, isAddress, type Address } from "viem";
+import { createPrivateKey, sign } from "node:crypto";
+import { getAddress, isAddress, isHex, type Address, type Hex } from "viem";
 
 /**
  * Privy's server API (https://docs.privy.io/api-reference), called with plain fetch: Basic auth with the app id and
  * app secret, plus the privy-app-id header. Used to give an email address a wallet before its owner has ever signed
- * in, so AUSD can be sent to them (lib/recipient.ts). The secret lives only in PRIVY_APP_SECRET.
+ * in, so AUSD can be sent to them (lib/recipient.ts), and to sign fee refunds with Segundo's refund wallet, a Privy
+ * server wallet (below). The secret lives only in PRIVY_APP_SECRET.
  */
 const API = "https://api.privy.io/v1";
 
@@ -21,19 +23,48 @@ type PrivyUser = { id: string; linked_accounts: LinkedAccount[] };
 
 export const privyServerReady = () => !!(process.env.NEXT_PUBLIC_PRIVY_APP_ID?.trim() && process.env.PRIVY_APP_SECRET?.trim());
 
-/** One call to Privy: the status and parsed body. Errors never include the secret. */
-async function privy(path: string, body: unknown): Promise<{ status: number; data: unknown }> {
+/** RFC 8785 for the plain JSON Privy requests carry (strings, integers, objects, arrays): sorted keys, no whitespace. */
+export function canonicalJson(v: unknown): string {
+  if (v === null || typeof v !== "object") return JSON.stringify(v);
+  if (Array.isArray(v)) return `[${v.map(canonicalJson).join(",")}]`;
+  const o = v as Record<string, unknown>;
+  return `{${Object.keys(o)
+    .filter((k) => o[k] !== undefined)
+    .sort()
+    .map((k) => `${JSON.stringify(k)}:${canonicalJson(o[k])}`)
+    .join(",")}}`;
+}
+
+/**
+ * The privy-authorization-signature for a request to a wallet owned by an authorization key: ECDSA P-256 over
+ * SHA-256 of the canonical { version, method, url, body, headers } payload, DER, base64. The key ("wallet-auth:" and
+ * a base64 PKCS#8 key) lives only in PRIVY_AUTHORIZATION_KEY.
+ */
+export function authorizationSignature(key: string, method: string, url: string, body: unknown, appId: string): string {
+  const payload = { version: 1, method, url, body, headers: { "privy-app-id": appId } };
+  const privateKey = createPrivateKey({ key: Buffer.from(key.replace(/^wallet-auth:/, ""), "base64"), format: "der", type: "pkcs8" });
+  return sign("sha256", Buffer.from(canonicalJson(payload)), privateKey).toString("base64");
+}
+
+/** One call to Privy: the status and parsed body, signed with the authorization key when `signed`. Errors never include a secret. */
+async function privy(path: string, body: unknown, { method = "POST", signed = false }: { method?: "GET" | "POST"; signed?: boolean } = {}): Promise<{ status: number; data: unknown }> {
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID?.trim();
   const secret = process.env.PRIVY_APP_SECRET?.trim();
   if (!appId || !secret) throw new Error("Privy is not configured on this deployment.");
+  const headers: Record<string, string> = {
+    authorization: `Basic ${Buffer.from(`${appId}:${secret}`).toString("base64")}`,
+    "privy-app-id": appId,
+    "content-type": "application/json",
+  };
+  if (signed) {
+    const key = process.env.PRIVY_AUTHORIZATION_KEY?.trim();
+    if (!key) throw new Error("Privy's authorization key is not configured on this deployment.");
+    headers["privy-authorization-signature"] = authorizationSignature(key, method, API + path, body, appId);
+  }
   const res = await fetch(API + path, {
-    method: "POST",
-    headers: {
-      authorization: `Basic ${Buffer.from(`${appId}:${secret}`).toString("base64")}`,
-      "privy-app-id": appId,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify(body),
+    method,
+    headers,
+    body: method === "GET" ? undefined : JSON.stringify(body),
     cache: "no-store",
     signal: AbortSignal.timeout(10_000),
   });
@@ -88,4 +119,45 @@ export async function recipientWallet(email: string): Promise<{ address: Address
     if (!address) throw new Error(`Privy wallet creation failed (${status}).`);
   }
   return { address, existing: hasSignedIn(user) };
+}
+
+/**
+ * Segundo's refund wallet: a Privy server wallet owned by an authorization key and bound to a Privy policy that lets
+ * it sign only AUSD transferWithAuthorization (EIP-3009) messages on Monad testnet (chain 10143), worth at most 50
+ * AUSD each, and send only AUSD transfers of at most 50 AUSD with no MON; Privy refuses anything else. Made by
+ * scripts/privy-refund.mjs. Set by PRIVY_REFUND_WALLET_ID; without it (or the key), refunds come from the treasury key.
+ */
+export const REFUND_WALLET_CAP = 50_000_000n;
+export const privyRefundsReady = () => !!(privyServerReady() && process.env.PRIVY_REFUND_WALLET_ID?.trim() && process.env.PRIVY_AUTHORIZATION_KEY?.trim());
+
+let refundWalletCache: { id: string; address: Address } | null = null;
+
+/** The refund wallet's id and address (read from Privy once per instance), or null when it isn't configured. */
+export async function refundWallet(): Promise<{ id: string; address: Address } | null> {
+  if (!privyRefundsReady()) return null;
+  const id = process.env.PRIVY_REFUND_WALLET_ID!.trim();
+  if (refundWalletCache?.id === id) return refundWalletCache;
+  const { status, data } = await privy(`/wallets/${encodeURIComponent(id)}`, undefined, { method: "GET" });
+  const w = data as { id?: string; address?: string; chain_type?: string } | null;
+  if (status !== 200 || !w?.address || !isAddress(w.address) || w.chain_type !== "ethereum") throw new Error(`Privy refund wallet lookup failed (${status}).`);
+  refundWalletCache = { id, address: getAddress(w.address) };
+  return refundWalletCache;
+}
+
+/** An EIP-712 message for Privy's eth_signTypedData_v4: the four parts, numbers as decimal strings. */
+export type TypedData = {
+  domain: Record<string, unknown>;
+  types: Record<string, readonly { name: string; type: string }[]>;
+  message: Record<string, unknown>;
+  primaryType: string;
+};
+
+/** Has a Privy wallet sign typed data, the request signed by the authorization key; the wallet's policy decides. */
+export async function privySignTypedData(walletId: string, t: TypedData): Promise<Hex> {
+  const body = { method: "eth_signTypedData_v4", caip2: "eip155:10143", params: { typed_data: { domain: t.domain, types: t.types, message: t.message, primary_type: t.primaryType } } };
+  const { status, data } = await privy(`/wallets/${encodeURIComponent(walletId)}/rpc`, body, { signed: true });
+  const sig = (data as { data?: { signature?: string } } | null)?.data?.signature;
+  if (status === 200 && sig && isHex(sig)) return sig;
+  const code = (data as { code?: string } | null)?.code;
+  throw new Error(`Privy refused to sign (${status}${code ? ` ${code}` : ""}).`);
 }

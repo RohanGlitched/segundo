@@ -143,7 +143,7 @@ export default function CashOut() {
         </header>
 
         <div className={styles.layout}>
-          <section className={styles.form} aria-labelledby="where">
+          <section className={styles.form} aria-labelledby="where" data-nav="Quote">
             <h2 id="where" className={styles.legend}>
               Where should the money go?
             </h2>
@@ -335,7 +335,7 @@ export default function CashOut() {
           </aside>
         </div>
 
-        <section className={`${styles.section} ${styles.inks}`} aria-labelledby="inks">
+        <section className={`${styles.section} ${styles.inks}`} aria-labelledby="inks" data-nav="Inks">
           <h2 id="inks" className={styles.h2}>
             Every currency, its own ink
           </h2>
@@ -343,7 +343,7 @@ export default function CashOut() {
           <InkSheet />
         </section>
 
-        <section className={styles.section} aria-labelledby="mainnet">
+        <section className={styles.section} aria-labelledby="mainnet" data-nav="On mainnet">
           <h2 id="mainnet" className={styles.h2}>
             How it works on mainnet
           </h2>
@@ -368,25 +368,26 @@ export default function CashOut() {
           </ol>
         </section>
 
-        <section className={styles.section} aria-labelledby="earns">
+        <section className={styles.section} aria-labelledby="earns" data-nav="What we earn">
           <h2 id="earns" className={styles.h2}>
             What Segundo earns: revenue line 3
           </h2>
           <div className={styles.cols}>
             <p>
-              Clients pay Segundo 1% of what they fund, and get 1% of the unspent part back when a tab closes (line 1). Reserve yield on budgets waiting in
-              tabs is line 2. Cash-out is line 3: a share of the spread the payout partner keeps, agreed with each partner.
+              The business runs on line 1: clients pay Segundo 1% of what they fund, and get 1% of the unspent part back when a tab closes. Reserve
+              yield on budgets waiting in tabs, shared with the client, is line 2. Cash-out is line 3: a share of the spread the payout partner keeps,
+              agreed with each partner.
             </p>
             <p>
-              With a spread of <b>{spread.toFixed(2)}%</b> and Segundo&apos;s share at <b>{Math.round(SEGUNDO_SHARE * 100)}%</b> of it (both assumptions,
-              since no partner has signed), every $100 cashed out earns Segundo <b className="denom">{formatUsd(shareExample)}</b>. The partner keeps{" "}
-              {formatUsd(100 * (spread / 100) - shareExample)} and the freelancer gets the rest, about {formatUsd(100 - 100 * (spread / 100))}.{" "}
-              <Link href="/business">The whole business model</Link>.
+              With a spread of <b>{spread.toFixed(2)}%</b> and Segundo&apos;s share at <b>{Math.round(SEGUNDO_SHARE * 100)}%</b> of it, every $100 cashed
+              out earns Segundo <b className="denom">{formatUsd(shareExample)}</b>. The partner keeps {formatUsd(100 * (spread / 100) - shareExample)} and
+              the freelancer gets the rest, about {formatUsd(100 - 100 * (spread / 100))}. Both figures are assumptions: no partner has signed, and
+              whether one gives up a quarter of its spread is for that agreement. <Link href="/business">All four revenue lines</Link>.
             </p>
           </div>
         </section>
 
-        <section className={styles.section} aria-labelledby="today">
+        <section className={styles.section} aria-labelledby="today" data-nav="Today's cost">
           <h2 id="today" className={styles.h2}>
             The bar: what people pay today
           </h2>
@@ -403,7 +404,7 @@ export default function CashOut() {
           </p>
         </section>
 
-        <section className={styles.section} aria-labelledby="sources">
+        <section className={styles.section} aria-labelledby="sources" data-nav="Sources">
           <h2 id="sources" className={styles.h2}>
             Sources
           </h2>

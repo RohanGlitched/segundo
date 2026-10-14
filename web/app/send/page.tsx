@@ -37,6 +37,9 @@ const WAYS: { mode: Mode; title: string; line: string }[] = [
 const MODE_KEY = "segundo.send.mode";
 const CUR_KEY = "segundo.send.cur";
 
+/** The cash-out partner's spread /cashout assumes (corridors.ts SPREAD_DEFAULT), as a fraction. */
+const CASHOUT_SPREAD = 0.01;
+
 /** World Bank, Remittance Prices Worldwide, Q3 2025: global average total cost of sending $200. */
 const RPW_AVERAGE = 6.36;
 const RPW = {
@@ -79,13 +82,17 @@ export default function SendAbroad() {
   const usd = parsed.units == null ? 0 : toUsd(parsed.units);
   const hasRate = code === "USD" || !!rates?.[code];
   const receive = hasRate ? formatMoney(usd, cur, rates) : formatUsd(usd);
-  const usual = (usd * RPW_AVERAGE) / 100;
+  // What a cash-out partner's assumed 1% spread (the /cashout default) leaves of it in local money.
+  const afterSpread = hasRate ? formatMoney(usd * (1 - CASHOUT_SPREAD), cur, rates) : formatUsd(usd * (1 - CASHOUT_SPREAD));
+  // The passkey-only site has no email sign-in, so a send to an email couldn't be collected there.
+  const ways = wallet.accounts === "mera" ? WAYS.filter((w) => w.mode !== "contact") : WAYS;
+  const way = ways.find((w) => w.mode === mode) ?? ways[0]!;
   const src = fx?.sources[code];
   const reportTx = src?.source === "chainlink-cre" ? src.tx : null;
   const ink = { "--c": cur.ink, "--c-night": cur.inkNight } as CSSProperties;
 
   const go = () => {
-    store(MODE_KEY, mode);
+    store(MODE_KEY, way.mode);
     store(CUR_KEY, code);
   };
 
@@ -101,7 +108,7 @@ export default function SendAbroad() {
           </p>
         </header>
 
-        <section className={styles.calc} aria-labelledby="calc-title">
+        <section className={styles.calc} aria-labelledby="calc-title" data-nav="Quote">
           <h2 id="calc-title" className="visually-hidden">
             Work out a transfer
           </h2>
@@ -150,8 +157,8 @@ export default function SendAbroad() {
             <fieldset className={styles.ways}>
               <legend className={styles.legend}>How should it reach them?</legend>
               <div className={styles.wayGrid}>
-                {WAYS.map((w) => (
-                  <button key={w.mode} type="button" className={styles.way} aria-pressed={w.mode === mode} onClick={() => setMode(w.mode)}>
+                {ways.map((w) => (
+                  <button key={w.mode} type="button" className={styles.way} aria-pressed={w.mode === way.mode} onClick={() => setMode(w.mode)}>
                     <b>{w.title}</b>
                     <span>{w.line}</span>
                   </button>
@@ -160,7 +167,7 @@ export default function SendAbroad() {
             </fieldset>
           </div>
 
-          <aside className={styles.side} aria-label="What they receive">
+          <div className={styles.side} role="group" aria-label="What they receive">
             <div className={styles.stub} style={ink} id="send-quote" aria-live="polite">
               <p className={styles.stubTitle}>
                 <span>They receive about</span>
@@ -170,6 +177,12 @@ export default function SendAbroad() {
               <dl className={styles.facts}>
                 <dt>You send</dt>
                 <dd>{formatUsd(usd)} in AUSD</dd>
+                {code !== "USD" && (
+                  <>
+                    <dt>After cash-out</dt>
+                    <dd>About {afterSpread}, after an assumed 1% cash-out spread</dd>
+                  </>
+                )}
                 <dt>Fee to send</dt>
                 <dd>$0.00</dd>
                 <dt>Network cost</dt>
@@ -202,11 +215,16 @@ export default function SendAbroad() {
                 </p>
               )}
               <p className={styles.compare}>
-                Sending $200 abroad the usual way costs {RPW_AVERAGE}% on average
+                They get {formatUsd(usd)} in digital dollars{code !== "USD" && hasRate ? `, worth about ${receive} at today's rate` : ""}. No fee to send;
+                Segundo pays the network cost. Turning it into local money costs a cash-out partner&apos;s spread, assumed 1% (see{" "}
+                <Link href="/cashout" className={styles.inline}>
+                  cash-out
+                </Link>
+                ). For comparison, {RPW_AVERAGE}% is the World Bank&apos;s average for sending $200 (Q3 2025)
                 <a href={RPW.url} target="_blank" rel="noreferrer" className={styles.ref} title={RPW.name} aria-label={`Source: ${RPW.name}`}>
                   1
                 </a>
-                {usd > 0 ? `; at that rate, ${formatUsd(usual)} of your ${formatUsd(usd)}` : ""}.
+                .
               </p>
             </div>
             <Link href="/app?send=1" className={`btn primary ${styles.go}`} onClick={go}>
@@ -217,7 +235,7 @@ export default function SendAbroad() {
             </Link>
             <p className={styles.goNote}>
               {wallet.address
-                ? `Opens the send sheet in your account, set to ${WAYS.find((w) => w.mode === mode)!.title.toLowerCase()} and ${cur.name.toLowerCase()}.`
+                ? `Opens the send sheet in your account, set to ${way.title.toLowerCase()} and ${cur.name.toLowerCase()}.`
                 : "You'll sign in first: a passkey is enough, no app to install."}{" "}
               Need dollars first?{" "}
               <Link href="/app?add=1" className={styles.inline}>
@@ -225,12 +243,12 @@ export default function SendAbroad() {
               </Link>
               .
             </p>
-          </aside>
+          </div>
         </section>
 
-        <section className={styles.section} aria-labelledby="three">
+        <section className={styles.section} aria-labelledby="three" data-nav="Ways to send">
           <h2 id="three" className={styles.h2}>
-            Three ways to reach them
+            {ways.length === 3 ? "Three ways to reach them" : "Two ways to reach them"}
           </h2>
           <div className={styles.threeGrid}>
             <article className={styles.card}>
@@ -241,14 +259,16 @@ export default function SendAbroad() {
                 text or as a QR code. Whoever opens it first collects, and until they do you can take the money back.
               </p>
             </article>
-            <article className={styles.card}>
-              <h3>To an email</h3>
-              <p className={styles.cardLead}>For someone you know by their email address.</p>
-              <p>
-                If they already use Segundo with that email, it lands in their account. If not, a wallet is made for that email (Privy holds it) and the
-                money waits there until they sign in with the same address.
-              </p>
-            </article>
+            {ways.some((w) => w.mode === "contact") && (
+              <article className={styles.card}>
+                <h3>To an email</h3>
+                <p className={styles.cardLead}>For someone you know by their email address.</p>
+                <p>
+                  If they already use Segundo with that email, it lands in their account. If not, a wallet is made for that email (Privy holds it) and the
+                  money waits there until they sign in with the same address.
+                </p>
+              </article>
+            )}
             <article className={styles.card}>
               <h3>To an address</h3>
               <p className={styles.cardLead}>For someone with a wallet or an exchange account on Monad.</p>
@@ -260,7 +280,7 @@ export default function SendAbroad() {
           </div>
         </section>
 
-        <section className={styles.section} aria-labelledby="how">
+        <section className={styles.section} aria-labelledby="how" data-nav="How it works">
           <h2 id="how" className={styles.h2}>
             How it works
           </h2>
@@ -314,7 +334,7 @@ export default function SendAbroad() {
           </ol>
         </section>
 
-        <section className={`${styles.section} ${styles.claim}`} aria-labelledby="claim">
+        <section className={`${styles.section} ${styles.claim}`} aria-labelledby="claim" data-nav="What they see">
           <div className={styles.claimText}>
             <h2 id="claim" className={styles.h2}>
               What they see
@@ -353,7 +373,7 @@ export default function SendAbroad() {
           </figure>
         </section>
 
-        <section className={styles.section} aria-labelledby="rates">
+        <section className={styles.section} aria-labelledby="rates" data-nav="Rates">
           <h2 id="rates" className={styles.h2}>
             The rate comes from Monad, not from us
           </h2>
@@ -428,7 +448,7 @@ export default function SendAbroad() {
           </div>
         </section>
 
-        <section className={`${styles.section} ${styles.money2}`} aria-labelledby="in">
+        <section className={`${styles.section} ${styles.money2}`} aria-labelledby="in" data-nav="Money in">
           <div>
             <h2 id="in" className={styles.h2}>
               Getting dollars in

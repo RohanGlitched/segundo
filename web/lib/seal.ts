@@ -132,8 +132,8 @@ function parseEnvelope(value: unknown): SealedEnvelope {
 /**
  * The sealed copy kept in this browser for an account, if any. Reading it needs no passkey: it's ciphertext. The same
  * envelope is kept on Segundo's server (uploadSealed, fetchSealed), so on another device or a fresh browser profile
- * loadSealed finds it and the same passkey opens it there; the backup file (downloadSealedBackup, restoreSealedBackup)
- * still works without the server.
+ * loadSealed finds it once the account signs a read challenge, and the same passkey opens it there; the backup file
+ * (downloadSealedBackup, restoreSealedBackup) still works without the server.
  */
 export function readSealed(address: string | undefined): SealedEnvelope | null {
   if (!address) return null;
@@ -145,11 +145,14 @@ export function readSealed(address: string | undefined): SealedEnvelope | null {
   }
 }
 
-/** True when this browser holds a sealed copy. When it doesn't, looks for the server copy once in the background:
- *  if there is one, it is cached here and a "segundo:sealed" event fires. */
-export function hasSealedDetails(address: string | undefined): boolean {
+/**
+ * True when this browser holds a sealed copy. When it doesn't and `wallet` is this account's own, signing unlocked,
+ * looks for the server copy once in the background: if there is one, it is cached here and a "segundo:sealed" event
+ * fires. Without the owner's wallet there is nothing to sign the read with, so only this browser's copy counts.
+ */
+export function hasSealedDetails(address: string | undefined, wallet?: Wallet): boolean {
   const here = readSealed(address) != null;
-  if (!here && address && typeof window !== "undefined") void fetchSealed(address);
+  if (!here && address && wallet?.address?.toLowerCase() === address.toLowerCase() && typeof window !== "undefined") void fetchSealed(wallet);
   return here;
 }
 
@@ -167,18 +170,36 @@ export async function sealUploadMessage(address: string, envelopeText: string, s
   return `segundo/sealed/v1:${address.toLowerCase()}:${await sha256Hex(envelopeText)}:${signedAt}`;
 }
 
+/** What the account signs to read its envelope back (good for five minutes); app/api/seal/route.ts checks the same text. */
+export const sealReadMessage = (address: string, signedAt: string) => `segundo/sealed/read/v1:${address.toLowerCase()}:${signedAt}`;
+
 /**
- * The envelope Segundo's server keeps for an account, cached in this browser when found. Null when there is none, the
- * deployment keeps no server copies (503), or the network fails: the caller carries on with what this browser has.
- * One request per address per page load unless `again`.
+ * The envelope Segundo's server keeps for this account, cached in this browser when found. The server hands it only
+ * to the account itself, so the wallet signs a short-lived read challenge first: silently inside an unlocked passkey
+ * session. While signing is locked it doesn't look (that would ask for the passkey) unless `prompt`, for an action
+ * the person just tapped. Null when there is none, signing is locked, the deployment keeps no server copies (503), or
+ * the network fails: the caller carries on with what this browser has. One request per account per page load unless
+ * `again`; a failed or skipped look isn't remembered.
  */
-export function fetchSealed(address: string, again = false): Promise<SealedEnvelope | null> {
+export function fetchSealed(wallet: Wallet, opts: { again?: boolean; prompt?: boolean } = {}): Promise<SealedEnvelope | null> {
+  if (!canSeal(wallet) || (!wallet.unlocked && !opts.prompt)) return Promise.resolve(null);
+  const address = wallet.address!;
   const k = address.toLowerCase();
-  if (!again && fetched.has(k)) return fetched.get(k)!;
-  const p = (async () => {
+  if (!opts.again && fetched.has(k)) return fetched.get(k)!;
+  const forget = () => {
+    if (fetched.get(k) === p) fetched.delete(k);
+  };
+  const p: Promise<SealedEnvelope | null> = (async () => {
     try {
-      const r = await fetch(`/api/seal?address=${k}`, { cache: "no-store" });
-      if (!r.ok) return null;
+      const at = new Date().toISOString();
+      const sig = await wallet.signMessage(toHex(new TextEncoder().encode(sealReadMessage(k, at))));
+      // The signature goes in headers, not the URL, so it stays out of logs and history.
+      const r = await fetch(`/api/seal?address=${k}`, { cache: "no-store", headers: { "x-segundo-signed-at": at, "x-segundo-signature": sig } });
+      if (!r.ok) {
+        // Nothing sealed (404) or no server copies here (503) holds for the page load; anything else may pass.
+        if (r.status !== 404 && r.status !== 503) forget();
+        return null;
+      }
       const envelope = parseEnvelope(await r.text());
       if (envelope.account.toLowerCase() !== k) return null;
       const local = readSealed(address);
@@ -186,6 +207,7 @@ export function fetchSealed(address: string, again = false): Promise<SealedEnvel
       if (!local || (envelope.sealedAt || "") > (local.sealedAt || "")) store(envelope);
       return envelope;
     } catch {
+      forget();
       return null;
     }
   })();
@@ -193,10 +215,10 @@ export function fetchSealed(address: string, again = false): Promise<SealedEnvel
   return p;
 }
 
-/** This browser's sealed copy, or the server's when this browser has none (then cached here). */
-export async function loadSealed(address: string | undefined): Promise<SealedEnvelope | null> {
-  if (!address) return null;
-  return readSealed(address) ?? (await fetchSealed(address));
+/** This browser's sealed copy, or the server's when this browser has none (then cached here). May ask for the passkey. */
+export async function loadSealed(wallet: Wallet): Promise<SealedEnvelope | null> {
+  if (!wallet.address) return null;
+  return readSealed(wallet.address) ?? (await fetchSealed(wallet, { prompt: true }));
 }
 
 /**
@@ -280,7 +302,7 @@ export async function sealDetails(wallet: Wallet, details: SealedDetails): Promi
  */
 export async function unsealDetails(wallet: Wallet, withKey?: CryptoKey): Promise<SealedDetails | null> {
   if (!canSeal(wallet)) return null;
-  const envelope = await loadSealed(wallet.address);
+  const envelope = await loadSealed(wallet);
   if (!envelope) return null;
   return open(wallet, envelope, withKey);
 }

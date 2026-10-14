@@ -9,8 +9,18 @@
   border-bottom: 1px solid var(--rule);
 }
 .cityItem {
+  --c: var(--c-day, var(--ink));
   min-width: 0;
   border-left: 1px solid var(--rule);
+}
+/* Each currency's night ink in dark mode (lib/money.ts inkNight), the same switch as Send and the note use. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .cityItem {
+    --c: var(--c-night, var(--ink));
+  }
+}
+:root[data-theme="dark"] .cityItem {
+  --c: var(--c-night, var(--ink));
 }
 .cityItem:first-child {
   border-left: 0;
@@ -46,7 +56,8 @@ a.cityLink:hover {
   color: var(--ink-soft);
 }
 .cityAmount {
-  font-size: clamp(15px, 1.35vw + 4px, 26px);
+  color: var(--c);
+  font-size: clamp(15px, 1.2vw + 4px, 23px);
   font-weight: 550;
   margin-top: 8px;
   line-height: 1.1;
@@ -305,6 +316,7 @@ a.cityLink:hover {
     linear-gradient(45deg, transparent 8px, var(--note-paper) 0) 0 0 / 14px 12px repeat-x;
 }
 .receiptHead {
+  max-width: none;
   font-weight: 650;
   font-size: 15px;
   padding-bottom: 10px;
@@ -312,10 +324,11 @@ a.cityLink:hover {
   margin-bottom: 4px;
 }
 .receiptLine {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 4px 12px;
+  max-width: none;
   padding: 9px 0;
   border-bottom: 1px dashed var(--rule);
   font-size: 14.5px;
@@ -324,6 +337,16 @@ a.cityLink:hover {
 }
 a.receiptLine:hover span:first-child {
   text-decoration: underline;
+}
+p.receiptLine {
+  grid-template-columns: minmax(0, 1fr);
+  color: var(--ink-soft);
+}
+/* On a phone every row is the same two lines: who was paid, then the block and when. */
+@media (max-width: 560px) {
+  .receiptLine {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .receiptLine .serial {
   font-size: 13px;
@@ -388,26 +411,62 @@ a.receiptLine:hover span:first-child {
 .qa summary {
   cursor: pointer;
   list-style: none;
-  padding: 18px 40px 18px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 0;
   font-weight: 650;
   font-size: 17px;
-  position: relative;
 }
 .qa summary::-webkit-details-marker {
   display: none;
 }
+/* The "+" sits on the question's optical centre, then turns into a cross as the answer opens. */
 .qa summary::after {
   content: "+";
-  position: absolute;
-  right: 6px;
-  top: 12px;
-  font-size: 26px;
+  flex: none;
+  width: 28px;
+  text-align: center;
+  line-height: 1;
+  font-size: 28px;
   font-weight: 300;
   color: var(--serial);
+  transform: translateY(-1px);
   transition: transform 0.2s;
 }
 .qa[open] summary::after {
-  transform: rotate(45deg);
+  transform: translateY(-1px) rotate(45deg);
+}
+/* Answers open with the same unfolding as the "Read the note" panel, where the browser can animate to auto height;
+   elsewhere the answer fades in as it opens. Reduced motion turns both off with every other transition (globals.css). */
+@supports (interpolate-size: allow-keywords) {
+  .faq {
+    interpolate-size: allow-keywords;
+  }
+  .qa::details-content,
+  .more::details-content {
+    block-size: 0;
+    overflow: clip;
+    opacity: 0;
+    transition: block-size 0.28s cubic-bezier(0.2, 0.7, 0.2, 1), opacity 0.22s ease-out, content-visibility 0.28s allow-discrete;
+  }
+  .qa[open]::details-content,
+  .more[open]::details-content {
+    block-size: auto;
+    opacity: 1;
+  }
+}
+@supports not (interpolate-size: allow-keywords) {
+  .qa[open] > p {
+    animation: unfold 0.25s ease-out;
+  }
+}
+@keyframes unfold {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
 }
 .qa p {
   padding: 0 0 20px;
@@ -452,13 +511,51 @@ a.receiptLine:hover span:first-child {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+/* The narrow chart (ArrivalChart.tsx) is drawn one unit to a pixel at 360 wide, so these are real sizes. */
+.chartNarrow .axis {
+  font-size: 14px;
+}
+.chartNarrow .lineLabel {
+  font-size: 15px;
+}
+.chartPhone {
+  display: none;
+}
+@media (max-width: 560px) {
+  .chartWide {
+    display: none;
+  }
+  .chartPhone {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+.chartLegend {
+  list-style: none;
+  margin: 0;
+  padding: 10px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--rule);
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+.chartLegend li {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+.chartLegend b {
+  color: var(--ink);
+  font-weight: 650;
+}
+.chartLegend svg {
+  display: block;
+}
 @media (max-width: 640px) {
-  .axis {
-    font-size: 28px;
-  }
-  .lineLabel {
-    font-size: 32px;
-  }
   .world {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -504,7 +601,7 @@ a.receiptLine:hover span:first-child {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
   gap: 48px;
-  align-items: center;
+  align-items: start;
   border-top: 1.5px solid var(--ink);
   padding-top: 28px;
 }
@@ -512,6 +609,13 @@ a.receiptLine:hover span:first-child {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+/* The big 1% stays beside the text it explains while that column runs on. */
+@media (min-width: 901px) {
+  .moneyFace {
+    position: sticky;
+    top: 96px;
+  }
 }
 .moneyDenom {
   font-size: clamp(120px, 18vw, 240px);
@@ -618,9 +722,8 @@ a.receiptLine:hover span:first-child {
 .loadHead span {
   font-weight: 650;
   color: var(--serial);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 13px;
+  letter-spacing: 0.02em;
+  font-size: 15px;
 }
 .loadFigs {
   margin: 0;
@@ -695,30 +798,40 @@ a.receiptLine:hover span:first-child {
 }
 
 /* ---------------------------------------------------------------- the rest of the questions */
+/* "More questions" is a secondary button like every other on the page: ink outline, the same radius and height. */
 .more > summary {
   cursor: pointer;
   list-style: none;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   margin-top: 18px;
-  padding: 10px 16px;
-  border: 1.5px solid var(--rule);
+  min-height: 46px;
+  padding: 0 20px;
+  border: 1.5px solid var(--ink);
   border-radius: var(--radius);
-  font-weight: 600;
-  font-size: 15px;
+  font: 600 15.5px/1 "Segundo Dollar", var(--font-archivo), sans-serif;
+  transition: background 0.15s;
 }
 .more > summary::-webkit-details-marker {
   display: none;
 }
 .more > summary:hover {
-  border-color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+.more > summary::after {
+  content: "+";
+  font-size: 20px;
+  font-weight: 300;
+  line-height: 1;
+  color: var(--serial);
+  transition: transform 0.2s;
+}
+.more[open] > summary::after {
+  transform: rotate(45deg);
 }
 .more[open] > summary {
   margin-bottom: 4px;
-}
-.more[open] > summary::after {
-  content: "";
 }
 
 /* ---------------------------------------------------------------- world clocks on a phone: one row per city */
@@ -754,9 +867,11 @@ a.receiptLine:hover span:first-child {
   .person {
     grid-area: person;
     font-size: 13px;
-    white-space: nowrap;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
     overflow: hidden;
-    text-overflow: ellipsis;
   }
   .cityAmount {
     grid-area: amount;

@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { decodeEventLog, isAddress, zeroAddress, type Address, type Hex } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { Note } from "@/components/Note";
 import { ErrorLine, LandedLine, busyLabel, useAction } from "@/components/ui";
+import { PageHead } from "@/components/PageHead";
 import { SignInGate } from "@/components/SignInGate";
 import gate from "@/components/SignInGate.module.css";
 import { tillAbi } from "@/lib/abi";
@@ -19,8 +21,9 @@ import { useLive } from "@/lib/live";
 import { MIN_RATE_USD, currency, feeFor, formatDuration, formatFee, formatMoney, formatUsd, parseAmount, toUsd } from "@/lib/money";
 import { relay, signFee, signPermit, type Landed } from "@/lib/relay";
 import { groupedAddress, parseRequest } from "@/lib/request";
+import { codeToBytes3 } from "@/lib/tabs";
 import { gasPaused, useHealth } from "@/lib/health";
-import { PROMPT_FREE_LABEL, asksForPasskey, useWallet } from "@/lib/wallet";
+import { PROMPT_FREE_LABEL, asksForPasskey, passkeyHint, useWallet } from "@/lib/wallet";
 import styles from "./open.module.css";
 
 type Who = "invite" | "demo" | "address";
@@ -38,6 +41,24 @@ function saveReceipt(r: Receipt) {
     sessionStorage.setItem(RECEIPT(r.id.toString()), JSON.stringify({ ...r, id: r.id.toString(), landed: landed && { ...landed, fee } }));
   } catch {}
 }
+/** An open that was on its way to Monad when the page went away (a reload, a closed tab): said on the way back. */
+const PENDING = "segundo.pendingOpen";
+const markPending = (on: boolean) => {
+  try {
+    if (on) sessionStorage.setItem(PENDING, String(Date.now()));
+    else sessionStorage.removeItem(PENDING);
+  } catch {}
+};
+function takePending(): boolean {
+  try {
+    const at = Number(sessionStorage.getItem(PENDING) || 0);
+    sessionStorage.removeItem(PENDING);
+    return at > 0 && Date.now() - at < 15 * 60_000;
+  } catch {
+    return false;
+  }
+}
+
 function loadReceipt(id: string): Receipt | null {
   try {
     const raw = sessionStorage.getItem(RECEIPT(id));
@@ -51,6 +72,7 @@ function loadReceipt(id: string): Receipt | null {
 }
 
 export default function OpenTab() {
+  const router = useRouter();
   const wallet = useWallet();
   const me = wallet.address;
   const health = useHealth();
@@ -64,7 +86,10 @@ export default function OpenTab() {
   const [rate, setRate] = useState("30");
   const [budget, setBudget] = useState("5");
   const [memo, setMemo] = useState("");
+  const [payerName, setPayerName] = useState("");
   const [opened, setOpened] = useState<Receipt | null>(null);
+  const [interrupted, setInterrupted] = useState(false);
+  const doneRef = useRef<HTMLHeadingElement>(null);
   const act = useAction();
   const faucet = useAction();
   const drip = useAutoDrip(me, balance, refreshBalance);
@@ -76,6 +101,7 @@ export default function OpenTab() {
   // Otherwise, a freelancer's request link (/open?to=&rate=&budget=&memo=&from=) fills in the form.
   const [asked, setAsked] = useState<Asked | null>(null);
   useEffect(() => {
+    if (takePending()) setInterrupted(true);
     const q = new URLSearchParams(window.location.search);
     const back = q.get("opened");
     const receipt = back && /^\d+$/.test(back) ? loadReceipt(back) : null;
@@ -89,6 +115,30 @@ export default function OpenTab() {
     if (r.memo) setMemo(r.memo);
     setAsked({ from: r.from, to: r.to, rate: r.rate, budget: r.budget, memo: r.memo });
   }, []);
+  // While a tab is on its way to Monad, leaving the page asks first (the open can't be resumed from here).
+  useEffect(() => {
+    if (!act.busy) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [act.busy]);
+  // The receipt starts at the top of the page, with focus on its heading, wherever the form was scrolled to.
+  useEffect(() => {
+    if (!opened) return;
+    window.scrollTo({ top: 0 });
+    doneRef.current?.focus({ preventScroll: true });
+  }, [opened]);
+
+  const interruptedNote = interrupted && (
+    <p className="notice" role="status">
+      <b>The page was reloaded while your last tab was on its way to Monad.</b> If it landed, it&apos;s in <Link href="/app">your tabs</Link>; if it
+      didn&apos;t, nothing left your wallet. Check there before you open it again.
+    </p>
+  );
+
   const askedBanner = asked && (
     <p className="notice" role="status" style={{ overflowWrap: "anywhere" }}>
       <b>{asked.from || "A freelancer"} asked you to open this tab.</b> The pay goes to <span className="serial">{groupedAddress(asked.to)}</span>. Check
@@ -139,7 +189,9 @@ export default function OpenTab() {
   // From a request link, the note carries the name the freelancer gave, while the address is still the one they sent.
   const askedName = asked?.from && who === "address" && addr.toLowerCase() === asked.to.toLowerCase() ? asked.from : "";
   const previewPayee = who === "demo" ? { name: pick.name, place: pick.place } : { name: askedName || "Your freelancer", place: "anywhere" };
-  const myName = myProfile?.name || "You";
+  // A client with no name on Segundo yet can give one here: the freelancer's invite and note then name them, not an address.
+  const asksName = myProfile != null && !myProfile.name;
+  const myName = myProfile?.name || payerName.trim() || "You";
 
   const submit = () =>
     act.run("Tab opened", async (sent) => {
@@ -157,6 +209,13 @@ export default function OpenTab() {
       }
       const permit = await signPermit(wallet, budgetUnits);
       const fee = await signFee(wallet, budgetUnits);
+      markPending(true);
+      // The name goes on chain first, so the invite and the note read it from the start (as /join does for the freelancer).
+      if (asksName && payerName.trim()) {
+        try {
+          await relay(wallet, "setProfile", [payerName.trim(), myProfile?.place ?? "", codeToBytes3(myProfile?.currency || "USD")]);
+        } catch {}
+      }
       const p = relay(wallet, "openWithPermit", [
         payee ?? zeroAddress,
         invite,
@@ -169,7 +228,7 @@ export default function OpenTab() {
         permit.s,
       ], fee);
       sent();
-      const landed = await p;
+      const landed = await p.finally(() => markPending(false));
       const receipt = await publicClient.getTransactionReceipt({ hash: landed.hash });
       let id = 0n;
       for (const log of receipt.logs) {
@@ -191,8 +250,11 @@ export default function OpenTab() {
       saveReceipt(done);
       // The address bar now names the receipt, so Back from the tab page lands here again.
       window.history.replaceState(null, "", `/open?opened=${id}`);
-      setOpened(done);
       refreshBalance();
+      // A demo freelancer clocks in by themselves: go straight to the note printing, with the receipt on top of it.
+      // An invite or an address keeps the receipt here, where the link to send is.
+      if (who === "demo") router.push(`/tab/${id}?opened=1`);
+      else setOpened(done);
       return landed;
     });
 
@@ -200,7 +262,9 @@ export default function OpenTab() {
     return (
       <main className={`wrap ${styles.page}`}>
         <div className={styles.done}>
-          <h1 className={styles.h1}>Tab № {opened.id.toString().padStart(4, "0")} is open.</h1>
+          <h1 className={styles.h1} ref={doneRef} tabIndex={-1}>
+            Tab № {opened.id.toString().padStart(4, "0")} is open.
+          </h1>
           <LandedLine landed={opened.landed ?? null} />
           <FeeLine fee={opened.landed?.fee} />
           {opened.link ? <InviteBox link={opened.link} /> : <p>{opened.next}</p>}
@@ -221,6 +285,13 @@ export default function OpenTab() {
 
   return (
     <main className={`wrap ${styles.page}`}>
+      <PageHead
+        compact
+        className={styles.head}
+        eyebrow="For clients"
+        title="Open a tab"
+        lede="Fund a budget once; the freelancer is paid by the second while they're on the clock, and what's left comes back."
+      />
       <div className={styles.layout}>
         <form
           className={styles.form}
@@ -229,7 +300,7 @@ export default function OpenTab() {
             if (!problem && !act.busy) submit();
           }}
         >
-          <h1 className={styles.h1}>Open a tab</h1>
+          {interruptedNote}
           {askedBanner}
 
           <fieldset className={styles.who}>
@@ -306,6 +377,22 @@ export default function OpenTab() {
             </div>
           </div>
 
+          {asksName && (
+            <div className="field">
+              <label htmlFor="payer-name">Your name (optional)</label>
+              <input
+                id="payer-name"
+                className="input"
+                maxLength={40}
+                value={payerName}
+                onChange={(e) => setPayerName(e.target.value)}
+                placeholder="Your name or your studio's"
+                autoComplete="organization"
+              />
+              <span className="hint">The freelancer sees this on the invite and on the note, instead of your wallet address.</span>
+            </div>
+          )}
+
           <div className="field">
             <label htmlFor="memo">What it&apos;s for (optional)</label>
             <input id="memo" className="input" maxLength={48} value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="Logo for the autumn launch" />
@@ -356,7 +443,9 @@ export default function OpenTab() {
           {paused && !problem && <p className={styles.why}>The relayer is short of test MON right now, so opening a tab is paused. Try again in a little while; your wallet and balance are unchanged.</p>}
           <p className="soft">
             Your account signs three things in one step: permission to take the budget, the 1% fee, and the tab itself.{" "}
-            {asksForPasskey(wallet, budgetUnits)
+            {passkeyHint(wallet, budgetUnits)
+              ? `No gas. ${passkeyHint(wallet, budgetUnits)}`
+              : asksForPasskey(wallet, budgetUnits)
               ? `No gas. Over ${PROMPT_FREE_LABEL}, Segundo asks for your passkey again before the budget moves.`
               : wallet.kind === "mera"
                 ? `No pop-ups up to ${PROMPT_FREE_LABEL}, no gas; over ${PROMPT_FREE_LABEL}, Segundo asks for your passkey again.`
@@ -490,8 +579,20 @@ function SignedOutOpen({ asked }: { asked: Asked | null }) {
 
   return (
       <main className={`wrap ${styles.page}`}>
+        <PageHead
+          compact
+          className={styles.head}
+          eyebrow="For clients"
+          title={asked ? `${asked.from || "A freelancer"} asked you to open a tab` : "Open a tab"}
+          lede={
+            asked
+              ? "Their rate and budget arrive filled in. Sign in to check the request and fund it."
+              : "Hire by the second: fund a budget once, and the freelancer is paid while they're on the clock. Sign in, or try it without signing up."
+          }
+        />
         <SignInGate
-          title={asked ? `${asked.from || "A freelancer"} asked you to open a tab` : "Sign in to open a tab"}
+          level={2}
+          title={asked ? "Sign in to fund the tab" : "Sign in to open a tab"}
           preview={
             <>
               {terms}

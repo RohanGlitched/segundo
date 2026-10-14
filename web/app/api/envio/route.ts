@@ -1,6 +1,6 @@
 import { getAddress, isAddress } from "viem";
 import { getStats } from "@/lib/envio";
-import { HYPERINDEX_URL, INDEXER_SOURCE, indexedNetwork, indexedPerson, lagging, type IndexedNetwork } from "@/lib/hyperindex";
+import { HYPERINDEX_URL, INDEXER_SOURCE, indexedNetwork, indexedPersonWithRates, lagging, type IndexedNetwork } from "@/lib/hyperindex";
 import { json } from "@/lib/server";
 
 export const runtime = "nodejs";
@@ -19,8 +19,10 @@ const minutes = (s: number) => (s < 120 ? `${s} s` : `${Math.round(s / 60)} min`
 /**
  * Segundo's HyperIndex indexer, read for the /proof pages.
  *
- * GET /api/envio?address=0x…  one person's all-time record (Person, Payout, CurrencyRate). On failure: 503, and the
- *                             statement page computes the same record from the HyperRPC history it already holds.
+ * GET /api/envio?address=0x…  one person's all-time record (Person, Payout, CurrencyRate), plus `atPayout`: the CRE
+ *                             rate in force at each payout, from deployments that store it (null from older ones, and
+ *                             the statement then uses today's rate). On failure: 503, and the statement page computes
+ *                             the same record from the HyperRPC history it already holds.
  * GET /api/envio              the network by day (DailyStat, Totals, minus the load benchmark). When HyperIndex fails
  *                             or is more than five minutes behind, the same rows come from the HyperRPC ledger.
  */
@@ -32,9 +34,9 @@ export async function GET(req: Request) {
   if (address != null) {
     if (!isAddress(address, { strict: false })) return json({ error: "That isn't a Monad address." }, 400);
     try {
-      const p = await indexedPerson(getAddress(address));
+      const p = await indexedPersonWithRates(getAddress(address));
       return json({ from: "envio-hyperindex", lagging: lagging(p.status), ...about, ...p }, 200, {
-        "cache-control": "public, s-maxage=20, stale-while-revalidate=60",
+        "cache-control": "public, s-maxage=20, stale-while-revalidate=300",
       });
     } catch (e) {
       return json({ from: null, reason: why(e), ...about }, 503, { "cache-control": "no-store" });
@@ -46,7 +48,7 @@ export async function GET(req: Request) {
   try {
     indexed = await indexedNetwork(14);
     if (!lagging(indexed.status)) {
-      return json({ from: "envio-hyperindex", lagging: false, ...about, ...indexed }, 200, { "cache-control": "public, s-maxage=20, stale-while-revalidate=60" });
+      return json({ from: "envio-hyperindex", lagging: false, ...about, ...indexed }, 200, { "cache-control": "public, s-maxage=20, stale-while-revalidate=300" });
     }
     reason = `HyperIndex is ${minutes(indexed.status.lagSeconds ?? 0)} behind Monad`;
   } catch (e) {

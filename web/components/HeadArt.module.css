@@ -1,0 +1,165 @@
+/* A specimen sheet in a page head: note paper, an ink rule at the top, a serial-red stamp. */
+.sheet {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px 22px 18px;
+  background: var(--note-paper);
+  border-top: 1.5px solid var(--ink);
+  border-radius: 0 0 10px 10px;
+  box-shadow: var(--shadow);
+  transform: rotate(-0.8deg);
+  min-width: 0;
+}
+.sheetHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.sheetTitle {
+  font-variation-settings: "wdth" 112;
+  font-weight: 650;
+  font-size: 17px;
+}
+.stamp {
+  flex: none;
+  padding: 1px 8px;
+  border: 1.5px solid var(--serial);
+  border-radius: 4px;
+  color: var(--serial);
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  transform: rotate(4deg);
+}
+.who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  font-size: 15px;
+  color: var(--ink-soft);
+  max-width: none;
+}
+.who b {
+  color: var(--ink);
+  font-weight: 650;
+}
+.who :global(.serial) {
+  font-size: 13px;
+}
+.total {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 0;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1.5px solid var(--ink);
+}
+.total dt {
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.total dd {
+  margin: 0;
+}
+/* An engraved bar where a figure would be printed. */
+.bar {
+  display: block;
+  height: 10px;
+  border-radius: 2px;
+  background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--ink) 42%, transparent) 0 2px, transparent 2px 4px);
+}
+.total .bar {
+  height: 18px;
+}
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.rows li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--rule);
+  font-size: 14px;
+}
+.rows li .bar {
+  grid-column: 1 / -1;
+  height: 6px;
+}
+.rows :global(.serial) {
+  font-size: 12.5px;
+}
+.cap {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+.flow {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-top: 1px solid var(--rule);
+  padding-top: 14px;
+}
+.flow li {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+.flow li > span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  font-size: 14px;
+}
+.n {
+  font-variation-settings: var(--wide);
+  font-size: 22px;
+  font-weight: 300;
+  line-height: 1;
+  color: var(--serial);
+}
+.field {
+  display: block;
+  padding: 8px 12px;
+  border: 1.5px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--sheet);
+  color: var(--ink);
+  font-size: 14.5px;
+}
+.code {
+  font-variation-settings: var(--wide);
+  letter-spacing: 0.24em;
+  font-weight: 600;
+}
+.wallet {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ok);
+  flex: none;
+}
+@media (max-width: 900px) {
+  .sheet {
+    transform: none;
+  }
+}

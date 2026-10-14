@@ -131,7 +131,7 @@
   margin-top: 2.6cqw;
 }
 .curName {
-  font-size: clamp(11px, 1.6cqw, 16px);
+  font-size: clamp(12px, 1.6cqw, 16px);
   color: var(--ink-c);
   font-weight: 600;
 }
@@ -157,12 +157,12 @@
   color: var(--ink-soft);
 }
 .usd {
-  font-size: clamp(11px, 1.55cqw, 16px);
+  font-size: clamp(12px, 1.55cqw, 16px);
   color: var(--ink-soft);
   font-variation-settings: "wdth" 100;
 }
 .who {
-  font-size: clamp(11px, 1.6cqw, 16.5px);
+  font-size: clamp(12px, 1.6cqw, 16.5px);
   line-height: 1.35;
   margin-top: 0.5cqw;
 }
@@ -183,7 +183,7 @@
   align-items: center;
   gap: 8px;
   font-weight: 600;
-  font-size: clamp(11px, 1.6cqw, 16px);
+  font-size: clamp(12px, 1.6cqw, 16px);
 }
 .dot {
   position: relative;
@@ -212,8 +212,10 @@
     opacity: 0;
   }
 }
+/* Content a reader is meant to read ("block 70,758,748, paid 2 s ago"), so never microtype; only the border's
+   microprint stays under 8 px. */
 .serialLine {
-  font-size: clamp(10px, 1.35cqw, 14px);
+  font-size: clamp(11.5px, 1.35cqw, 14px);
 }
 
 /* The rosette, its glow and monogram, scaled as one so narrow notes can make room for the text. */
@@ -238,7 +240,7 @@
     font-size: calc(9.6cqw * var(--shrink, 1));
   }
   .who {
-    font-size: 3.2cqw;
+    font-size: max(12px, 3.2cqw);
     /* One line each, so a long name or city can't push the block line down onto the microprint and border. */
     white-space: nowrap;
     overflow: hidden;
@@ -252,13 +254,16 @@
   }
   .usd,
   .status {
-    font-size: 3cqw;
+    font-size: max(12px, 3cqw);
   }
   .serialLine {
-    font-size: 2.7cqw;
+    font-size: max(11px, 2.7cqw);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .serialTop {
-    font-size: 3cqw;
+    font-size: max(11.5px, 3cqw);
     top: 5cqw;
   }
 }

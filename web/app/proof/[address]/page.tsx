@@ -18,7 +18,7 @@ import { KEEPER_ADDRESS, currency, fetchFx, formatDuration, formatFee, formatMon
 import { canSeal, hasSealedDetails, unsealDetails, type SealedDetails } from "@/lib/seal";
 import { shortAddress } from "@/lib/tabs";
 import { useWallet } from "@/lib/wallet";
-import { IndexedRecord } from "./IndexedRecord";
+import { IndexedRecord, ratesThen, useIndexed, type RateThen } from "./IndexedRecord";
 import styles from "./statement.module.css";
 
 type Period = "30d" | "90d" | "12m" | "all";
@@ -51,6 +51,8 @@ function StatementFor({ address }: { address: Address }) {
   const { data, error } = useHistoryFeed(address);
   const profile = useProfile(address);
   const { rates } = useLive();
+  // Segundo's HyperIndex indexer: the all-time record, and the CRE rate in force at each payout where it stores one.
+  const { indexed, failed } = useIndexed(address);
   // Where today's rate came from: the on-chain Chainlink CRE rate, or the daily reference rate (lib/money.ts).
   const [fx, setFx] = useState<FxReply | null>(null);
   useEffect(() => {
@@ -94,6 +96,8 @@ function StatementFor({ address }: { address: Address }) {
   }, [data]);
 
   const cur = currency(profile?.currency || "USD");
+  const then = useMemo(() => ratesThen(indexed, cur.code), [indexed, cur.code]);
+  const priceOf = useMemo(() => pricer(cur, rates, then), [cur, rates, then]);
   const days = PERIODS.find((p) => p.key === period)!.days;
   const since = days == null ? 0 : now - days * 86_400;
 
@@ -104,11 +108,25 @@ function StatementFor({ address }: { address: Address }) {
   const shifts = useMemo(() => clockTime(data?.items ?? [], since, now), [data, since, now]);
   const names = useNames(income.map((i) => i.counterparty).filter((a): a is Address => !!a));
   const total = income.reduce((s, i) => s + BigInt(i.amount!), 0n);
-  const clients = useMemo(() => byClient(income), [income]);
+  const totalLocal = useMemo(() => sumLocal(income, priceOf), [income, priceOf]);
+  // How many payouts in view carry the rate of their day; the rest (marked *) use today's rate.
+  const dated = useMemo(() => income.filter((i) => priceOf(i).then).length, [income, priceOf]);
+  const undated = income.length - dated;
+  const mixed = dated > 0 && undated > 0 && totalLocal != null;
+  const clients = useMemo(() => byClient(income, priceOf), [income, priceOf]);
   // Tabs this account funded: not income, so they stay out of the totals, but a client looking up their own
   // statement should see where their money went rather than an empty page.
   const funded = useMemo(() => asClient(data?.items ?? [], since), [data, since]);
-  const bars = useMemo(() => buckets(income, since, now), [income, since, now]);
+  const bars = useMemo(() => buckets(income, since, now, priceOf), [income, since, now, priceOf]);
+  const plural = cur.name.toLowerCase() + "s";
+  const rateWords =
+    cur.code === "USD" || totalLocal == null
+      ? "US dollars"
+      : dated === 0
+        ? `${plural} at today's rate`
+        : undated === 0
+          ? `${plural} at the Chainlink CRE rate in force when each payout landed`
+          : `${plural} at the Chainlink CRE rate in force when each payout landed (today's rate for the ${undated.toLocaleString("en-US")} with no CRE rate on record)`;
   const owner = !!wallet.address && wallet.address.toLowerCase() === address.toLowerCase();
   const first = income.at(-1)?.time;
   const periodFrom = days == null ? (first ?? now) : since;
@@ -181,7 +199,7 @@ function StatementFor({ address }: { address: Address }) {
         {owner && canSeal(wallet) ? <ShareDetails address={address} wallet={wallet} block={data ? data.head : null} /> : <RequestNotice />}
         {verified && <VerifiedDetails v={verified} />}
 
-        <IndexedRecord address={address} history={data} cur={cur} rates={rates} />
+        <IndexedRecord indexed={indexed} failed={failed} history={data} cur={cur} rates={rates} />
 
         <div className={styles.periods} role="radiogroup" aria-label="Period">
           {PERIODS.map((p) => (
@@ -217,7 +235,7 @@ function StatementFor({ address }: { address: Address }) {
             <section className={styles.totals} aria-label="Totals">
               <div className={styles.total}>
                 <p className={styles.label}>Total received</p>
-                <p className={`denom ${styles.big}`}>{local(toUsd(total), cur, rates)}</p>
+                <p className={`denom ${styles.big}`}>{shown(totalLocal, toUsd(total), cur)}</p>
                 {cur.code !== "USD" && (
                   <p className={styles.sub}>
                     <b>{formatUsd(toUsd(total))}</b> in AUSD, a US dollar stablecoin
@@ -239,7 +257,9 @@ function StatementFor({ address }: { address: Address }) {
                 </div>
                 <div>
                   <dt>Average an hour</dt>
-                  <dd className="denom">{shifts.seconds >= 60 ? local(toUsd(total) / (shifts.seconds / 3600), cur, rates) : "—"}</dd>
+                  <dd className="denom">
+                    {shifts.seconds >= 60 ? shown(totalLocal == null ? null : totalLocal / (shifts.seconds / 3600), toUsd(total) / (shifts.seconds / 3600), cur) : "—"}
+                  </dd>
                 </div>
               </dl>
             </section>
@@ -250,7 +270,7 @@ function StatementFor({ address }: { address: Address }) {
               <>
                 <section className={styles.section} aria-labelledby="by-time">
                   <h2 id="by-time">{bars.byDay ? "Received by day" : "Received by month"}</h2>
-                  <Bars bars={bars.rows} byDay={bars.byDay} cur={cur} rates={rates} />
+                  <Bars bars={bars.rows} byDay={bars.byDay} cur={cur} words={rateWords} />
                 </section>
 
                 <section className={styles.section} aria-labelledby="by-client">
@@ -298,7 +318,7 @@ function StatementFor({ address }: { address: Address }) {
                           </td>
                           <td data-label="Payouts">{c.count.toLocaleString("en-US")}</td>
                           <td data-label="Received" className={styles.num}>
-                            {local(toUsd(c.units), cur, rates)}
+                            {shown(c.local, toUsd(c.units), cur)}
                             {cur.code !== "USD" && <span className={styles.usd}>{formatUsd(toUsd(c.units))}</span>}
                           </td>
                           <td data-label="Share" className={styles.num}>
@@ -312,7 +332,10 @@ function StatementFor({ address }: { address: Address }) {
 
                 <section className={styles.section} aria-labelledby="payouts">
                   <h2 id="payouts">Every payout</h2>
-                  <p className="soft">Newest first. Times are UTC. Each block number opens its transaction on MonadVision.</p>
+                  <p className="soft">
+                    Newest first. Times are UTC. Each block number opens its transaction on MonadVision.
+                    {cur.code !== "USD" && totalLocal != null && dated > 0 && <> {cur.code} is in {rateWords}{mixed ? "; those lines are marked *" : ""}.</>}
+                  </p>
                   <table className={`${styles.table} ${styles.lines}`}>
                     <thead>
                       <tr>
@@ -343,7 +366,7 @@ function StatementFor({ address }: { address: Address }) {
                           </td>
                           {cur.code !== "USD" && (
                             <td data-label={cur.code} className={styles.num}>
-                              {local(toUsd(BigInt(i.amount!)), cur, rates)}
+                              <Line i={i} cur={cur} priceOf={priceOf} mark={mixed} />
                             </td>
                           )}
                           <td data-label="Block" className={styles.num}>
@@ -430,10 +453,29 @@ function StatementFor({ address }: { address: Address }) {
                     </a>
                     , with its source matched on Sourcify. Pay is in AUSD, Agora&apos;s digital dollar, which tracks the US dollar one to one.
                   </li>
-                  {cur.code !== "USD" && (
+                  {cur.code !== "USD" && dated > 0 && (
                     <li>
-                      <b>{cur.code} amounts are a guide.</b> They use today&apos;s rate, not the rate on the day each payout landed. The AUSD
-                      column is exact. {rateSourceLine(cur.code, fx)}
+                      {undated === 0 ? (
+                        <>
+                          <b>{cur.code} amounts use the rate of their day.</b> Each payout is priced at the rate Segundo&apos;s Chainlink CRE workflow
+                          had posted on Monad when it landed, which Segundo&apos;s HyperIndex indexer stores on the payout. The AUSD column is exact.
+                        </>
+                      ) : (
+                        <>
+                          <b>{cur.code} amounts use the rate of their day where one is on record.</b> {dated.toLocaleString("en-US")} of{" "}
+                          {income.length.toLocaleString("en-US")} payouts in this period are priced at the rate Segundo&apos;s Chainlink CRE workflow had
+                          posted on Monad when they landed, as the HyperIndex indexer stores it on each payout. The{" "}
+                          {undated.toLocaleString("en-US")} marked * have no CRE rate on record, mostly because they landed before the workflow started
+                          posting rates, so they use today&apos;s rate. The AUSD column is exact.
+                        </>
+                      )}
+                    </li>
+                  )}
+                  {cur.code !== "USD" && (undated > 0 || dated === 0) && (
+                    <li>
+                      <b>{dated > 0 ? "Today's rate is a guide." : `${cur.code} amounts are a guide.`}</b>{" "}
+                      {dated > 0 ? "It is" : "They use"} today&apos;s rate, not the rate on the day each payout landed. The AUSD column is exact.{" "}
+                      {rateSourceLine(cur.code, fx)}
                       {fx?.sources[cur.code]?.source === "chainlink-cre" ? (
                         <>
                           {" "}(
@@ -472,9 +514,59 @@ function StatementFor({ address }: { address: Address }) {
   );
 }
 
-/** Today's reference rate into the person's currency; dollars while rates load or when they think in dollars. */
-function local(usd: number, cur: Currency, rates: Rates | null) {
-  return cur.code === "USD" || !rates ? formatUsd(usd) : formatMoney(usd, cur, rates);
+type PriceOf = (i: HistoryItem) => { value: number | null; then: RateThen | null };
+
+/**
+ * One payout in the person's currency: at the Chainlink CRE rate in force when it landed, where Segundo's HyperIndex
+ * indexer stored one on the payout, and at today's rate otherwise (null while today's rates load).
+ */
+function pricer(cur: Currency, rates: Rates | null, then: ((block: number, hash: string) => RateThen | null) | null): PriceOf {
+  return (i) => {
+    const usd = toUsd(BigInt(i.amount!));
+    if (cur.code === "USD") return { value: usd, then: null };
+    const t = then?.(i.block, i.hash) ?? null;
+    const rate = t?.rate ?? rates?.[cur.code];
+    return { value: rate == null ? null : usd * rate, then: t };
+  };
+}
+
+/** The payouts' total in the person's currency, or null while any of them can't be priced yet. */
+function sumLocal(items: HistoryItem[], priceOf: PriceOf): number | null {
+  let v = 0;
+  for (const i of items) {
+    const p = priceOf(i).value;
+    if (p == null) return null;
+    v += p;
+  }
+  return v;
+}
+
+/** An amount already in the person's currency; dollars while it can't be priced or when they think in dollars. */
+function shown(value: number | null, usd: number, cur: Currency) {
+  return cur.code === "USD" || value == null ? formatUsd(usd) : formatMoney(value, cur, { [cur.code]: 1 });
+}
+
+/** One line's amount in the person's currency, with the rate it used on hover; * marks today's rate among dated lines. */
+function Line({ i, cur, priceOf, mark }: { i: HistoryItem; cur: Currency; priceOf: PriceOf; mark: boolean }) {
+  const p = priceOf(i);
+  const text = shown(p.value, toUsd(BigInt(i.amount!)), cur);
+  if (p.then) {
+    const rate = p.then.rate.toLocaleString("en-US", { maximumFractionDigits: 4 });
+    return <span title={`${rate} ${cur.code} to the dollar: the Chainlink CRE rate posted ${stamp(p.then.at)}`}>{text}</span>;
+  }
+  return (
+    <span title={p.value == null ? undefined : "At today's rate"}>
+      {text}
+      {mark && p.value != null && (
+        <>
+          <span className={styles.atToday} aria-hidden>
+            *
+          </span>
+          <span className="visually-hidden"> at today&apos;s rate</span>
+        </>
+      )}
+    </span>
+  );
 }
 
 /** Time on the clock in the period, from clock-in and clock-out pairs on tabs where this account is the freelancer. */
@@ -527,13 +619,15 @@ function asClient(items: HistoryItem[], since: number) {
   return { tabs: tabs.size, funded, paid, refunded, fees };
 }
 
-function byClient(income: HistoryItem[]) {
-  const map = new Map<string, { address: Address; units: bigint; count: number; tabs: Set<string> }>();
+function byClient(income: HistoryItem[], priceOf: PriceOf) {
+  const map = new Map<string, { address: Address; units: bigint; local: number | null; count: number; tabs: Set<string> }>();
   for (const i of income) {
     if (!i.counterparty) continue;
     const k = i.counterparty.toLowerCase();
-    const row = map.get(k) ?? { address: i.counterparty, units: 0n, count: 0, tabs: new Set<string>() };
+    const row = map.get(k) ?? { address: i.counterparty, units: 0n, local: 0, count: 0, tabs: new Set<string>() };
     row.units += BigInt(i.amount!);
+    const v = priceOf(i).value;
+    row.local = row.local == null || v == null ? null : row.local + v;
     row.count++;
     if (i.tab) row.tabs.add(i.tab);
     map.set(k, row);
@@ -543,23 +637,28 @@ function byClient(income: HistoryItem[]) {
     .map((r) => ({ ...r, tabs: [...r.tabs].sort((a, b) => Number(a) - Number(b)) }));
 }
 
-type Bar = { key: string; label: string; units: bigint };
+type Bar = { key: string; label: string; units: bigint; local: number | null };
 
 /** By day when the pay in view spans two months or less, by month otherwise; quiet days and months included. */
-function buckets(income: HistoryItem[], since: number, now: number): { byDay: boolean; rows: Bar[] } {
+function buckets(income: HistoryItem[], since: number, now: number, priceOf: PriceOf): { byDay: boolean; rows: Bar[] } {
   if (!income.length) return { byDay: true, rows: [] };
   const start = Math.max(since, income.at(-1)!.time);
   const byDay = now - start <= 62 * 86_400;
   const sums = new Map<string, bigint>();
+  const locals = new Map<string, number | null>();
   for (const i of income) {
     const k = byDay ? isoDay(i.time) : isoMonth(i.time);
     sums.set(k, (sums.get(k) ?? 0n) + BigInt(i.amount!));
+    const v = priceOf(i).value;
+    const held = locals.has(k) ? locals.get(k)! : 0;
+    locals.set(k, held == null || v == null ? null : held + v);
   }
+  const local = (k: string) => (locals.has(k) ? locals.get(k)! : 0);
   const rows: Bar[] = [];
   if (byDay) {
     for (let t = Date.parse(`${isoDay(start)}T00:00:00Z`) / 1000; t <= now; t += 86_400) {
       const k = isoDay(t);
-      rows.push({ key: k, label: new Date(t * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }), units: sums.get(k) ?? 0n });
+      rows.push({ key: k, label: new Date(t * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }), units: sums.get(k) ?? 0n, local: local(k) });
     }
   } else {
     const d = new Date(start * 1000);
@@ -568,7 +667,7 @@ function buckets(income: HistoryItem[], since: number, now: number): { byDay: bo
     const end = isoMonth(now);
     for (;;) {
       const k = `${y}-${String(m + 1).padStart(2, "0")}`;
-      rows.push({ key: k, label: new Date(Date.UTC(y, m, 1)).toLocaleDateString("en-GB", { month: "short", year: "2-digit", timeZone: "UTC" }), units: sums.get(k) ?? 0n });
+      rows.push({ key: k, label: new Date(Date.UTC(y, m, 1)).toLocaleDateString("en-GB", { month: "short", year: "2-digit", timeZone: "UTC" }), units: sums.get(k) ?? 0n, local: local(k) });
       if (k >= end) break;
       m++;
       if (m === 12) {
@@ -580,7 +679,7 @@ function buckets(income: HistoryItem[], since: number, now: number): { byDay: bo
   return { byDay, rows };
 }
 
-function Bars({ bars, byDay, cur, rates }: { bars: Bar[]; byDay: boolean; cur: Currency; rates: Rates | null }) {
+function Bars({ bars, byDay, cur, words }: { bars: Bar[]; byDay: boolean; cur: Currency; words: string }) {
   const max = bars.reduce((m, b) => (b.units > m ? b.units : m), 0n);
   const peak = bars.find((b) => b.units === max);
   const every = Math.max(1, Math.ceil(bars.length / 8));
@@ -590,13 +689,13 @@ function Bars({ bars, byDay, cur, rates }: { bars: Bar[]; byDay: boolean; cur: C
         {bars.map((b, i) => {
           const pct = max > 0n ? (Number(b.units) / Number(max)) * 100 : 0;
           return (
-            <li key={b.key} title={`${b.label}: ${local(toUsd(b.units), cur, rates)}`}>
+            <li key={b.key} title={`${b.label}: ${shown(b.local, toUsd(b.units), cur)}`}>
               <span className="visually-hidden">
-                {b.label}: {local(toUsd(b.units), cur, rates)}
+                {b.label}: {shown(b.local, toUsd(b.units), cur)}
               </span>
               <span className={styles.col} aria-hidden>
                 <span className={styles.bar} style={{ height: `${b.units > 0n ? Math.max(pct, 2) : 0}%` }}>
-                  {b === peak && max > 0n && <span className={`${styles.peak} ${i > bars.length / 2 ? styles.peakEnd : ""}`}>{local(toUsd(b.units), cur, rates)}</span>}
+                  {b === peak && max > 0n && <span className={`${styles.peak} ${i > bars.length / 2 ? styles.peakEnd : ""}`}>{shown(b.local, toUsd(b.units), cur)}</span>}
                 </span>
               </span>
               <span className={styles.tick} aria-hidden>
@@ -608,7 +707,7 @@ function Bars({ bars, byDay, cur, rates }: { bars: Bar[]; byDay: boolean; cur: C
         })}
       </ol>
       <figcaption className="soft">
-        {byDay ? "Each bar is one UTC day" : "Each bar is one month"}, in {cur.code === "USD" || !rates ? "US dollars" : cur.name.toLowerCase() + "s at today's rate"}.
+        {byDay ? "Each bar is one UTC day" : "Each bar is one month"}, in {words}.
       </figcaption>
     </figure>
   );
@@ -684,27 +783,29 @@ function Sealed({ address, owner, wallet }: { address: Address; owner: boolean; 
   if (details) {
     const place = [details.postalAddress, details.country].filter(Boolean).join(", ");
     return (
-      <dl className={styles.sealed}>
-        {details.legalName && (
-          <div>
-            <dt>Legal name</dt>
-            <dd>{details.legalName}</dd>
-          </div>
-        )}
-        {place && (
-          <div>
-            <dt>Address</dt>
-            <dd>{place}</dd>
-          </div>
-        )}
-        {details.taxId && (
-          <div>
-            <dt>Tax ID</dt>
-            <dd>{details.taxId}</dd>
-          </div>
-        )}
+      <div className={styles.sealed}>
+        <dl className={styles.sealedList}>
+          {details.legalName && (
+            <div>
+              <dt>Legal name</dt>
+              <dd>{details.legalName}</dd>
+            </div>
+          )}
+          {place && (
+            <div>
+              <dt>Address</dt>
+              <dd>{place}</dd>
+            </div>
+          )}
+          {details.taxId && (
+            <div>
+              <dt>Tax ID</dt>
+              <dd>{details.taxId}</dd>
+            </div>
+          )}
+        </dl>
         <p className={styles.sealedNote}>Added by the account holder from details sealed with their passkey. Shown on this device only.</p>
-      </dl>
+      </div>
     );
   }
   return (
@@ -730,7 +831,7 @@ function Sealed({ address, owner, wallet }: { address: Address; owner: boolean; 
       </button>
       <p className="soft">
         {note ??
-          (hasSealedDetails(address)
+          (hasSealedDetails(address, wallet)
             ? "Prints your legal name, address and tax ID on this copy. They are unsealed here with your passkey and never leave this device."
             : "Seal your legal name, address and tax ID with your passkey on your account page, then add them to printed statements.")}
       </p>

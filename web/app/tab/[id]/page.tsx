@@ -16,7 +16,9 @@ import { ago, currency, feeFor, formatCents, formatDuration, formatFee, formatMo
 import { relay, settleNow, signFee, signPermit, type Landed } from "@/lib/relay";
 import { DEMO_FREELANCERS } from "@/lib/demo";
 import { earnedAt, isZero, stateOf } from "@/lib/tabs";
-import { PROMPT_FREE_LABEL, asksForPasskey, useWallet } from "@/lib/wallet";
+import { PROMPT_FREE_LABEL, asksForPasskey, passkeyHint, useWallet } from "@/lib/wallet";
+import { StatePage } from "@/components/StatePage";
+import { GrandRosette } from "@/components/home/Art";
 import styles from "./tab.module.css";
 
 /**
@@ -29,10 +31,24 @@ function payEvery(secondsOpen: number) {
   return 60_000;
 }
 const PACE_WORDS: Record<number, string> = {
-  6_000: "Paying out every few seconds while this page is open.",
-  20_000: "Paying out every 20 seconds while this page stays open.",
-  60_000: "Paying out once a minute while this page stays open. Collect the rest whenever you like.",
+  6_000: "Pay is earned every second on Monad. While this page is open it is also paid out every few seconds.",
+  20_000: "Pay is earned every second on Monad. While this page is open it is paid out every 20 seconds.",
+  60_000: "Pay is earned every second on Monad. While this page is open it is paid out once a minute.",
 };
+/** The guarantee behind the pace: closing the page never stops pay. */
+const PACE_AWAY = "Close the page and nothing stops: Segundo's keeper pays out what's earned every few minutes, and the freelancer can collect it at any time.";
+
+/** The receipt /open saved for a tab it just opened (app/open/page.tsx), shown once on arrival. */
+type Arrival = { ms?: number; block?: number; hash?: string; fee?: { value?: string; hash?: string; block?: number; error?: string } };
+function readArrival(id: string): Arrival | null {
+  try {
+    if (!new URLSearchParams(window.location.search).has("opened")) return null;
+    const raw = sessionStorage.getItem(`segundo.receipt.${id}`);
+    return raw ? ((JSON.parse(raw) as { landed?: Arrival }).landed ?? null) : null;
+  } catch {
+    return null;
+  }
+}
 
 export default function TabPage() {
   const params = useParams<{ id: string }>();
@@ -45,7 +61,16 @@ export default function TabPage() {
   const now = useChainNow();
   const { rates } = useLive();
   const act = useAction();
-  const { lines, more, loading: historyLoading } = useHistory(id, view?.tab.lastBlock, 30);
+  const { lines, more, loading: historyLoading, reload: reloadHistory } = useHistory(id, view?.tab.lastBlock, 30);
+  // Just opened from /open: the receipt (when it landed, the fee's own transaction) as one line above the note.
+  const [arrival, setArrival] = useState<Arrival | null>(null);
+  useEffect(() => {
+    if (!id) return;
+    const a = readArrival(id.toString());
+    if (!a) return;
+    setArrival(a);
+    window.history.replaceState(null, "", `/tab/${id}`);
+  }, [id]);
   const [copied, setCopied] = useState(false);
   const [payouts, setPayouts] = useState<(Landed & { amount: number })[]>([]);
   const [topUp, setTopUp] = useState("");
@@ -75,6 +100,7 @@ export default function TabPage() {
   useEffect(() => {
     if (!id || state !== "working") return;
     const since = Date.now();
+    let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
     const tick = async () => {
       const every = payEvery((Date.now() - since) / 1000);
@@ -86,10 +112,16 @@ export default function TabPage() {
           refresh();
         } catch {}
       }
-      timer = setTimeout(tick, every);
+      // A payout still in flight when the clock stops must not start another round.
+      if (!stopped) timer = setTimeout(tick, every);
     };
-    timer = setTimeout(tick, 1500);
-    return () => clearTimeout(timer);
+    // The first payout is asked for at once: the server waits (up to 3 s) for the clock-in's block to settle and the
+    // first half cent to build up, so it lands seconds after the clock-in instead of on the next round.
+    timer = setTimeout(tick, 0);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
   }, [id, state, refresh]);
 
   // When the clock stops (clock-out, pause, or the budget running out), the last seconds of pay
@@ -125,6 +157,19 @@ export default function TabPage() {
     };
   }, [id, stopKey, refresh]);
 
+  // A tab closed from another window: once the stub has caught up with the tab, it ends with the close.
+  const closedNow = !!view?.tab.closed;
+  const stubHasClose = !!lines?.some((l) => l.kind === "closed");
+  useEffect(() => {
+    if (!closedNow || stubHasClose || historyLoading) return;
+    let tries = 0;
+    const timer = setInterval(() => {
+      if (++tries > 6) return clearInterval(timer);
+      reloadHistory();
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [closedNow, stubHasClose, historyLoading, reloadHistory]);
+
   if (!id) return <Missing text="That isn't a tab number." />;
   if (error && !view) return <Missing text={error} />;
   if (!views) return <Loading />;
@@ -149,6 +194,9 @@ export default function TabPage() {
   // history is one line (just opened) has no card, and the walk reaching "opened" says so.
   const timeCardPending = lines == null || (lines.length === 1 && lines[0]!.kind !== "opened");
   const isDemo = DEMO_FREELANCERS.some((f) => f.address.toLowerCase() === t.payee.toLowerCase());
+  // A shift the budget ended: the contract still holds its start, and the clock stopped when the budget ran out.
+  const spentAt =
+    state === "spent" && t.since > 0n && t.rate > 0n ? Number(t.since) + Math.ceil((Number(t.budget - t.banked) * 3600) / Number(t.rate)) : undefined;
 
   const go = (what: string, fn: string, args: readonly unknown[]) =>
     act.run(what, async (sent) => {
@@ -210,6 +258,36 @@ export default function TabPage() {
 
   return (
     <main className={`wrap ${styles.page}`}>
+      {arrival && (
+        <p className={styles.arrival} role="status">
+          <b>Tab opened.</b>
+          {arrival.ms != null && arrival.block != null && arrival.hash && (
+            <>
+              {" "}
+              Landed in {(arrival.ms / 1000).toFixed(2)} s,{" "}
+              <a className="serial" href={explorerTx(arrival.hash)} target="_blank" rel="noreferrer">
+                block {arrival.block.toLocaleString("en-US")}
+              </a>
+              .
+            </>
+          )}
+          {arrival.fee?.hash && arrival.fee.value && (
+            <>
+              {" "}
+              Segundo&apos;s 1% fee, {formatFee(BigInt(arrival.fee.value))}, went in its own transaction,{" "}
+              <a className="serial" href={explorerTx(arrival.fee.hash)} target="_blank" rel="noreferrer">
+                block {arrival.fee.block?.toLocaleString("en-US")}
+              </a>
+              .
+            </>
+          )}
+          <button type="button" className={styles.arrivalClose} onClick={() => setArrival(null)} aria-label="Dismiss">
+            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
+              <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </button>
+        </p>
+      )}
       <div className={styles.noteWrap}>
         <TabNote view={view!} profiles={profiles} lastPaidAt={lastPaid?.time} invited={invited} engrave />
         <div className={styles.noteBar}>
@@ -341,7 +419,7 @@ export default function TabPage() {
                         ? `Top-up ${formatUsd(toUsd(topUpUnits))} · Segundo fee (1%) ${formatFee(topUpFee)} · You pay ${formatFee(topUpUnits + topUpFee)}. `
                         : ""}
                       Wallet: {balance == null ? "…" : formatUsd(toUsd(balance))}
-                      {wallet.kind === "mera" && `. Over ${PROMPT_FREE_LABEL}, Segundo asks for your passkey again.`}
+                      {wallet.kind === "mera" && `. ${passkeyHint(wallet, topUpUnits) ?? `Over ${PROMPT_FREE_LABEL}, Segundo asks for your passkey again.`}`}
                     </span>
                   </div>
                   <button className="btn primary" disabled={!!topUpProblem || act.busy}>
@@ -398,6 +476,7 @@ export default function TabPage() {
           {state === "working" && (
             <div className={styles.payouts} aria-live="polite">
               <p className={styles.payoutsHead}>{PACE_WORDS[pace] ?? PACE_WORDS[6_000]}</p>
+              <p className={styles.payoutsAway}>{PACE_AWAY}</p>
               {payouts.length === 0 ? (
                 <p className="soft">First payout in a moment…</p>
               ) : (
@@ -430,13 +509,20 @@ export default function TabPage() {
               <dt>Paid out</dt>
               <dd>{money(toUsd(t.paid))}</dd>
             </div>
-            <div>
-              <dt>Budget left</dt>
-              <dd>
-                {formatUsd(toUsd(remaining > 0n ? remaining : 0n))}
-                {state !== "closed" && runway > 0 && <span className="soft"> covers {formatDuration(runway)}</span>}
-              </dd>
-            </div>
+            {state === "closed" ? (
+              <div>
+                <dt>Returned to client</dt>
+                <dd>{formatUsd(toUsd(refunded))}</dd>
+              </div>
+            ) : (
+              <div>
+                <dt>Budget left</dt>
+                <dd>
+                  {formatUsd(toUsd(remaining > 0n ? remaining : 0n))}
+                  {runway > 0 && <span className="soft"> covers {formatDuration(runway)}</span>}
+                </dd>
+              </div>
+            )}
             <div>
               <dt>Between</dt>
               <dd>
@@ -465,7 +551,17 @@ export default function TabPage() {
             {more ? "The most recent stretch of this tab. " : ""}Red is time on the clock, hatched is pay paused, and the line is money that has
             reached the freelancer.
           </p>
-          <TimeCard lines={lines} now={now} earnedUsd={toUsd(earned)} running={state === "working"} partial={more} loading={historyLoading} since={Number(t.since)} />
+          <TimeCard
+            lines={lines}
+            now={now}
+            earnedUsd={toUsd(earned)}
+            paidUsd={toUsd(t.paid)}
+            running={state === "working"}
+            partial={more}
+            loading={historyLoading}
+            since={Number(t.since)}
+            stoppedAt={spentAt}
+          />
         </section>
       )}
 
@@ -535,21 +631,42 @@ function RefundLine({ refund }: { refund: NonNullable<Landed["refund"]> }) {
   );
 }
 
+/** The page's own shape while the tab is read: the note, the controls beside the facts, the time card. */
 function Loading() {
   return (
-    <main className={`wrap ${styles.page}`} aria-busy="true">
+    <main className={`wrap ${styles.page}`} aria-busy="true" aria-label="Reading the tab from Monad">
       <div className={`skeleton ${styles.noteSkel}`} />
+      <div className={styles.grid}>
+        <div className={styles.controls}>
+          <div className={`skeleton ${styles.lineSkel}`} />
+          <div className={`skeleton ${styles.btnSkel}`} />
+        </div>
+        <div className={`skeleton ${styles.factsSkel}`} />
+      </div>
+      <div className={`skeleton ${styles.cardSkelBox}`} />
     </main>
   );
 }
 
 function Missing({ text }: { text: string }) {
   return (
-    <main className={`wrap ${styles.page}`}>
-      <h1 className={styles.missing}>{text}</h1>
-      <p>
-        <Link href="/app">See your tabs</Link> or <Link href="/open">open a new one</Link>.
-      </p>
+    <main>
+      <StatePage
+        eyebrow="Segundo tab"
+        title={text}
+        lede="A tab's address is its number on Monad. If someone sent you this link, check it with them; a tab opened a moment ago can take a few seconds to appear."
+        art={<GrandRosette />}
+        actions={
+          <>
+            <Link href="/app" className="btn primary">
+              See your tabs
+            </Link>
+            <Link href="/open" className="btn">
+              Open a new one
+            </Link>
+          </>
+        }
+      />
     </main>
   );
 }

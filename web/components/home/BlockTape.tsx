@@ -57,7 +57,7 @@ function Tape({ show, wrapRef }: { show: "both" | "tape" | "receipt"; wrapRef: R
     <div ref={wrapRef} className={`${styles.tapeWrap} ${show !== "both" ? styles.tapeOne : ""}`}>
       {show !== "receipt" && (
       <>
-      <div className={styles.blocks} aria-label={head ? `Latest Monad block ${head.number.toLocaleString("en-US")}` : "Waiting for Monad blocks"}>
+      <div className={styles.blocks} role="img" aria-label="Monad blocks as they arrive, newest on the right; the red ones carried a Segundo payout.">
         {seen.map((b) => (
           <span key={b.number} className={`${styles.block} ${paidBlocks.has(b.number) ? styles.blockPaid : ""}`} title={`Block ${b.number}`} />
         ))}
@@ -90,8 +90,8 @@ function Tape({ show, wrapRef }: { show: "both" | "tape" | "receipt"; wrapRef: R
             return (
               <a key={`${r.hash}-${r.id}`} href={explorerTx(r.hash)} target="_blank" rel="noreferrer" className={styles.receiptLine}>
                 <span>
-                  {rates ? formatMoney(usd, cur, rates) : formatUsd(usd, 4)} to {p?.name ?? "a freelancer"}
-                  {p?.place ? `, ${p.place}` : ""}
+                  {rates ? formatMoney(usd, cur, rates) : formatUsd(usd, 4)} to {p?.name || "a freelancer on Segundo"}
+                  {p?.name && p.place ? `, ${p.place}` : ""}
                 </span>
                 <span className="serial">
                   block {r.block.toLocaleString("en-US")}{r.time ? `, ${ago(now - r.time)}` : ""}

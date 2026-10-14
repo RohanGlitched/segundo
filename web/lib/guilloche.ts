@@ -2,6 +2,11 @@
  * Guilloche geometry for the notes. Every tab gets its own rosette from a seed, the way every
  * banknote series has its own engraving. Rings are hypotrochoids (the spirograph curve used in
  * security printing); one ring is engraved for each hour worked.
+ *
+ * Curves are written as smooth cubic segments whose handles come from the curve's own derivative,
+ * so a few segments per wave stay within about a tenth of a unit of the true curve. Points are
+ * whole tenths, written relative to the one before, so the path strings stay short; every point
+ * lands where its absolute tenth would.
  */
 
 export function mulberry32(seed: number) {
@@ -25,6 +30,86 @@ export function seedOf(...parts: (string | number | bigint)[]): number {
 }
 
 const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
+
+// ---- path writing
+
+type Pt = [number, number];
+/** How far, in user units, a segment's middle may sit from the true curve. */
+const TOLERANCE = 0.1;
+
+/** A length in whole tenths, written short: 12 → "1.2", 5 → ".5", -30 → "-3". */
+function num(tenths: number): string {
+  const a = Math.abs(tenths);
+  const s = a % 10 ? `${Math.floor(a / 10) || ""}.${a % 10}` : `${a / 10}`;
+  return tenths < 0 ? `-${s}` : s;
+}
+
+/** Numbers joined with the fewest separators SVG allows ("1.2-3.5.5" is 1.2, -3.5, 0.5). */
+function join(values: number[]): string {
+  let out = "";
+  let dot = false;
+  for (const v of values) {
+    const s = num(v);
+    if (out && s[0] !== "-" && !(s[0] === "." && dot)) out += " ";
+    out += s;
+    dot = s.includes(".");
+  }
+  return out;
+}
+
+/** Segments needed so that every segment's middle is within TOLERANCE of the curve. */
+function segments(f: (t: number) => Pt, df: (t: number) => Pt, t0: number, t1: number, start: number): number {
+  let n = Math.max(2, Math.ceil(start));
+  for (let pass = 0; pass < 16; pass++) {
+    const h = (t1 - t0) / n;
+    let ok = true;
+    for (let i = 0; i < n && ok; i++) {
+      const a = t0 + i * h;
+      const [ax, ay] = f(a);
+      const [bx, by] = f(a + h);
+      const [adx, ady] = df(a);
+      const [bdx, bdy] = df(a + h);
+      const [mx, my] = f(a + h / 2);
+      // The cubic's midpoint: halfway between the ends, pushed by the difference of the end tangents.
+      const ex = (ax + bx) / 2 + (h * (adx - bdx)) / 8 - mx;
+      const ey = (ay + by) / 2 + (h * (ady - bdy)) / 8 - my;
+      ok = ex * ex + ey * ey <= TOLERANCE * TOLERANCE;
+    }
+    if (ok) break;
+    n = Math.ceil(n * 1.25);
+  }
+  return n;
+}
+
+/** SVG path through f on [t0, t1], as cubic segments with handles a third of a step along the tangent. */
+function curve(f: (t: number) => Pt, df: (t: number) => Pt, t0: number, t1: number, start: number, closed: boolean): string {
+  const n = segments(f, df, t0, t1, start);
+  const h = (t1 - t0) / n;
+  const q = (v: number) => Math.round(v * 10);
+  const [x0, y0] = f(t0);
+  const [dx0, dy0] = df(t0);
+  let px = q(x0);
+  let py = q(y0);
+  const head = `M${join([px, py])}`;
+  const first: number[] = [q(x0 + (dx0 * h) / 3) - px, q(y0 + (dy0 * h) / 3) - py];
+  const rest: number[] = [];
+  for (let i = 1; i <= n; i++) {
+    const t = i === n ? t1 : t0 + i * h;
+    const [x, y] = closed && i === n ? [x0, y0] : f(t);
+    const [dx, dy] = df(t);
+    const ex = q(x);
+    const ey = q(y);
+    const seg = [q(x - (dx * h) / 3) - px, q(y - (dy * h) / 3) - py, ex - px, ey - py];
+    if (i === 1) first.push(...seg);
+    else rest.push(...seg);
+    px = ex;
+    py = ey;
+  }
+  // "c" for the first segment; "s" for the rest, whose first handle mirrors the last one.
+  return `${head}c${join(first)}${rest.length ? `s${join(rest)}` : ""}${closed ? "z" : ""}`;
+}
+
+// ---- rings
 
 export type Ring = { R: number; r: number; d: number; rot: number; scale: number; weight: number };
 
@@ -54,34 +139,39 @@ export function ringsFor(seed: number, count = 7): Ring[] {
 export function ringPath(cx: number, cy: number, size: number, ring: Ring): string {
   const { R, r, d, rot } = ring;
   const k = (R - r) / r;
-  const turns = r / gcd(R, r);
-  const steps = Math.max(240, Math.round(turns * 150));
-  const max = R - r + d;
-  const s = (size * ring.scale) / max;
-  let out = "";
-  for (let i = 0; i <= steps; i++) {
-    const t = (i / steps) * turns * Math.PI * 2;
+  const g = gcd(R, r);
+  const turns = r / g;
+  const s = (size * ring.scale) / (R - r + d);
+  const c = Math.cos(rot) * s;
+  const n = Math.sin(rot) * s;
+  const f = (t: number): Pt => {
     const x = (R - r) * Math.cos(t) + d * Math.cos(k * t);
     const y = (R - r) * Math.sin(t) - d * Math.sin(k * t);
-    const xr = x * Math.cos(rot) - y * Math.sin(rot);
-    const yr = x * Math.sin(rot) + y * Math.cos(rot);
-    out += `${i ? "L" : "M"}${(cx + xr * s).toFixed(1)} ${(cy + yr * s).toFixed(1)}`;
-  }
-  return out + "Z";
+    return [cx + x * c - y * n, cy + x * n + y * c];
+  };
+  const df = (t: number): Pt => {
+    const x = -(R - r) * Math.sin(t) - d * k * Math.sin(k * t);
+    const y = (R - r) * Math.cos(t) - d * k * Math.cos(k * t);
+    return [x * c - y * n, x * n + y * c];
+  };
+  // One petal per (R - r) / g turns of the rolling circle; start from four segments a petal.
+  return curve(f, df, 0, turns * Math.PI * 2, (4 * R) / g, true);
 }
+
+// ---- waves and bands
 
 /** A band of interlaced waves along a straight line: the engraved border of a note. */
 export function wavePath(x0: number, y0: number, length: number, amp: number, period: number, phase: number, vertical = false): string {
-  const steps = Math.max(8, Math.round((length / period) * 10));
-  let out = "";
-  for (let i = 0; i <= steps; i++) {
-    const u = (i / steps) * length;
-    const w = amp * Math.sin((u / period) * Math.PI * 2 + phase);
-    const x = vertical ? x0 + w : x0 + u;
-    const y = vertical ? y0 + u : y0 + w;
-    out += `${i ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`;
-  }
-  return out;
+  const w = (Math.PI * 2) / period;
+  const f = (u: number): Pt => {
+    const a = amp * Math.sin(u * w + phase);
+    return vertical ? [x0 + a, y0 + u] : [x0 + u, y0 + a];
+  };
+  const df = (u: number): Pt => {
+    const a = amp * w * Math.cos(u * w + phase);
+    return vertical ? [a, 1] : [1, a];
+  };
+  return curve(f, df, 0, length, (length / period) * 3, false);
 }
 
 export type Band = { radius: number; amp: number; lobes: number; strands: number; twist: number; weight: number };
@@ -110,16 +200,22 @@ export function bandsFor(seed: number, count = 7): Band[] {
 /** One path per strand of a band. */
 export function bandPaths(cx: number, cy: number, size: number, b: Band): string[] {
   const paths: string[] = [];
-  const steps = b.lobes * 14;
+  const A = size * b.amp;
+  const L = b.lobes;
   for (let i = 0; i < b.strands; i++) {
     const phase = b.twist + (i / b.strands) * Math.PI * 2;
-    let d = "";
-    for (let j = 0; j <= steps; j++) {
-      const t = (j / steps) * Math.PI * 2;
-      const r = size * (b.radius + b.amp * Math.sin(b.lobes * t + phase) + b.amp * 0.35 * Math.sin(3 * t + phase * 0.5));
-      d += `${j ? "L" : "M"}${(cx + r * Math.cos(t)).toFixed(1)} ${(cy + r * Math.sin(t)).toFixed(1)}`;
-    }
-    paths.push(d + "Z");
+    const rad = (t: number) => size * b.radius + A * Math.sin(L * t + phase) + A * 0.35 * Math.sin(3 * t + phase * 0.5);
+    const drad = (t: number) => A * L * Math.cos(L * t + phase) + A * 1.05 * Math.cos(3 * t + phase * 0.5);
+    const f = (t: number): Pt => {
+      const r = rad(t);
+      return [cx + r * Math.cos(t), cy + r * Math.sin(t)];
+    };
+    const df = (t: number): Pt => {
+      const r = rad(t);
+      const dr = drad(t);
+      return [dr * Math.cos(t) - r * Math.sin(t), dr * Math.sin(t) + r * Math.cos(t)];
+    };
+    paths.push(curve(f, df, 0, Math.PI * 2, L * 3, true));
   }
   return paths;
 }

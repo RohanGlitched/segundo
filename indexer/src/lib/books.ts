@@ -26,6 +26,21 @@ export const dayStart = (ts: number): number => ts - (ts % 86_400);
 export const eventId = (tx: string, logIndex: number): string => `${tx}-${logIndex}`;
 export const min = (a: bigint, b: bigint): bigint => (a < b ? a : b);
 
+/**
+ * The keys whose SegundoKeeper reports count: the CRE loop key, and the keeper key that signed the first broadcasts.
+ * On testnet anyone can call the MockKeystoneForwarder, so a report from any other sender is kept but not trusted.
+ * The same list as `web/lib/cre.ts` (DEFAULT_REPORTERS).
+ */
+export const CRE_REPORTERS = new Set([
+  "0x022875424e1556fec66fdc5a7d52820dea4dbb8d",
+  "0xe77f8062f66767428b1786709e079cabd01abf40",
+]);
+/** A report may be dated at most this far past its block (web/lib/cre.ts CRE_FUTURE_SLACK_SECONDS). */
+export const CRE_FUTURE_SLACK_SECONDS = 5 * 60;
+/** Sent by one of Segundo's reporting keys, and not dated in the future. */
+export const trustedReport = (from: string | undefined, at: number, blockTime: number): boolean =>
+  !!from && CRE_REPORTERS.has(from.toLowerCase()) && at <= blockTime + CRE_FUTURE_SLACK_SECONDS;
+
 /** bytes3 as hex ("0x504850") to its ASCII code ("PHP"); empty for zero bytes. */
 export function currencyCode(hex: string): string {
   let out = "";
@@ -61,6 +76,7 @@ export const newTotals = (): Mut<Totals> => ({
   keeperRuns: 0,
   keeperPaid: 0n,
   keeperSkipped: 0,
+  untrustedReports: 0,
   lastBlock: 0,
   lastTimestamp: 0,
 });

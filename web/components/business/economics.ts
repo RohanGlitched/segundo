@@ -33,6 +33,15 @@ export const GAS = {
 export const BATCH_EXTRA = 40_000;
 /** The first tab in a batch costs what a single settle does. */
 export const BATCH_FIRST = GAS.settle;
+/**
+ * Our own ceiling on one settleMany, well under what a Monad transaction may use: about 248 tabs a transaction.
+ * A bigger batch is split into transactions of this size, each paying the first-tab cost again.
+ */
+export const BATCH_TX_GAS = 10_000_000;
+export const TABS_PER_BATCH_TX = Math.floor((BATCH_TX_GAS - BATCH_FIRST) / BATCH_EXTRA) + 1;
+/** Block gas limit on Monad testnet (every block of our load test) and the block time we measured over 10,000 blocks. */
+export const BLOCK_GAS = 150_000_000;
+export const BLOCK_S = 0.305;
 
 /** The payout policy for mainnet: on screen, off screen, and the cap on gas as a share of a tab's fee. */
 export const POLICY = {
@@ -40,12 +49,23 @@ export const POLICY = {
   onScreenS: 10,
   /** Every other running tab is paid by the keeper this often, in one settleMany (as the testnet keeper already does). */
   offScreenS: 300,
-  /** The relayer slows a tab's on-screen payouts rather than spend more than this share of its fee on gas. */
+  /** The relayer slows a tab's payouts, on screen and off, rather than spend more than this share of its fee on payout gas. */
   gasCap: 0.5,
 };
 
+/**
+ * How often a tab is paid out on testnet today, so every page says the same thing: the tab page asks for a payout
+ * every 6 s for its first two minutes open, then every 20 s, then once a minute after ten minutes
+ * (app/tab/[id]/page.tsx), and the keeper pays running tabs every 5 minutes (bots/till-bots.mjs).
+ */
+export const TESTNET_PACE = { firstS: 6, firstForS: 120, thenS: 20, laterS: 60, laterAfterS: 600, keeperS: 300 };
+
 /** The prices the site prices gas at: 102 gwei on every relayer receipt, and our MON assumption. */
 export const PRICES = { gasGwei: 102, monPrice: 0.05 };
+
+/** The raise, in one line, the same on /business and the deck. */
+export const ASK =
+  "Raising a $500k pre-seed for 12 months: audit and mainnet, cash-out partners in Manila and Lagos, an EU/US on-ramp, and 10 design-partner studios.";
 
 /** The example freelancer used across the site: 35 hours a week at $20 an hour. */
 export const EXAMPLE = { hours: 35, rate: 20, feePct: 1 };
@@ -83,13 +103,16 @@ export type Inputs = {
   batched: boolean;
   monPrice: number;
   gasGwei: number;
+  /** Other variable costs per freelancer-month in dollars (KYC, sanctions screening, wallet and infra), our assumption. */
+  otherUsd: number;
 };
 
 export const DEFAULTS: Inputs = {
   people: 150,
   hours: EXAMPLE.hours,
   rate: EXAMPLE.rate,
-  days: 10,
+  // A weekly budget spent evenly over the week waits about 3.5 days on average; the gas model below assumes weekly budgets.
+  days: 4,
   yieldPct: 1,
   feePct: EXAMPLE.feePct,
   onScreen: 0.25,
@@ -98,6 +121,7 @@ export const DEFAULTS: Inputs = {
   batched: true,
   monPrice: PRICES.monPrice,
   gasGwei: PRICES.gasGwei,
+  otherUsd: 2,
 };
 
 /**
@@ -114,18 +138,31 @@ export function unitEconomics(i: Inputs) {
   const float = ((volume * 12) / 365) * i.days * (i.yieldPct / 100 / 12);
 
   const clockedNow = i.people * (i.hours / 168);
-  const perPayout = (batch: number) => (i.batched ? BATCH_EXTRA + (BATCH_FIRST - BATCH_EXTRA) / Math.max(1, batch) : GAS.settle);
+  // A batch bigger than one transaction's share is split, and each transaction pays the first-tab cost again.
+  const perPayout = (batch: number) => {
+    if (!i.batched) return GAS.settle;
+    const tabs = Math.max(1, batch);
+    return BATCH_EXTRA + ((BATCH_FIRST - BATCH_EXTRA) * Math.ceil(tabs / TABS_PER_BATCH_TX)) / tabs;
+  };
   const onGas = perPayout(clockedNow * i.onScreen);
   const offGas = perPayout(clockedNow * (1 - i.onScreen));
 
-  // The cap: on screen, never pay out faster than half the fee covers.
+  // The cap, on screen and off: never pay out faster than half the fee covers. With no fee there is nothing to
+  // weigh gas against, so only the keeper's schedule runs.
   const feePerSecond = (i.rate * feeRate) / 3600;
-  const capEvery = feePerSecond > 0 ? gasUsd(onGas, i.gasGwei, i.monPrice) / (POLICY.gasCap * feePerSecond) : Infinity;
-  const onEvery = Math.max(i.onScreenEvery, capEvery);
-  const capped = capEvery > i.onScreenEvery;
+  const noFee = feePerSecond <= 0;
+  const capFor = (gas: number) => (noFee ? 0 : gasUsd(gas, i.gasGwei, i.monPrice) / (POLICY.gasCap * feePerSecond));
+  const onEvery = noFee ? Infinity : Math.max(i.onScreenEvery, capFor(onGas));
+  const offEvery = Math.max(i.offScreenEvery, capFor(offGas));
+  const capped = !noFee && capFor(onGas) > i.onScreenEvery;
+  const offCapped = !noFee && capFor(offGas) > i.offScreenEvery;
 
-  const payoutsHour = i.onScreen * (3600 / onEvery) + (1 - i.onScreen) * (3600 / i.offScreenEvery);
-  const payoutGasHour = i.onScreen * (3600 / onEvery) * onGas + (1 - i.onScreen) * (3600 / i.offScreenEvery) * offGas;
+  const payoutsHour = i.onScreen * (3600 / onEvery) + (1 - i.onScreen) * (3600 / offEvery);
+  const payoutGasHour = i.onScreen * (3600 / onEvery) * onGas + (1 - i.onScreen) * (3600 / offEvery) * offGas;
+  // Payout gas across every tab clocked in at once, against what Monad's blocks hold in a second.
+  const payoutGasSecond = (clockedNow * payoutGasHour) / 3600;
+  const blockspace = payoutGasSecond / (BLOCK_GAS / BLOCK_S);
+  const tabsPerBatch = clockedNow * i.onScreen;
 
   // A clock-in and out per shift, and a weekly budget (one open, then a top-up each week, each with its fee
   // transfer), closed once with its fee refund.
@@ -138,7 +175,10 @@ export function unitEconomics(i: Inputs) {
   const gasAll = gasUsdMonth * i.people;
 
   const feeFreelancer = fee / Math.max(1, i.people);
+  /** Contribution after gas: the fee and the yield share, less the relayer's gas. */
   const net = fee + float - gasAll;
+  const otherAll = i.otherUsd * i.people;
+  const left = net - otherAll;
   return {
     hoursMonth,
     volume,
@@ -146,8 +186,11 @@ export function unitEconomics(i: Inputs) {
     float,
     gasAll,
     net,
+    otherAll,
+    left,
     feeFreelancer,
     netFreelancer: net / Math.max(1, i.people),
+    leftFreelancer: left / Math.max(1, i.people),
     gasTabHour: gasUsdMonth / hoursMonth,
     monTabHour: monMonth / hoursMonth,
     feeTabHour: feeRate * i.rate,
@@ -157,7 +200,15 @@ export function unitEconomics(i: Inputs) {
     onGas,
     offGas,
     onEvery,
+    offEvery,
     capped,
+    offCapped,
+    noFee,
+    /** Share of Monad's block gas, per second, that these payouts would use. */
+    blockspace,
+    /** Tabs on screen at one moment, so in one batch, and how many transactions that batch needs. */
+    tabsPerBatch,
+    batchTxs: i.batched ? Math.max(1, Math.ceil(tabsPerBatch / TABS_PER_BATCH_TX)) : 0,
     /** The MON price at which gas eats the whole fee. */
     breakEvenMon: monMonth > 0 ? feeFreelancer / monMonth : Infinity,
     /** Seconds between payouts the fee pays for, one payout per transaction and batched. */

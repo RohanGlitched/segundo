@@ -495,8 +495,13 @@ export type Stats = {
    */
   fees: { total: string; count: number; last7d: string; refunded: string; refunds: number; net: string };
   paid: { total: string; payouts: number; tabs: number; freelancers: number; clients: number };
-  /** Tabs opened in the app (through Segundo's relayer) by anyone other than our demo studios and the proof script. */
+  /**
+   * Tabs opened in the app (through Segundo's relayer) by anyone other than our demo studios, the proof script and
+   * the team's own known test wallets (TEAM_WALLETS). Fresh accounts made by our end-to-end scripts can't be told apart.
+   */
   outside: Slice;
+  /** Tabs opened by the team's own known test wallets (TEAM_WALLETS), apart from the demo studios. */
+  team: Slice;
   /** Tabs our demo studios (and the proof script) opened. `studios` and `people` are how many demo wallets we run. */
   demo: Slice & { studios: number; people: number };
   /** Tabs opened straight on the contract, without the app or the relayer (allowed by design; no fee is due). */
@@ -524,6 +529,24 @@ export type Stats = {
 };
 
 const BENCH: ReadonlySet<string> = new Set(BENCH_ADDRESSES.map(lower));
+/**
+ * Wallets the team runs or used for its own tests, already public in VERIFY.md and the code: the fee-refund check
+ * client (tab 124), the two fresh Mera accounts of the first passkey end-to-end runs, and Segundo's own infrastructure
+ * (relayer key 0, the CRE loop key, the treasury, the demo payout partner, the faucet wallet). Tabs these open count
+ * as the team's, never as outside use.
+ */
+const TEAM_WALLETS: ReadonlySet<string> = new Set(
+  [
+    "0xA4980bae43FC09C0ee7B764121E63cCA93b01065",
+    "0xca158574f9f167A186C0fe66591081a7072582f3",
+    "0xAD7F23EC8C2c6c86e84ED063C525542EA6749d93",
+    "0xe77f8062f66767428b1786709E079cABd01ABF40",
+    "0x022875424E1556FEC66Fdc5A7D52820dea4dBb8D",
+    "0xAdF0F9443EafD19916cBd8f7541ea5e19e69F62c",
+    "0x092178787c772cbF67c2560B38D9F4f3454677e6",
+    "0xa49d9f84FafA0FeBCBA2F02a3c0EEC75C8957534",
+  ].map(lower),
+);
 const BLOCK_SPAN = 10_000n;
 let blockTime: { at: number; v: Stats["chain"] } | null = null;
 
@@ -597,10 +620,11 @@ async function buildStats(): Promise<Stats> {
   }
 
   // Each tab belongs to one slice, by who funded it and how it was opened.
-  type Kind = "demo" | "outside" | "direct";
+  type Kind = "demo" | "team" | "outside" | "direct";
   const kindOf = new Map<string, Kind>();
   for (const e of opened) {
-    const k: Kind = DEMO_WALLETS.has(lower(e.payer)) ? "demo" : l.forwarded.has(lower(e.hash)) ? "outside" : "direct";
+    const payer = lower(e.payer);
+    const k: Kind = DEMO_WALLETS.has(payer) ? "demo" : TEAM_WALLETS.has(payer) ? "team" : l.forwarded.has(lower(e.hash)) ? "outside" : "direct";
     kindOf.set(String(e.id), k);
   }
   const slice = (kind: Kind): Slice => {
@@ -614,8 +638,10 @@ async function buildStats(): Promise<Stats> {
       payers.add(lower(p.payer));
       if (p.payee !== ZERO) payees.add(lower(p.payee));
     }
-    // People outside our own wallets: a demo freelancer hired by an outside client is still one of ours.
-    const theirs = (s: Set<string>) => [...s].filter((a) => kind === "demo" || !DEMO_WALLETS.has(a));
+    // People outside our own wallets: a demo freelancer hired by an outside client is still one of ours, and so is a
+    // team test wallet.
+    const theirs = (s: Set<string>) =>
+      [...s].filter((a) => kind === "demo" || (!DEMO_WALLETS.has(a) && (kind === "team" || !TEAM_WALLETS.has(a))));
     return {
       tabs: ids.size,
       payouts: pays.length,
@@ -691,6 +717,7 @@ async function buildStats(): Promise<Stats> {
     },
     paid: { total: paidTotal.toString(), payouts: settled.length, tabs, freelancers, clients },
     outside: slice("outside"),
+    team: slice("team"),
     demo: { ...demo, studios: DEMO_CLIENTS.length, people: DEMO_FREELANCERS.length },
     direct: slice("direct"),
     bench: { tabs: benchEvents.filter((e) => e.name === "Opened").length, payouts: benchEvents.filter((e) => e.name === "Settled").length },

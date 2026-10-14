@@ -74,11 +74,30 @@ export function LiveRevenue() {
     ["Paid to freelancers", some(paid, money(paid))],
     ["Payouts", whole ? count(stats.paid.payouts) : "—"],
     ["Tabs opened", some(stats.paid.tabs, count(stats.paid.tabs))],
-    ["Freelancers paid", some(stats.paid.freelancers, count(stats.paid.freelancers))],
-    ["Clients paying", some(stats.paid.clients, count(stats.paid.clients))],
+    ["Freelancer wallets paid (testnet)", some(stats.paid.freelancers, count(stats.paid.freelancers))],
+    ["Client wallets (testnet)", some(stats.paid.clients, count(stats.paid.clients))],
     ["Fees refunded at close", whole ? money(refunded) : "—"],
   ];
-  const { outside, demo } = whole ? stats : { outside: undefined, demo: undefined };
+  const { outside, demo, team } = whole ? stats : { outside: undefined, demo: undefined, team: undefined };
+  const cols: { label: string; line: string; s: { wallets: number; tabs: number; paid: string } }[] = [];
+  if (outside)
+    cols.push({
+      label: "Outside wallets",
+      line: "Wallets the team doesn't control that opened a tab in the app. Fresh accounts made by our own end-to-end test scripts can't be told apart, so some may still be ours.",
+      s: outside,
+    });
+  if (team)
+    cols.push({
+      label: "Team test wallets",
+      line: "Wallets we used for our own checks, all public in VERIFY.md: the fee-refund check, the first passkey test runs and Segundo's own infrastructure.",
+      s: team,
+    });
+  if (demo)
+    cols.push({
+      label: "Our demo studios (bots)",
+      line: `${demo.studios} bot studios paying ${demo.people} bot freelancers during their own working hours, staggered so someone is usually on (and the one proof-script tab).`,
+      s: demo,
+    });
 
   return (
     <div className={styles.ledger}>
@@ -122,46 +141,28 @@ export function LiveRevenue() {
           ))}
         </dl>
       </div>
-      {outside && demo && (
-        <div className={styles.split} aria-label="Who the numbers come from">
-          <div className={styles.splitCol}>
-            <span className={styles.label}>Outside wallets</span>
-            <p className={styles.soft}>Everyone who opened a tab in the app who isn&apos;t one of our demo studios, our own test runs included.</p>
-            <dl className={styles.splitFigs}>
-              <div>
-                <dt>Wallets</dt>
-                <dd className="denom">{count(outside.wallets)}</dd>
-              </div>
-              <div>
-                <dt>Tabs</dt>
-                <dd className="denom">{count(outside.tabs)}</dd>
-              </div>
-              <div>
-                <dt>Paid out</dt>
-                <dd className="denom">{money(usdOf(outside.paid))}</dd>
-              </div>
-            </dl>
-          </div>
-          <div className={styles.splitCol}>
-            <span className={styles.label}>Our demo studios</span>
-            <p className={styles.soft}>
-              {demo.studios} bot studios paying {demo.people} bot freelancers during their own working hours, staggered so someone is usually on (and the one proof-script tab).
-            </p>
-            <dl className={styles.splitFigs}>
-              <div>
-                <dt>Wallets</dt>
-                <dd className="denom">{count(demo.wallets)}</dd>
-              </div>
-              <div>
-                <dt>Tabs</dt>
-                <dd className="denom">{count(demo.tabs)}</dd>
-              </div>
-              <div>
-                <dt>Paid out</dt>
-                <dd className="denom">{money(usdOf(demo.paid))}</dd>
-              </div>
-            </dl>
-          </div>
+      {cols.length >= 2 && (
+        <div className={`${styles.split} ${cols.length === 3 ? styles.splitThree : ""}`} aria-label="Who the numbers come from">
+          {cols.map((c) => (
+            <div className={styles.splitCol} key={c.label}>
+              <span className={styles.label}>{c.label}</span>
+              <p className={styles.soft}>{c.line}</p>
+              <dl className={styles.splitFigs}>
+                <div>
+                  <dt>Wallets</dt>
+                  <dd className="denom">{count(c.s.wallets)}</dd>
+                </div>
+                <div>
+                  <dt>Tabs</dt>
+                  <dd className="denom">{count(c.s.tabs)}</dd>
+                </div>
+                <div>
+                  <dt>Paid out</dt>
+                  <dd className="denom">{money(usdOf(c.s.paid))}</dd>
+                </div>
+              </dl>
+            </div>
+          ))}
         </div>
       )}
       {whole && rate && rate.opens > 0 && (
@@ -198,12 +199,13 @@ export function LiveRevenue() {
       <p className={styles.honest}>
         Testnet, including our demo studios: three bot studios pay five bot freelancers during their own working hours, alongside everyone who
         tries the app. Test AUSD has no value. Fees started when the 1% went live, so paid-out money before that carries no fee. Only transfers that
-        match an open or top-up count as fees.
+        match an open or top-up count as fees. Fees are taken on budgets as they are funded, so they run ahead of pay: on tabs still open, 1% of the
+        unspent part goes back at close.
         {stats.bench && stats.bench.tabs > 0 && (
           <>
             {" "}
-            The {count(stats.bench.tabs)} tabs and {count(stats.bench.payouts)} payouts of our <Link href="/network">Monad load test</Link> are left out of
-            every figure here.
+            The {count(stats.bench.tabs)} tabs of our <Link href="/network">Monad load test</Link> are left out of every figure here, with the{" "}
+            {count(stats.bench.payouts)} payouts recorded on them, from the 480-transaction burst and the smaller single-key runs around it.
           </>
         )}
       </p>

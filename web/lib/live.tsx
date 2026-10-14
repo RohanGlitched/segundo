@@ -14,17 +14,34 @@ const RatesContext = createContext<RatesOnly>({ rates: null, ratesUpdated: null 
 /** False inside a subtree that is off-screen: its live readers stop subscribing to blocks and the clock. */
 const LiveActiveContext = createContext(true);
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "wss://testnet-rpc.monad.xyz";
+/** How long a block reader must stay mounted before the socket opens, and how long it stays open after the last one goes. */
+const OPEN_DELAY_MS = 250;
+const CLOSE_GRACE_MS = 5000;
 
 const noopSubscribe = () => () => {};
 const hidden = () => typeof document !== "undefined" && document.hidden;
+
+// ---- who wants blocks: the socket runs only while something on screen reads them
+/**
+ * Mounted block readers (useHead, useLive's head, useChainNow) are counted through their store subscriptions, so
+ * pages that show no block data never open the socket. peekHead() also counts for a few seconds after each call, for
+ * readers that sample the head on their own timer.
+ */
+const PEEK_MS = 4000;
+let peekUntil = 0;
+let onDemand: (() => void) | null = null;
+const demandChanged = () => onDemand?.();
+const blockReaders = () => headSubs.size + clockSubs.size;
 
 // ---- block head store
 let headNow: Head | null = null;
 const headSubs = new Set<() => void>();
 const subscribeHead = (f: () => void) => {
   headSubs.add(f);
+  demandChanged();
   return () => {
     headSubs.delete(f);
+    demandChanged();
   };
 };
 const getHead = () => headNow;
@@ -60,9 +77,11 @@ if (typeof document !== "undefined") document.addEventListener("visibilitychange
 const subscribeClock = (f: () => void) => {
   clockSubs.add(f);
   runClock();
+  demandChanged();
   return () => {
     clockSubs.delete(f);
     runClock();
+    demandChanged();
   };
 };
 const getClock = () => {
@@ -73,7 +92,8 @@ const getClock = () => {
 /**
  * Follows Monad's blocks as they are produced (a newHeads subscription, roughly 2.5 a second),
  * falling back to polling if the socket can't open (polls skip their turn while the RPC is rate-limiting us, see
- * lib/hooks.ts). Also loads reference exchange rates once. The socket closes while the tab is hidden.
+ * lib/hooks.ts). Also loads reference exchange rates once. The socket is open only while the tab is visible and a
+ * block reader is mounted (see "who wants blocks" above), so pages that show no block data hold no socket.
  */
 export function LiveProvider({ children }: { children: ReactNode }) {
   const [rates, setRates] = useState<RatesOnly>({ rates: null, ratesUpdated: null });
@@ -175,13 +195,67 @@ export function LiveProvider({ children }: { children: ReactNode }) {
       startPolling();
       connect();
     };
-    const onVisibility = () => (hidden() ? pause() : resume());
 
-    if (!hidden()) resume();
-    document.addEventListener("visibilitychange", onVisibility);
+    // Run only while the tab is visible and a block reader is mounted. Opening waits a moment (readers that start
+    // off-screen unsubscribe as soon as their observer reports), and closing waits a few seconds so moving between
+    // pages, or a reader remounting, doesn't drop and reopen the socket.
+    let running = false;
+    let startTimer: ReturnType<typeof setTimeout> | null = null;
+    let stopTimer: ReturnType<typeof setTimeout> | null = null;
+    let peekTimer: ReturnType<typeof setTimeout> | null = null;
+    const clear = (t: ReturnType<typeof setTimeout> | null) => {
+      if (t) clearTimeout(t);
+    };
+    const wanted = () => !hidden() && (blockReaders() > 0 || Date.now() < peekUntil);
+    const stop = () => {
+      if (!running) return;
+      running = false;
+      pause();
+    };
+    const evaluate = () => {
+      if (closed) return;
+      clear(peekTimer);
+      peekTimer = null;
+      if (hidden()) {
+        clear(startTimer);
+        clear(stopTimer);
+        startTimer = stopTimer = null;
+        stop();
+        return;
+      }
+      if (wanted()) {
+        clear(stopTimer);
+        stopTimer = null;
+        if (!running && !startTimer)
+          startTimer = setTimeout(() => {
+            startTimer = null;
+            if (closed || running || !wanted()) return;
+            running = true;
+            resume();
+          }, OPEN_DELAY_MS);
+        // Wanted only because of a recent peek: look again when it runs out.
+        if (!blockReaders()) peekTimer = setTimeout(evaluate, Math.max(0, peekUntil - Date.now()) + 50);
+      } else {
+        clear(startTimer);
+        startTimer = null;
+        if (running && !stopTimer)
+          stopTimer = setTimeout(() => {
+            stopTimer = null;
+            if (!closed && !wanted()) stop();
+          }, CLOSE_GRACE_MS);
+      }
+    };
+
+    onDemand = evaluate;
+    evaluate();
+    document.addEventListener("visibilitychange", evaluate);
     return () => {
       closed = true;
-      document.removeEventListener("visibilitychange", onVisibility);
+      if (onDemand === evaluate) onDemand = null;
+      document.removeEventListener("visibilitychange", evaluate);
+      clear(startTimer);
+      clear(stopTimer);
+      clear(peekTimer);
       pause();
     };
   }, []);
@@ -200,17 +274,41 @@ export function useHead(): Head | null {
   return useSyncExternalStore(active ? subscribeHead : noopSubscribe, getHead, getServerHead);
 }
 
-/** The latest block without subscribing to it (read during an update that happens anyway). */
-export const peekHead = () => headNow;
+/** The latest block without subscribing to it (read during an update that happens anyway). Keeps blocks coming for a few seconds. */
+export const peekHead = () => {
+  if (typeof window !== "undefined") {
+    const fresh = Date.now() >= peekUntil;
+    peekUntil = Date.now() + PEEK_MS;
+    if (fresh) demandChanged();
+  }
+  return headNow;
+};
 
 /** Reference exchange rates only: never re-renders for blocks. */
 export const useRates = () => useContext(RatesContext);
 
-/** Rates and the latest block (re-renders on every block; use useRates when the block isn't shown). */
+/**
+ * Rates and the latest block. Only a component that reads `head` follows blocks (and re-renders on each one); one
+ * that takes just the rates, as in `const { rates } = useLive()`, never subscribes, so it keeps no socket open.
+ */
 export function useLive(): Live {
   const { rates, ratesUpdated } = useContext(RatesContext);
-  const head = useHead();
-  return { head, rates, ratesUpdated };
+  const active = useContext(LiveActiveContext);
+  const readsHead = useRef(false);
+  const [follow, setFollow] = useState(false);
+  const head = useSyncExternalStore(active && follow ? subscribeHead : noopSubscribe, getHead, getServerHead);
+  // `head` was read during a render: from now on, re-render on every block.
+  useEffect(() => {
+    if (readsHead.current && !follow) setFollow(true);
+  });
+  return {
+    get head() {
+      readsHead.current = true;
+      return head;
+    },
+    rates,
+    ratesUpdated,
+  };
 }
 
 /** Chain time in whole seconds, advanced locally between blocks; one shared 1 Hz clock that stops while the tab is hidden. */

@@ -78,6 +78,9 @@ jobs:
         run: npm ci
       - working-directory: web
         run: npx tsc --noEmit
+      - name: Relay, fee refund and settlement tests (fake chain, no network)
+        working-directory: web
+        run: npm test
       - working-directory: web
         run: npm run build
         env:

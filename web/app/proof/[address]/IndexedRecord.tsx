@@ -7,12 +7,17 @@ import { explorerTx } from "@/lib/chain";
 import { formatDuration, formatMoney, formatUsd, toUsd, type Currency, type Rates } from "@/lib/money";
 import styles from "./statement.module.css";
 
+/** Only until /api/envio answers: the reply names the endpoint it read (lib/hyperindex.ts HYPERINDEX_URL). */
 const ENDPOINT = "https://indexer.dev.hyperindex.xyz/bd7a257/v1/graphql";
 const SOURCE = "https://github.com/RohanGlitched/segundo/tree/main/indexer";
 
+/** A stretch of payouts made while one CRE rate was in force (lib/hyperindex.ts RateSpan). */
+type RateSpan = { currency: string; rateE6: string; at: number; from: number; to: number; payouts: number; units: string };
+
 /** What /api/envio?address= answers (lib/hyperindex.ts). */
-type Indexed = {
+export type Indexed = {
   from: "envio-hyperindex";
+  endpoint?: string;
   lagging: boolean;
   status: { block: number; head: number | null; lagBlocks: number | null; lagSeconds: number | null; events: number };
   person: { earned: string; payoutsReceived: number; clients: number; tabsAsFreelancer: number; shifts: number; secondsWorked: string } | null;
@@ -20,7 +25,72 @@ type Indexed = {
   lastPayout: { timestamp: number; block: number; tx: string } | null;
   daysPaid: number;
   recent: { block: number; amount: string }[];
+  /** The CRE rate in force at each payout, from indexer deployments that store it; absent or null from older ones. */
+  atPayout?: { spans: RateSpan[]; exact: Record<string, number>; payouts: number; units: string } | null;
 };
+
+/** The rate a payout was made at: units of the currency per 1 USD, and when the CRE workflow posted it. */
+export type RateThen = { rate: number; at: number };
+
+/**
+ * The CRE rate in force when a payout in `code` landed, as the indexer stored it on the payout, or null for a payout
+ * it has no rate for (paid before Segundo's first CRE report, in another currency, or not indexed yet). Null overall
+ * when the indexer doesn't store rates or the person thinks in dollars.
+ */
+export function ratesThen(x: Indexed | null, code: string): ((block: number, hash: string) => RateThen | null) | null {
+  const a = x?.atPayout;
+  if (!a || code === "USD") return null;
+  const mine = a.spans.filter((s) => s.currency === code);
+  if (!mine.length) return null;
+  const then = (s: RateSpan): RateThen => ({ rate: Number(s.rateE6) / 1e6, at: s.at });
+  return (block, hash) => {
+    const i = a.exact[hash.toLowerCase()];
+    if (i != null) {
+      const s = a.spans[i];
+      return s && s.currency === code ? then(s) : null;
+    }
+    const s = mine.find((r) => block >= r.from && block <= r.to);
+    return s ? then(s) : null;
+  };
+}
+
+/** /api/envio?address=, read once and then every minute (with one quick retry on a miss). */
+export function useIndexed(address: Address) {
+  const [indexed, setIndexed] = useState<Indexed | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+  useEffect(() => {
+    let stop = false;
+    const load = () =>
+      fetch(`/api/envio?address=${address}`)
+        .then(async (r) => {
+          const body = await r.json();
+          if (!r.ok || body?.from !== "envio-hyperindex") throw new Error(body?.reason ?? "HyperIndex didn't answer");
+          if (!stop) {
+            setIndexed(body as Indexed);
+            setFailed(null);
+          }
+        })
+        .catch((e) => {
+          if (stop) return;
+          setFailed(e instanceof Error ? e.message : "HyperIndex didn't answer");
+          // One quick second try before the minute's poll: a cold instance can miss the 3-second budget once.
+          if (!retried) {
+            retried = true;
+            retry = setTimeout(load, 4_000);
+          }
+        });
+    let retried = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    load();
+    const t = setInterval(load, 60_000);
+    return () => {
+      stop = true;
+      clearInterval(t);
+      clearTimeout(retry);
+    };
+  }, [address]);
+  return { indexed, failed };
+}
 
 type Line = { time: number; block: number; hash: string };
 type Rec = {
@@ -99,41 +169,19 @@ function crossCheck(x: Indexed, h: History) {
   return { through, idx, rpc, agree: idx.payouts === rpc.payouts && idx.units === rpc.units };
 }
 
-export function IndexedRecord({ address, history, cur, rates }: { address: Address; history: History | null; cur: Currency; rates: Rates | null }) {
-  const [indexed, setIndexed] = useState<Indexed | null>(null);
-  const [failed, setFailed] = useState<string | null>(null);
-  useEffect(() => {
-    let stop = false;
-    const load = () =>
-      fetch(`/api/envio?address=${address}`)
-        .then(async (r) => {
-          const body = await r.json();
-          if (!r.ok || body?.from !== "envio-hyperindex") throw new Error(body?.reason ?? "HyperIndex didn't answer");
-          if (!stop) {
-            setIndexed(body as Indexed);
-            setFailed(null);
-          }
-        })
-        .catch((e) => {
-          if (stop) return;
-          setFailed(e instanceof Error ? e.message : "HyperIndex didn't answer");
-          // One quick second try before the minute's poll: a cold instance can miss the 3-second budget once.
-          if (!retried) {
-            retried = true;
-            retry = setTimeout(load, 4_000);
-          }
-        });
-    let retried = false;
-    let retry: ReturnType<typeof setTimeout> | undefined;
-    load();
-    const t = setInterval(load, 60_000);
-    return () => {
-      stop = true;
-      clearInterval(t);
-      clearTimeout(retry);
-    };
-  }, [address]);
-
+export function IndexedRecord({
+  indexed,
+  failed,
+  history,
+  cur,
+  rates,
+}: {
+  indexed: Indexed | null;
+  failed: string | null;
+  history: History | null;
+  cur: Currency;
+  rates: Rates | null;
+}) {
   const fullHistory = history?.source === "envio-hyperrpc" ? history : null;
   // HyperIndex first; HyperRPC when the indexer fails or is more than five minutes behind and HyperRPC has the whole ledger.
   const useIndex = !!indexed && (!indexed.lagging || !fullHistory);
@@ -154,6 +202,9 @@ export function IndexedRecord({ address, history, cur, rates }: { address: Addre
 
   const money = (units: bigint) => (cur.code === "USD" || !rates ? formatUsd(toUsd(units)) : formatMoney(toUsd(units), cur, rates));
   const s = indexed?.status;
+  const endpoint = indexed?.endpoint ?? ENDPOINT;
+  // All time in the person's currency: each payout at the CRE rate in force when it landed, where the indexer stored one.
+  const allTime = useIndex && record ? priceAllTime(indexed!, record.earned, cur, rates) : null;
 
   return (
     <section className={styles.record} aria-labelledby="record">
@@ -172,7 +223,7 @@ export function IndexedRecord({ address, history, cur, rates }: { address: Addre
             </>
           )}{" "}
           ·{" "}
-          <a href={ENDPOINT} target="_blank" rel="noreferrer">
+          <a href={endpoint} target="_blank" rel="noreferrer">
             GraphQL
           </a>{" "}
           ·{" "}
@@ -188,8 +239,19 @@ export function IndexedRecord({ address, history, cur, rates }: { address: Addre
         <dl className={styles.recordFacts}>
           <div className={styles.recordWide}>
             <dt>Received, all time</dt>
-            <dd className="denom">{money(record.earned)}</dd>
-            {cur.code !== "USD" && <p className={styles.usd}>{formatUsd(toUsd(record.earned))} AUSD</p>}
+            <dd className="denom">{allTime ? allTime.text : money(record.earned)}</dd>
+            {cur.code !== "USD" && (
+              <dd className={styles.usd}>
+                {formatUsd(toUsd(record.earned))} AUSD
+                {allTime
+                  ? allTime.today === 0
+                    ? " · every payout at the Chainlink CRE rate in force when it landed"
+                    : ` · ${allTime.then.toLocaleString("en-US")} of ${record.payouts.toLocaleString("en-US")} payouts at the CRE rate in force when they landed, the rest at today's rate`
+                  : rates
+                    ? " · at today's rate"
+                    : ""}
+              </dd>
+            )}
           </div>
           <div>
             <dt>Payouts</dt>
@@ -255,4 +317,21 @@ export function IndexedRecord({ address, history, cur, rates }: { address: Addre
       )}
     </section>
   );
+}
+
+/**
+ * The all-time total in the person's currency from the rates the indexer stored on each payout: every span at its
+ * own rate, and whatever carries no rate (paid before the first CRE report) at today's rate. Null when there's
+ * nothing to price at a past rate.
+ */
+function priceAllTime(x: Indexed, earned: bigint, cur: Currency, rates: Rates | null) {
+  const spans = x.atPayout?.spans.filter((s) => s.currency === cur.code) ?? [];
+  if (cur.code === "USD" || !spans.length) return null;
+  const dated = spans.reduce((n, s) => n + BigInt(s.units), 0n);
+  const rest = earned > dated ? earned - dated : 0n;
+  const today = rates?.[cur.code];
+  if (rest > 0n && today == null) return null;
+  const value = spans.reduce((v, s) => v + toUsd(BigInt(s.units)) * (Number(s.rateE6) / 1e6), 0) + toUsd(rest) * (today ?? 0);
+  const then = spans.reduce((n, s) => n + s.payouts, 0);
+  return { text: formatMoney(value, cur, { [cur.code]: 1 }), then, today: Math.max(0, (x.person?.payoutsReceived ?? then) - then) };
 }

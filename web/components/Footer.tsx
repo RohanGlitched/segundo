@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { FORWARDER, TILL, DOLLAR, explorerAddress } from "@/lib/chain";
 import { ByAccounts } from "./home/ByAccounts";
+import { CopyAddress, FooterLive } from "./FooterLive";
 import { Mark } from "./Mark";
 import styles from "./Footer.module.css";
 
@@ -17,16 +18,16 @@ const short = (a: string) => `${a.slice(0, 8)}…${a.slice(-6)}`;
 /** The bottom of the note: who issued it, where to go next, and the serials to check it against. */
 export function Footer() {
   return (
-    <footer className={styles.foot}>
+    <footer className={styles.foot} data-site-footer>
       <div className={`wrap ${styles.inner}`}>
         <div className={styles.top}>
           <div className={styles.brand}>
-            <Mark size={44} />
-            <div>
-              <p className={styles.word}>Segundo</p>
-              <p className={styles.tag}>Get paid every second you work.</p>
-              <p className={styles.where}>Runs on Monad testnet with Agora&apos;s test AUSD. Nothing here is real money.</p>
-            </div>
+            <p className={styles.word}>
+              <Mark size={34} />
+              Segundo
+            </p>
+            <p className={styles.tag}>Pay by the second, on Monad.</p>
+            <p className={styles.where}>Runs on Monad testnet with Agora&apos;s test AUSD. Nothing here is real money.</p>
           </div>
 
           <nav className={styles.cols} aria-label="Footer">
@@ -106,22 +107,20 @@ export function Footer() {
                 <dt>{c.label}</dt>
                 <dd>
                   <a href={explorerAddress(c.address)} target="_blank" rel="noreferrer" className="serial" title={c.address}>
-                    <span className={styles.full}>{c.address}</span>
-                    <span className={styles.short} aria-hidden>
-                      {short(c.address)}
-                    </span>
+                    <span className="visually-hidden">{c.address}</span>
+                    <span aria-hidden>{short(c.address)}</span>
                   </a>
+                  <CopyAddress address={c.address} label={c.label} />
                 </dd>
               </div>
             ))}
           </dl>
 
-          <p className={styles.micro} aria-hidden>
-            {"SEGUNDO PAYS BY THE SECOND ON MONAD ".repeat(12)}
-          </p>
+          {/* Microprint is texture, not text: drawn from an attribute by CSS, so it never reads as page content. */}
+          <div className={styles.micro} aria-hidden data-micro={"SEGUNDO PAYS BY THE SECOND ON MONAD ".repeat(16)} />
 
           <div className={styles.base}>
-            <p>Monad testnet, chain 10143.</p>
+            <FooterLive />
             <p>
               Open source under the{" "}
               <a href={`${REPO}/blob/main/LICENSE`} target="_blank" rel="noreferrer">

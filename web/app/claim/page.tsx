@@ -11,6 +11,8 @@ import { CURRENCIES, currency, formatMoney, formatUsd, toUsd } from "@/lib/money
 import { sweepFromKey, type Landed } from "@/lib/relay";
 import { findSentLink, linkBalance, readFragment, updateSentLink, type LinkFragment } from "@/lib/sendlink";
 import { useWallet } from "@/lib/wallet";
+import { StatePage } from "@/components/StatePage";
+import { TornNote } from "@/components/StateArt";
 import styles from "./claim.module.css";
 
 type Got = Landed & { value: bigint; to: string; back: boolean };
@@ -101,10 +103,30 @@ export default function Claim() {
   if (frag === undefined) return <Shell busy />;
   if (frag === null)
     return (
-      <Shell>
-        <h1 className={styles.h1}>This link is missing its key.</h1>
-        <p className={styles.lede}>Ask the person who sent it to share it again: the whole link, including the part after the #.</p>
-      </Shell>
+      <main>
+        <StatePage
+          eyebrow="Money sent by link"
+          title="This link is missing its key."
+          lede="A Segundo link carries its own key after the #, and this one arrived without it. Nothing is lost: the money is still waiting at the link's address on Monad."
+          art={<TornNote />}
+          actions={
+            <>
+              <Link href="/" className="btn primary">
+                What Segundo is
+              </Link>
+              <Link href="/app" className="btn">
+                Your account
+              </Link>
+            </>
+          }
+        >
+          <ul>
+            <li>Ask the person who sent it to share it again: the whole link, including everything after the #.</li>
+            <li>Some chat apps cut a link at the #. Copying it from the message, rather than tapping it, usually keeps it whole.</li>
+            <li>Until someone collects it, the sender can take the money back from their own account.</li>
+          </ul>
+        </StatePage>
+      </main>
     );
 
   const c = currency(cur);
