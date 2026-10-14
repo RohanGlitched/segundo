@@ -28,7 +28,7 @@
 
 | Bounty | What we built | Where to look | Proof |
 |---|---|---|---|
-| **Agora**: cross-border payments with AUSD | Tabs that pay by the second in AUSD, send by link, email or address, cash-out to five corridors (simulated), Android app | [Agora section](#agora-a-cross-border-payments-app-with-mera-onboarding-and-instant-settlement), [`Till.sol`](contracts/src/Till.sol), [`api/relay`](web/app/api/relay/route.ts) | [Open a tab](https://testnet.monadvision.com/tx/0xa11775299c15c774caae591cce46d1c049e3e6b71c7a452dc748e25cc19fd2aa) · [17-step lifecycle](VERIFY.md) · [video](https://youtu.be/DkU_xAU__LM) |
+| **Agora**: cross-border payments with AUSD | Tabs that pay by the second in AUSD, send by link, email or address, cash-out to five corridors (simulated), Android app | [Agora section](#agora-a-cross-border-payments-app-with-mera-onboarding-and-instant-settlement), [`Till.sol`](contracts/src/Till.sol), [`api/relay`](web/app/api/relay/route.ts) | [Open a tab](https://testnet.monadvision.com/tx/0xa11775299c15c774caae591cce46d1c049e3e6b71c7a452dc748e25cc19fd2aa) · [17-step lifecycle](VERIFY.md) · [video](https://youtu.be/V_EGmAIOruc) |
 | **Privy**: beyond authentication | Embedded wallet signs every EIP-712 request; pregenerated wallets for email recipients over the REST API; key export | [Privy section](#privy-beyond-authentication), [`privy-server.ts`](web/lib/privy-server.ts), [`api/recipient`](web/app/api/recipient/route.ts) | [/privy](https://segundo.world/privy) · [video](https://youtu.be/p4O6ybALmYk) |
 | **Mera**: one passkey, many keys (PRF) | Four keys from four PRF salts: wallet, sealing, invite links rebuilt from chain, selective disclosure to a verifier | [Mera section](#mera-one-passkey-many-keys), [`keys.ts`](web/lib/keys.ts), [`disclose.ts`](web/lib/disclose.ts) | [/keys](https://segundo.world/keys) · [fee paid by a fresh Mera account](https://testnet.monadvision.com/tx/0xe1b850e8d7c93a155af39ee6e7173b77e42fdd2709cb823d047c936cb2888e31) |
 | **Mera**: passkey onboarding | One tap to an account, 15-minute signing sessions, claim a send link with a fingerprint, a passkey-only site | [Onboarding section](#mera-passkey-onboarding-people-dont-notice), [`mera.ts`](web/lib/mera.ts) | [mera.segundo.world](https://mera.segundo.world) · [demo video](https://youtu.be/U6be6-HecJI) |
@@ -51,7 +51,7 @@
 | | |
 |---|---|
 | **App** | [segundo.world](https://segundo.world). Installs on a phone from the browser. |
-| **Videos** | [Demo](https://youtu.be/U6be6-HecJI) · [Pitch](https://youtu.be/_Bl5ta4e_a8) · [Agora](https://youtu.be/DkU_xAU__LM) · [Privy](https://youtu.be/p4O6ybALmYk) · [Chainlink CRE](https://youtu.be/j2xxcSlUxtk) |
+| **Videos** | [Demo](https://youtu.be/U6be6-HecJI) · [Pitch](https://youtu.be/_Bl5ta4e_a8) · [Agora](https://youtu.be/V_EGmAIOruc) · [Privy](https://youtu.be/p4O6ybALmYk) · [Chainlink CRE](https://youtu.be/j2xxcSlUxtk) |
 | **Android app** | [segundo.world/segundo.apk](https://segundo.world/segundo.apk): a Trusted Web Activity, package `world.segundo.app` |
 | **Passkey-only site** | [mera.segundo.world](https://mera.segundo.world): Mera passkeys are the whole account; no email, no practice wallet |
 | **Business** | [segundo.world/business](https://segundo.world/business): live treasury, fees net of refunds, measured gas per action, break-even, market |
